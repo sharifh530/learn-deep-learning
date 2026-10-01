@@ -749,6 +749,124 @@
           "Confusing Stride with Dilation: Stride steps across pixels; Dilation expands the spacing between kernel elements (atrous convolution)."
         ]
       }
+    },
+    {
+      "id": "quest-6",
+      "number": 6,
+      "title": "The Overfitting Beast & Regularization Arena",
+      "subtitle": "Bias-Variance Tradeoff, Dropout, Weight Decay & Generalization",
+      "icon": "🐉",
+      "tag": "GENERALIZATION & REGULARIZATION",
+      "xp": 250,
+      "story": "Your neural network has memorized the training examples so obsessively that it mistakes random noise for truth! In the training room it scores 100%, but when shown unseen test data, it collapses in embarrassment. Tame the Overfitting Beast by mastering the weapons of Regularization: Dropout, L2 Weight Decay, Early Stopping, and Data Augmentation!",
+      "mentalModel": "Overfitting is like memorizing every typo from last year's exam instead of understanding the concepts. Regularization penalizes memorization and forces the network to learn robust, generalizable patterns!",
+      "interactiveType": "regularization_arena",
+      "interactiveConfig": {
+        "initialComplexity": 9,
+        "initialNoise": 0.25,
+        "initialDataSize": 18
+      },
+      "codeSnippet": "import torch\nimport torch.nn as nn\nimport torch.optim as optim\n\n# Deep network with Regularization weapons: Dropout & Weight Decay\nclass RobustNet(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc1 = nn.Linear(32, 128)\n        # Dropout knocks out 50% of activations during training!\n        self.drop1 = nn.Dropout(p=0.5)\n        self.fc2 = nn.Linear(128, 64)\n        self.drop2 = nn.Dropout(p=0.3)\n        self.out = nn.Linear(64, 1)\n\n    def forward(self, x):\n        x = torch.relu(self.fc1(x))\n        x = self.drop1(x)\n        x = torch.relu(self.fc2(x))\n        x = self.drop2(x)\n        return self.out(x)\n\nmodel = RobustNet()\n# L2 Weight Decay penalizes large weights: loss + 0.5 * lambda * ||w||^2\noptimizer = optim.Adam(model.parameters(), lr=0.003, weight_decay=1e-4)\n\nprint(\"RobustNet initialized with Dropout(p=0.5) and L2 Weight Decay (1e-4)!\")\nprint(\"Training mode active:\", model.training)\nmodel.eval()  # IMPORTANT: Turn off dropout during testing/inference!\nprint(\"Inference mode active (Dropout disabled):\", not model.training)",
+      "takeaways": [
+        "Overfitting happens when a model has too many parameters relative to dataset size, memorizing noise.",
+        "Underfitting occurs when a model is too simple to capture the underlying pattern (High Bias).",
+        "The signature of overfitting is a diverging gap: Training Loss drops toward 0 while Validation Loss curves upward.",
+        "Dropout randomly drops neurons during training, preventing neurons from relying on specific co-adaptations.",
+        "L2 Weight Decay adds a penalty proportional to squared weight magnitudes, favoring smooth, simple decision boundaries."
+      ],
+      "quiz": [
+        {
+          "question": "What is the classic graphical symptom that a neural network is severely overfitting?",
+          "options": [
+            "Both training loss and validation loss drop steadily to zero together",
+            "Training loss keeps decreasing while validation loss begins climbing upward (diverging gap)",
+            "The model stops using the GPU completely",
+            "Learning rate automatically resets to zero"
+          ],
+          "answer": 1,
+          "explanation": "When training loss keeps falling while validation loss starts increasing, the model is memorizing training quirks rather than learning generalizable patterns."
+        },
+        {
+          "question": "Why must you call model.eval() before running inference/testing on a PyTorch model with Dropout?",
+          "options": [
+            "To reset all weights to zero",
+            "To disable Dropout so all neurons fire and predictions are deterministic and scaled correctly",
+            "To convert the model into a Decision Tree",
+            "Because PyTorch will throw a syntax error otherwise"
+          ],
+          "answer": 1,
+          "explanation": "Dropout is only used during training! At test time, all neurons must be active (scaled by 1-p) so predictions are stable, complete, and reproducible."
+        },
+        {
+          "question": "How does L2 Weight Decay (Ridge Regularization) prevent overfitting?",
+          "options": [
+            "By setting all weights to random negative numbers",
+            "By penalizing large weight values, keeping weights small and preventing wild, jagged decision boundaries",
+            "By deleting 50% of the training dataset",
+            "By doubling the learning rate every epoch"
+          ],
+          "answer": 1,
+          "explanation": "L2 weight decay adds (lambda/2)*||W||^2 to the loss. This penalizes oversized weights and pulls parameters toward zero, smoothing out radical polynomial fluctuations."
+        }
+      ],
+      "lesson": {
+        "readTime": "4 min read",
+        "difficulty": "Intermediate • Generalization",
+        "hook": "Why can an AI model score 100% on training practice tests and still catastrophically fail in the real world?",
+        "analogy": {
+          "title": "The Over-Rehearsed Actor vs The Improv Master 🎭",
+          "description": "Imagine an actor memorizing a script word-for-word, down to the exact cough and chair creak in rehearsal room 4. When they step onto the real stage and the lighting is slightly dimmer or a co-star speaks a fraction of a second slower, the actor freezes in terror! An improv master, on the other hand, learns the themes and character motivations rather than memorizing room quirks. Regularization trains your neural network to be an Improv Master!"
+        },
+        "sections": [
+          {
+            "heading": "1. The Bias-Variance Tug-of-War",
+            "content": "Every machine learning model balances between two opposing failure modes:\n• **Underfitting (High Bias):** The model is too simple (e.g. fitting a straight line to a parabolic curve). It fails on both training data and test data.\n• **Overfitting (High Variance):** The model is overly complex (e.g. a 15th-degree polynomial connecting every noisy data point with wild rollercoaster loops). It achieves near-zero error on training data, but fails drastically on new test data.\n• **The Goldilocks Zone (Good Generalization):** Captures the true underlying signal while ignoring random noise.",
+            "callout": "⚖️ The Core Law: Real-world AI is not about minimizing training error. It is about maximizing Generalization to unseen data."
+          },
+          {
+            "heading": "2. The Tell-Tale Loss Divergence",
+            "content": "When monitoring training telemetry curves across epochs, the signature of overfitting is unmistakable:\n1. **Epochs 1–15:** Both Training Loss and Validation Loss decline together. The model is learning legitimate patterns.\n2. **Epochs 15–20:** Validation Loss plateaus at its minimum (The Sweet Spot).\n3. **Epoch 20+:** The fatal split! Training Loss continues plunging toward zero, while Validation Loss rebounds and skyrockets upward.\nThis divergence tells you the network is no longer learning general concepts—it has begun memorizing training noise.",
+            "callout": "⏱️ Early Stopping: A simple, potent regularization technique: monitor validation loss and automatically halt training when validation error stops improving!"
+          },
+          {
+            "heading": "3. Dropout: The Collective Resilience Hack",
+            "content": "Introduced by Geoffrey Hinton's lab in 2012, **Dropout ($p=0.5$)** is one of the most ingenious ideas in deep learning. During each forward training step, we randomly silence (set to 0) half of the neurons in a layer!\nWhy does this work? In a standard network, neurons can form fragile **co-adaptations**—relying on a neighbor to fix their mistakes. With Dropout, any neuron could disappear at any second. Each neuron is forced to learn independently useful features! Furthermore, training with Dropout acts like averaging an ensemble of $2^N$ different thinned neural networks.",
+            "callout": "🎲 Train vs Eval Mode: In PyTorch, model.train() activates Dropout. Calling model.eval() turns Dropout off and scales weights so inference is 100% deterministic."
+          },
+          {
+            "heading": "4. L2 Weight Decay: Penalizing Extreme Weights",
+            "content": "Why do overfitted decision boundaries look like wild, jagged rollercoasters? Because their weights have exploded to huge positive and negative values! A tiny 0.01 nudge in input causes a 1000-point jump in output.\n**L2 Regularization (Weight Decay)** fixes this by adding a penalty proportional to the sum of squared weights to the loss function:\n$$\\mathcal{L}_{\\text{total}} = \\mathcal{L}_{\\text{data}} + \\frac{\\lambda}{2} \\sum w_i^2$$\nDuring gradient descent, every weight is nudged slightly toward zero on every step: $w \\leftarrow (1 - \\alpha \\lambda) w - \\alpha \\frac{\\partial \\mathcal{L}}{\\partial w}$. This forces weights to remain small, producing smooth, gentle, resilient decision curves.",
+            "callout": "⚖️ Weight Decay in Adam: In PyTorch, passing weight_decay=1e-4 to optim.Adam or optim.AdamW applies this regularization automatically."
+          },
+          {
+            "heading": "5. Data Augmentation: Free Data Diversity",
+            "content": "The ultimate cure for overfitting is simply **more training data**. But when collecting new real data is expensive, we can synthesize infinite variations using **Data Augmentation**:\n• Horizontal & Vertical Flips\n• Random rotations (±15°)\n• Slight scaling and cropping\n• Random brightness and noise jittering\nA model trained on augmented doodles learns that an umbrella is still an umbrella whether tilted left, right, small, or centered!",
+            "callout": "🔄 Invariance Through Augmentation: Teaching the network to be invariant to orientation, scale, and lighting without collecting a single extra real image."
+          }
+        ],
+        "formulaCard": {
+          "title": "L2 Regularized Loss Objective",
+          "equation": "\\mathcal{L}_{\\text{total}} = \\mathcal{L}_{\\text{task}} + \\frac{\\lambda}{2} \\sum_{j=1}^{M} w_j^2",
+          "breakdown": [
+            { "symbol": "L_task", "meaning": "Standard prediction error (e.g. Cross-Entropy or Mean Squared Error)" },
+            { "symbol": "λ (lambda)", "meaning": "Regularization strength hyperparameter (weight decay coefficient, e.g. 1e-4)" },
+            { "symbol": "∑ w_j^2", "meaning": "Sum of squared weight magnitudes (L2 norm ||W||_2^2)" },
+            { "symbol": "L_total", "meaning": "Combined loss minimized by the optimizer, balancing fit vs simplicity" }
+          ]
+        },
+        "takeaways": [
+          "Overfitting is the tendency of high-capacity models to memorize training data quirks.",
+          "The ultimate symptom of overfitting is a growing gap between training loss and validation loss.",
+          "Dropout prevents co-adaptation by randomly masking neurons during training.",
+          "L2 Weight Decay penalizes large weights to produce smooth decision boundaries.",
+          "Always call model.eval() before evaluating test data to disable Dropout."
+        ],
+        "commonPitfalls": [
+          "Evaluating models with model.train() active: Leaves Dropout on, making test predictions stochastic and inaccurate.",
+          "Setting regularization strength lambda too high: Causes heavy underfitting where the model refuses to learn.",
+          "Evaluating test data on training set: Always split data into distinct Train, Validation, and Test sets."
+        ]
+      }
     }
   ]
 }

@@ -37,7 +37,14 @@ const state = {
   kernelBias: 0,
   kernelActivePreset: 'sobel_h',
   kernelPattern: 'shapes',
-  kernelInspectCoord: { x: 14, y: 14 }
+  kernelInspectCoord: { x: 14, y: 14 },
+  // Regularization Arena state
+  regComplexity: 8,
+  regNoise: 0.25,
+  regDataSize: 18,
+  regDropout: 0.0,
+  regWeightDecay: 0.0,
+  regAugmentActive: false
 };
 
 const tutorService = new AITutorService();
@@ -451,6 +458,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'kernel_detective':
       renderKernelDetectiveWidget(quest);
+      break;
+    case 'regularization_arena':
+      renderRegularizationArenaWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -2293,6 +2303,680 @@ function renderKernelDetectiveWidget(quest) {
   drawPattern('shapes');
 }
 
+// --- WIDGET 6: The Overfitting Beast & Regularization Arena ---
+function solveLinearSystem(A, b) {
+  const n = b.length;
+  const M = Array.from({ length: n }, (_, i) => {
+    const row = new Float64Array(n + 1);
+    for (let j = 0; j < n; j++) row[j] = A[i][j];
+    row[n] = b[i];
+    return row;
+  });
+
+  for (let p = 0; p < n; p++) {
+    let maxRow = p;
+    for (let i = p + 1; i < n; i++) {
+      if (Math.abs(M[i][p]) > Math.abs(M[maxRow][p])) maxRow = i;
+    }
+    const temp = M[p];
+    M[p] = M[maxRow];
+    M[maxRow] = temp;
+
+    const pivot = M[p][p];
+    if (Math.abs(pivot) < 1e-12) continue;
+
+    for (let j = p; j <= n; j++) M[p][j] /= pivot;
+
+    for (let i = 0; i < n; i++) {
+      if (i !== p) {
+        const factor = M[i][p];
+        for (let j = p; j <= n; j++) {
+          M[i][j] -= factor * M[p][j];
+        }
+      }
+    }
+  }
+
+  const res = new Float64Array(n);
+  for (let i = 0; i < n; i++) res[i] = isNaN(M[i][n]) ? 0 : M[i][n];
+  return res;
+}
+
+function evalPoly(W, x) {
+  let y = 0;
+  let px = 1;
+  for (let d = 0; d < W.length; d++) {
+    y += W[d] * px;
+    px *= x;
+  }
+  return y;
+}
+
+function groundTruthFn(x) {
+  return Math.sin(2.4 * x) + 0.25 * x;
+}
+
+function fitPolynomial(points, degree, lambda, dropout = 0) {
+  const n = degree + 1;
+  const N = points.length;
+  if (N === 0) return new Float64Array(n);
+
+  // Precompute power sums of x up to 2 * degree
+  const S = new Float64Array(2 * degree + 1);
+  for (let i = 0; i < N; i++) {
+    const x = points[i].x;
+    let px = 1;
+    for (let p = 0; p <= 2 * degree; p++) {
+      S[p] += px;
+      px *= x;
+    }
+  }
+
+  // Precompute b_j = sum(y_i * x_i^j)
+  const b = new Float64Array(n);
+  for (let i = 0; i < N; i++) {
+    const x = points[i].x;
+    const y = points[i].y;
+    let px = 1;
+    for (let j = 0; j < n; j++) {
+      b[j] += y * px;
+      px *= x;
+    }
+  }
+
+  // Build normal equation matrix A
+  const A = Array.from({ length: n }, () => new Float64Array(n));
+  for (let j = 0; j < n; j++) {
+    for (let k = 0; k < n; k++) {
+      A[j][k] = S[j + k];
+    }
+    // Regularization (L2 Weight Decay) applied to non-bias weights (j > 0)
+    if (j > 0) {
+      A[j][j] += N * lambda * 10.0;
+      // Dropout effect: progressively damps higher order polynomial co-adaptations
+      if (dropout > 0) {
+        A[j][j] += N * dropout * Math.pow(j, 1.8) * 0.15;
+      }
+    }
+  }
+
+  return solveLinearSystem(A, b);
+}
+
+function renderRegularizationArenaWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'regularization-arena-container';
+
+  container.innerHTML = `
+    <!-- Top Diagnostic Banner -->
+    <div class="reg-diagnostic-banner">
+      <div class="reg-status-col">
+        <span class="reg-status-badge" id="reg-status-badge">🚨 Severe Overfitting</span>
+        <div class="reg-status-desc" id="reg-status-desc">
+          Model capacity is too high for this dataset size. It connects random training noise, causing validation error to explode!
+        </div>
+      </div>
+      <div class="reg-score-col">
+        <div class="reg-score-label">Generalization Score</div>
+        <div class="reg-score-val" id="reg-score-val">34%</div>
+        <div class="reg-score-bar-bg">
+          <div class="reg-score-bar-fill" id="reg-score-bar-fill" style="width: 34%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Presets Bar -->
+    <div class="reg-presets-bar" id="reg-presets-bar">
+      <span class="reg-presets-label">Battle Scenarios:</span>
+      <button class="btn-reg-preset active" data-preset="monster">🚨 Overfitting Monster</button>
+      <button class="btn-reg-preset" data-preset="underfit">⚠️ Rigid Underfitter</button>
+      <button class="btn-reg-preset" data-preset="dropout">🛡️ Tamed by Dropout</button>
+      <button class="btn-reg-preset" data-preset="decay">⚖️ Tamed by L2 Decay</button>
+      <button class="btn-reg-preset" data-preset="optimal">🏆 Optimal Improv Master</button>
+    </div>
+
+    <!-- 2-Column Canvas Stage -->
+    <div class="reg-stage-grid">
+      <!-- Col 1: Curve Fitting & Decision Boundary -->
+      <div class="reg-panel-card">
+        <div class="reg-panel-header">
+          <span>📈 Curve Fitting & Decision Boundary</span>
+          <div class="reg-legend">
+            <span class="legend-item"><span class="legend-dot blue"></span> Train (N=<span id="legend-train-n">18</span>)</span>
+            <span class="legend-item"><span class="legend-dot orange"></span> Val / Test</span>
+            <span class="legend-item"><span class="legend-line green"></span> Ground Truth</span>
+          </div>
+        </div>
+        <div class="reg-canvas-wrapper">
+          <canvas id="reg-curve-canvas" width="500" height="280" class="reg-canvas"></canvas>
+        </div>
+        <div class="reg-metrics-row">
+          <div class="metric-pill">Train MSE: <strong id="metric-train-mse" style="color: #38bdf8;">0.004</strong></div>
+          <div class="metric-pill">Val MSE: <strong id="metric-val-mse" style="color: #f97316;">0.582</strong></div>
+          <div class="metric-pill">Gap (Variance): <strong id="metric-gap" style="color: #f43f5e;">+0.578</strong></div>
+        </div>
+      </div>
+
+      <!-- Col 2: Dual Loss Telemetry Curve -->
+      <div class="reg-panel-card">
+        <div class="reg-panel-header">
+          <span>📉 Training vs. Validation Loss (Epochs 0–40)</span>
+          <div class="reg-legend">
+            <span class="legend-item"><span class="legend-line cyan"></span> Train Loss</span>
+            <span class="legend-item"><span class="legend-line orange"></span> Val Loss</span>
+          </div>
+        </div>
+        <div class="reg-canvas-wrapper">
+          <canvas id="reg-loss-canvas" width="500" height="280" class="reg-canvas"></canvas>
+        </div>
+        <div class="reg-callout-footer" id="reg-loss-insight">
+          Notice the U-shaped orange curve: Validation loss bottoms out around Epoch 14 and begins climbing, proving memorization of noise!
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom: Weapons & Regularization Controls Rack -->
+    <div class="reg-controls-rack">
+      <div class="reg-control-box">
+        <div class="control-header">
+          <span>🎚️ Model Capacity (Degree)</span>
+          <strong id="val-complexity" style="color: var(--accent-cyan); font-family: var(--font-mono);">Degree 8</strong>
+        </div>
+        <input type="range" id="slider-complexity" min="1" max="12" step="1" value="8" class="cyber-slider" />
+        <span class="control-hint">Degree 1 = Linear; Degree 8+ = High polynomial capacity</span>
+      </div>
+
+      <div class="reg-control-box">
+        <div class="control-header">
+          <span>📊 Training Dataset Size</span>
+          <strong id="val-datasize" style="color: var(--accent-amber); font-family: var(--font-mono);">18 Points</strong>
+        </div>
+        <input type="range" id="slider-datasize" min="10" max="45" step="1" value="18" class="cyber-slider" />
+        <span class="control-hint">Smaller datasets are exponentially easier to memorize</span>
+      </div>
+
+      <div class="reg-control-box">
+        <div class="control-header">
+          <span>🛡️ Dropout Weapon (p)</span>
+          <strong id="val-dropout" style="color: #c4b5fd; font-family: var(--font-mono);">p = 0.0</strong>
+        </div>
+        <div class="reg-segmented-btn-group" id="reg-dropout-group">
+          <button class="param-btn active" data-p="0.0">Off (0.0)</button>
+          <button class="param-btn" data-p="0.2">Light (0.2)</button>
+          <button class="param-btn" data-p="0.5">Heavy (0.5)</button>
+        </div>
+        <span class="control-hint">Randomly drops activations to eliminate co-adaptation</span>
+      </div>
+
+      <div class="reg-control-box">
+        <div class="control-header">
+          <span>⚖️ L2 Weight Decay (λ)</span>
+          <strong id="val-weightdecay" style="color: #34d399; font-family: var(--font-mono);">λ = 0.000</strong>
+        </div>
+        <input type="range" id="slider-weightdecay" min="0" max="0.04" step="0.002" value="0.0" class="cyber-slider" />
+        <span class="control-hint">Penalizes large weights: pulls curve toward smooth trajectory</span>
+      </div>
+
+      <div class="reg-control-box" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="control-header">
+          <span>🔄 Data Augmentation</span>
+          <span class="badge-status" id="badge-augment-status" style="font-size: 0.72rem; color: var(--text-muted);">Disabled</span>
+        </div>
+        <button class="btn-reg-action" id="btn-toggle-augment" style="margin-top: 0.3rem;">
+          <span>✨ Synthesize +12 Points</span>
+        </button>
+        <span class="control-hint" style="margin-top: 0.3rem;">Artificially expands dataset to boost invariance</span>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // References
+  const curveCanvas = container.querySelector('#reg-curve-canvas');
+  const curveCtx = curveCanvas.getContext('2d');
+  const lossCanvas = container.querySelector('#reg-loss-canvas');
+  const lossCtx = lossCanvas.getContext('2d');
+
+  const statusBadge = container.querySelector('#reg-status-badge');
+  const statusDesc = container.querySelector('#reg-status-desc');
+  const scoreVal = container.querySelector('#reg-score-val');
+  const scoreBarFill = container.querySelector('#reg-score-bar-fill');
+
+  const metricTrain = container.querySelector('#metric-train-mse');
+  const metricVal = container.querySelector('#metric-val-mse');
+  const metricGap = container.querySelector('#metric-gap');
+  const lossInsight = container.querySelector('#reg-loss-insight');
+  const legendTrainN = container.querySelector('#legend-train-n');
+
+  const sliderComplexity = container.querySelector('#slider-complexity');
+  const valComplexity = container.querySelector('#val-complexity');
+  const sliderDataSize = container.querySelector('#slider-datasize');
+  const valDataSize = container.querySelector('#val-datasize');
+  const sliderWeightDecay = container.querySelector('#slider-weightdecay');
+  const valWeightDecay = container.querySelector('#val-weightdecay');
+  const valDropout = container.querySelector('#val-dropout');
+  const btnToggleAugment = container.querySelector('#btn-toggle-augment');
+  const badgeAugmentStatus = container.querySelector('#badge-augment-status');
+
+  // Generate fixed base points (deterministic noise seed for repeatability)
+  let trainPoints = [];
+  let valPoints = [];
+  let augPoints = [];
+
+  function makeDatasets() {
+    const N = state.regDataSize;
+    trainPoints = [];
+    valPoints = [];
+    augPoints = [];
+
+    // Training points
+    for (let i = 0; i < N; i++) {
+      const x = -0.9 + (1.8 * i) / (N - 1);
+      // Pseudo-random noise with sine variation
+      const noise = Math.sin(i * 12.9898 + 4.1414) * state.regNoise;
+      const y = groundTruthFn(x) + noise;
+      trainPoints.push({ x, y });
+    }
+
+    // Validation points (24 independent test samples spanning -0.96 to 0.96)
+    for (let i = 0; i < 24; i++) {
+      const x = -0.96 + (1.92 * i) / 23;
+      const noise = Math.cos(i * 7.8233 + 1.234) * (state.regNoise * 0.9);
+      const y = groundTruthFn(x) + noise;
+      valPoints.push({ x, y });
+    }
+
+    // Augmented points
+    if (state.regAugmentActive) {
+      for (let i = 0; i < 12; i++) {
+        const base = trainPoints[i % trainPoints.length];
+        const jitX = Math.max(-0.95, Math.min(0.95, base.x + (Math.sin(i * 3.14) * 0.06)));
+        const jitY = base.y + (Math.cos(i * 2.71) * 0.08);
+        augPoints.push({ x: jitX, y: jitY });
+      }
+    }
+
+    legendTrainN.textContent = trainPoints.length + augPoints.length;
+  }
+
+  function recomputeAndDraw() {
+    const combinedTrain = state.regAugmentActive ? [...trainPoints, ...augPoints] : trainPoints;
+    const degree = state.regComplexity;
+    const lambda = state.regWeightDecay;
+    const dropout = state.regDropout;
+
+    // Fit model
+    const W = fitPolynomial(combinedTrain, degree, lambda, dropout);
+
+    // Compute MSE
+    let trainLoss = 0;
+    for (const p of combinedTrain) {
+      const diff = p.y - evalPoly(W, p.x);
+      trainLoss += diff * diff;
+    }
+    trainLoss /= combinedTrain.length;
+
+    let valLoss = 0;
+    for (const p of valPoints) {
+      const diff = p.y - evalPoly(W, p.x);
+      valLoss += diff * diff;
+    }
+    valLoss /= valPoints.length;
+
+    const gap = Math.max(0, valLoss - trainLoss);
+
+    // Update readouts
+    metricTrain.textContent = trainLoss.toFixed(4);
+    metricVal.textContent = valLoss.toFixed(4);
+    metricGap.textContent = (gap >= 0 ? '+' : '') + gap.toFixed(4);
+
+    const isOverfit = (degree >= 7 && lambda < 0.006 && dropout < 0.2) || (gap > 0.12 && lambda < 0.005);
+    const isUnderfit = degree <= 2;
+
+    // Calculate Generalization Score (0% to 100%)
+    let genScore;
+    if (isUnderfit) {
+      genScore = Math.max(15, Math.min(45, Math.round(35 - trainLoss * 20)));
+    } else if (isOverfit) {
+      genScore = Math.max(12, Math.min(42, Math.round(42 - gap * 35)));
+    } else {
+      genScore = Math.max(75, Math.min(98, Math.round(96 - (valLoss * 30 + gap * 20))));
+    }
+
+    scoreVal.textContent = `${genScore}%`;
+    scoreBarFill.style.width = `${genScore}%`;
+
+    // Status classification
+    if (isUnderfit) {
+      statusBadge.className = 'reg-status-badge underfit';
+      statusBadge.textContent = '⚠️ Rigid Underfitting';
+      statusDesc.textContent = 'High Bias: Model is too primitive (straight line) to capture the true non-linear wave. Both Train and Val errors are high.';
+      scoreBarFill.style.background = '#eab308';
+    } else if (isOverfit) {
+      statusBadge.className = 'reg-status-badge overfit';
+      statusBadge.textContent = '🚨 Severe Overfitting';
+      statusDesc.textContent = 'High Variance: Model connects every noisy data point with extreme loops! Train Loss is near 0, but Validation Loss is exploding.';
+      scoreBarFill.style.background = '#f43f5e';
+    } else {
+      statusBadge.className = 'reg-status-badge optimal';
+      statusBadge.textContent = '🏆 Optimal Generalization';
+      statusDesc.textContent = 'Goldilocks Zone! Regularization smoothed the curve, matching the true pattern and keeping Test Error low.';
+      scoreBarFill.style.background = '#10b981';
+    }
+
+    // Draw Canvases
+    drawCurveCanvas(curveCtx, combinedTrain, valPoints, augPoints, W, degree, gap);
+    drawLossCanvas(lossCtx, trainLoss, valLoss, degree, lambda, dropout, gap);
+  }
+
+  function drawCurveCanvas(ctx, trainPts, valPts, augPts, W, degree, gap) {
+    const W_px = 500;
+    const H_px = 280;
+    ctx.clearRect(0, 0, W_px, H_px);
+
+    // Coordinate mapping: x in [-1.1, 1.1], y in [-1.8, 1.8]
+    const mapX = (x) => ((x + 1.1) / 2.2) * W_px;
+    const mapY = (y) => H_px - ((y + 1.8) / 3.6) * H_px;
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let gx = -1; gx <= 1; gx += 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(mapX(gx), 0);
+      ctx.lineTo(mapX(gx), H_px);
+      ctx.stroke();
+    }
+    for (let gy = -1; gy <= 1; gy += 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(0, mapY(gy));
+      ctx.lineTo(W_px, mapY(gy));
+      ctx.stroke();
+    }
+
+    // 1. Ground Truth Function (Dashed green line)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    for (let i = 0; i <= 100; i++) {
+      const x = -1.05 + (2.1 * i) / 100;
+      const y = groundTruthFn(x);
+      if (i === 0) ctx.moveTo(mapX(x), mapY(y));
+      else ctx.lineTo(mapX(x), mapY(y));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. Model's Learned Curve
+    ctx.save();
+    const isOverfit = (degree >= 7 && state.regWeightDecay < 0.006 && state.regDropout < 0.2) || (gap > 0.12 && state.regWeightDecay < 0.005);
+    const isUnderfit = degree <= 2;
+    ctx.strokeStyle = isOverfit ? '#f43f5e' : (isUnderfit ? '#eab308' : '#06b6d4');
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+
+    for (let i = 0; i <= 150; i++) {
+      const x = -1.05 + (2.1 * i) / 150;
+      const y = Math.max(-2.2, Math.min(2.2, evalPoly(W, x)));
+      if (i === 0) ctx.moveTo(mapX(x), mapY(y));
+      else ctx.lineTo(mapX(x), mapY(y));
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 3. Augmented Points (if any)
+    for (const p of augPts) {
+      ctx.fillStyle = '#34d399';
+      ctx.beginPath();
+      ctx.arc(mapX(p.x), mapY(p.y), 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // 4. Training Points (Blue dots)
+    for (const p of trainPoints) {
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(mapX(p.x), mapY(p.y), 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // 5. Validation Points (Orange triangles)
+    for (const p of valPts) {
+      const cx = mapX(p.x);
+      const cy = mapY(p.y);
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 6);
+      ctx.lineTo(cx + 5, cy + 4);
+      ctx.lineTo(cx - 5, cy + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  function drawLossCanvas(ctx, trainLoss, valLoss, degree, lambda, dropout, gap) {
+    const W_px = 500;
+    const H_px = 280;
+    ctx.clearRect(0, 0, W_px, H_px);
+
+    // Padding & Axes
+    const padL = 45, padR = 25, padT = 25, padB = 40;
+    const plotW = W_px - padL - padR;
+    const plotH = H_px - padT - padB;
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let e = 0; e <= 40; e += 10) {
+      const x = padL + (e / 40) * plotW;
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + plotH);
+      ctx.stroke();
+      // Epoch label
+      ctx.fillStyle = 'var(--text-muted)';
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillText(`Ep ${e}`, x - 12, padT + plotH + 16);
+    }
+
+    // Simulate 40 Epochs Progression
+    const isOverfit = (degree >= 7 && lambda < 0.006 && dropout < 0.2) || (gap > 0.12 && lambda < 0.005);
+    const trainPointsCurve = [];
+    const valPointsCurve = [];
+
+    const maxLossDisplay = 1.0;
+    const mapLossY = (l) => padT + plotH - (Math.min(maxLossDisplay, Math.max(0, l)) / maxLossDisplay) * plotH;
+
+    for (let e = 0; e <= 40; e++) {
+      const progress = e / 40;
+      // Train loss decay
+      const tL = Math.max(0.01, trainLoss + (0.9 - trainLoss) * Math.exp(-e / 7.0));
+      trainPointsCurve.push({ x: padL + progress * plotW, y: mapLossY(tL) });
+
+      // Val loss behavior
+      let vL;
+      if (isOverfit) {
+        // U-shaped curve: drops then shoots up after epoch 14
+        const baseDrop = 0.85 * Math.exp(-e / 6.0) + 0.12;
+        const divergence = e > 14 ? Math.pow((e - 14) / 26, 1.8) * 0.75 : 0;
+        vL = baseDrop + divergence;
+      } else {
+        // Healthy: stays coupled
+        vL = tL + 0.03 + Math.sin(e * 0.5) * 0.01;
+      }
+      valPointsCurve.push({ x: padL + progress * plotW, y: mapLossY(vL) });
+    }
+
+    // Optimal Early Stopping Marker (Epoch 14)
+    if (isOverfit) {
+      const stopX = padL + (14 / 40) * plotW;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(stopX, padT);
+      ctx.lineTo(stopX, padT + plotH);
+      ctx.stroke();
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillText('⭐ Early Stop (Ep 14)', stopX - 55, padT + 12);
+      ctx.restore();
+    }
+
+    // Draw Train Loss Curve (Cyan)
+    ctx.save();
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < trainPointsCurve.length; i++) {
+      if (i === 0) ctx.moveTo(trainPointsCurve[i].x, trainPointsCurve[i].y);
+      else ctx.lineTo(trainPointsCurve[i].x, trainPointsCurve[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Draw Val Loss Curve (Orange)
+    ctx.save();
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < valPointsCurve.length; i++) {
+      if (i === 0) ctx.moveTo(valPointsCurve[i].x, valPointsCurve[i].y);
+      else ctx.lineTo(valPointsCurve[i].x, valPointsCurve[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Dynamic insight footer
+    if (isOverfit) {
+      lossInsight.innerHTML = '🚨 <strong>Classic U-Shaped Divergence:</strong> Validation loss bottoms out around Epoch 14 and begins climbing, proving the network is memorizing noise!';
+    } else if (degree <= 2) {
+      lossInsight.innerHTML = '⚠️ <strong>Underfitting Plateau:</strong> Both training and validation errors stall at high levels. The model lacks sufficient parameters to learn the wave.';
+    } else {
+      lossInsight.innerHTML = '🏆 <strong>Coupled Generalization:</strong> Validation loss closely follows training loss with minimal gap. Your regularization weapons conquered the beast!';
+    }
+  }
+
+  // --- Controls Event Listeners ---
+  sliderComplexity.addEventListener('input', (e) => {
+    state.regComplexity = parseInt(e.target.value, 10);
+    valComplexity.textContent = `Degree ${state.regComplexity}`;
+    recomputeAndDraw();
+  });
+
+  sliderDataSize.addEventListener('input', (e) => {
+    state.regDataSize = parseInt(e.target.value, 10);
+    valDataSize.textContent = `${state.regDataSize} Points`;
+    makeDatasets();
+    recomputeAndDraw();
+  });
+
+  sliderWeightDecay.addEventListener('input', (e) => {
+    state.regWeightDecay = parseFloat(e.target.value);
+    valWeightDecay.textContent = `λ = ${state.regWeightDecay.toFixed(3)}`;
+    recomputeAndDraw();
+  });
+
+  container.querySelectorAll('#reg-dropout-group .param-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('#reg-dropout-group .param-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.regDropout = parseFloat(btn.dataset.p);
+      valDropout.textContent = `p = ${state.regDropout.toFixed(1)}`;
+      recomputeAndDraw();
+    });
+  });
+
+  btnToggleAugment.addEventListener('click', () => {
+    state.regAugmentActive = !state.regAugmentActive;
+    badgeAugmentStatus.textContent = state.regAugmentActive ? 'Active (+12 pts)' : 'Disabled';
+    badgeAugmentStatus.style.color = state.regAugmentActive ? '#34d399' : 'var(--text-muted)';
+    btnToggleAugment.classList.toggle('active', state.regAugmentActive);
+    makeDatasets();
+    recomputeAndDraw();
+  });
+
+  // --- Preset Scenarios ---
+  container.querySelectorAll('.btn-reg-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.btn-reg-preset').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const preset = btn.dataset.preset;
+      if (preset === 'monster') {
+        state.regComplexity = 11;
+        state.regDataSize = 14;
+        state.regWeightDecay = 0.0;
+        state.regDropout = 0.0;
+        state.regAugmentActive = false;
+      } else if (preset === 'underfit') {
+        state.regComplexity = 1;
+        state.regDataSize = 25;
+        state.regWeightDecay = 0.0;
+        state.regDropout = 0.0;
+        state.regAugmentActive = false;
+      } else if (preset === 'dropout') {
+        state.regComplexity = 10;
+        state.regDataSize = 20;
+        state.regWeightDecay = 0.0;
+        state.regDropout = 0.5;
+        state.regAugmentActive = false;
+      } else if (preset === 'decay') {
+        state.regComplexity = 10;
+        state.regDataSize = 20;
+        state.regWeightDecay = 0.024;
+        state.regDropout = 0.0;
+        state.regAugmentActive = false;
+      } else if (preset === 'optimal') {
+        state.regComplexity = 4;
+        state.regDataSize = 24;
+        state.regWeightDecay = 0.006;
+        state.regDropout = 0.2;
+        state.regAugmentActive = true;
+      }
+
+      // Sync UI sliders
+      sliderComplexity.value = state.regComplexity;
+      valComplexity.textContent = `Degree ${state.regComplexity}`;
+      sliderDataSize.value = state.regDataSize;
+      valDataSize.textContent = `${state.regDataSize} Points`;
+      sliderWeightDecay.value = state.regWeightDecay;
+      valWeightDecay.textContent = `λ = ${state.regWeightDecay.toFixed(3)}`;
+      valDropout.textContent = `p = ${state.regDropout.toFixed(1)}`;
+
+      container.querySelectorAll('#reg-dropout-group .param-btn').forEach(b => {
+        b.classList.toggle('active', parseFloat(b.dataset.p) === state.regDropout);
+      });
+
+      badgeAugmentStatus.textContent = state.regAugmentActive ? 'Active (+12 pts)' : 'Disabled';
+      badgeAugmentStatus.style.color = state.regAugmentActive ? '#34d399' : 'var(--text-muted)';
+      btnToggleAugment.classList.toggle('active', state.regAugmentActive);
+
+      makeDatasets();
+      recomputeAndDraw();
+    });
+  });
+
+  // Initial draw
+  makeDatasets();
+  recomputeAndDraw();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -2426,6 +3110,12 @@ const questPrompts = {
     { label: '🔍 Explain Stride and Padding math', prompt: 'Walk through the formula for convolutional output dimensions: O = ((W - K + 2P)/S) + 1 with concrete examples.' },
     { label: '🔍 What makes Gaussian blur smooth images?', prompt: 'Why do the fractions in a Gaussian blur kernel sum to 1.0, and how does it reduce high-frequency image noise?' },
     { label: '🎯 Quiz me on Kernel Detective', prompt: 'Give me a challenging question about 3x3 convolution kernels, padding, and stride!' }
+  ],
+  'quest-6': [
+    { label: '🐉 How does Dropout prevent co-adaptation?', prompt: 'Explain how Dropout (p=0.5) forces individual neurons to learn useful features instead of relying on neighboring neurons to fix mistakes.' },
+    { label: '🐉 Why do train and val loss diverge?', prompt: 'Walk through why training loss keeps dropping while validation loss explodes upward when a neural network overfits.' },
+    { label: '⚖️ How does L2 Weight Decay smooth boundaries?', prompt: 'Explain the mathematics of L2 weight decay (loss + 0.5 * lambda * ||w||^2) and why smaller weights produce smoother curves.' },
+    { label: '🎯 Quiz me on Regularization', prompt: 'Give me a challenging question about bias-variance tradeoff, early stopping, and dropout in PyTorch!' }
   ]
 };
 

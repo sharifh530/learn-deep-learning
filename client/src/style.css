@@ -2879,4 +2879,366 @@ body {
   }
 }
 
+/* ==========================================================================
+   QUEST 6: REGULARIZATION ARENA (THE OVERFITTING BEAST)
+   ========================================================================== */
+
+.regularization-arena-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  animation: fadeIn 0.3s ease;
+}
+
+.reg-diagnostic-banner {
+  background: linear-gradient(135deg, rgba(23, 27, 44, 0.85), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.reg-status-col {
+  flex: 1;
+  min-width: 250px;
+}
+
+.reg-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  margin-bottom: 0.4rem;
+  transition: all var(--transition-fast);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.reg-status-badge.overfit {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+.reg-status-badge.underfit {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+.reg-status-badge.optimal {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
+}
+
+.reg-status-desc {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.reg-score-col {
+  min-width: 180px;
+  text-align: right;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.8rem 1.1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.reg-score-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.reg-score-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #38bdf8;
+  letter-spacing: -0.5px;
+}
+
+.reg-score-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+
+.reg-score-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.35s ease, background 0.35s ease;
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+}
+
+/* Preset Scenarios */
+.reg-presets-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0.2rem 0;
+}
+
+.reg-presets-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-right: 0.2rem;
+}
+
+.btn-reg-preset {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  padding: 0.42rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-reg-preset:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-reg-preset.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.35), rgba(6, 182, 212, 0.35));
+  border-color: var(--accent-violet);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.4);
+}
+
+/* Stage Grid */
+.reg-stage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 960px) {
+  .reg-stage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.reg-panel-card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.reg-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reg-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend-dot.blue { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+.legend-dot.orange { background: #f97316; box-shadow: 0 0 6px #f97316; }
+
+.legend-line {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.legend-line.green { background: #10b981; box-shadow: 0 0 6px #10b981; }
+.legend-line.cyan { background: #06b6d4; box-shadow: 0 0 6px #06b6d4; }
+.legend-line.orange { background: #f97316; box-shadow: 0 0 6px #f97316; }
+
+.reg-canvas-wrapper {
+  width: 100%;
+  background: rgba(8, 12, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.4rem;
+}
+
+.reg-canvas {
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+  aspect-ratio: 500 / 280;
+  display: block;
+}
+
+.reg-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.metric-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex: 1;
+  text-align: center;
+  min-width: 110px;
+}
+
+.reg-callout-footer {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.95rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+/* Weapons & Regularization Controls Rack */
+.reg-controls-rack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+  background: rgba(15, 21, 35, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.reg-control-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.reg-segmented-btn-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 3px;
+}
+
+.reg-segmented-btn-group .param-btn {
+  flex: 1;
+  padding: 0.4rem 0.3rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.reg-segmented-btn-group .param-btn:hover {
+  color: #fff;
+}
+
+.reg-segmented-btn-group .param-btn.active {
+  background: var(--accent-violet);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
+
+.btn-reg-action {
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all var(--transition-fast);
+}
+
+.btn-reg-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-reg-action.active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+
 
