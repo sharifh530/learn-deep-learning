@@ -1190,6 +1190,17 @@ function setupAiTutor() {
   renderTutorChips();
 }
 
+// --- TUTOR BADGE HELPER ---
+function updateTutorBadge() {
+  if (dom.tutorModelBadge) {
+    if (tutorService.providerType === 'custom_agent') {
+      dom.tutorModelBadge.textContent = 'Custom Cloud Agent';
+    } else {
+      dom.tutorModelBadge.textContent = tutorService.model;
+    }
+  }
+}
+
 // --- SETTINGS MODAL & API KEY ---
 function setupSettings() {
   const updateProviderVisibility = () => {
@@ -1217,16 +1228,6 @@ function setupSettings() {
 
   dom.btnOpenSettings.addEventListener('click', openModal);
   dom.btnCloseSettings.addEventListener('click', closeModal);
-
-function updateTutorBadge() {
-  if (dom.tutorModelBadge) {
-    if (tutorService.providerType === 'custom_agent') {
-      dom.tutorModelBadge.textContent = 'Custom Cloud Agent';
-    } else {
-      dom.tutorModelBadge.textContent = tutorService.model;
-    }
-  }
-}
 
   dom.geminiModelSelect.addEventListener('change', () => {
     tutorService.setModel(dom.geminiModelSelect.value);
@@ -1341,4 +1342,8 @@ function initApp() {
   setInterval(checkBackendStatus, 15000);
 }
 
-document.addEventListener('DOMContentLoaded', initApp);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}

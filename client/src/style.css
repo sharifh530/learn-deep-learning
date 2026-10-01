@@ -1520,7 +1520,12 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tutor-preset-chips::-webkit-scrollbar {
+  display: none;
 }
 
 .chip {
