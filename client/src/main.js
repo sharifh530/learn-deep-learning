@@ -72,6 +72,7 @@ const dom = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   btnSaveSettings: document.getElementById('btn-save-settings'),
   btnTestApi: document.getElementById('btn-test-api'),
+  btnDetectModels: document.getElementById('btn-detect-models'),
   aiProviderSelect: document.getElementById('ai-provider-select'),
   geminiKeyInput: document.getElementById('gemini-key-input'),
   geminiModelSelect: document.getElementById('gemini-model-select'),
@@ -1098,6 +1099,40 @@ function updateTutorBadge() {
     const testAns = await tutorService.ask("Test connection! Reply with 'Osu! Sensei Tensor is online!' in 5 words.");
     dom.settingsTestStatus.innerHTML = marked.parse(testAns);
   });
+
+  if (dom.btnDetectModels) {
+    dom.btnDetectModels.addEventListener('click', async () => {
+      const key = dom.geminiKeyInput.value.trim();
+      if (!key) {
+        dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">Please enter an API key first to auto-detect models.</span>`;
+        return;
+      }
+
+      dom.settingsTestStatus.innerHTML = `<span>⏳ Querying available models from Google API for your key...</span>`;
+      tutorService.setApiKey(key);
+      const models = await tutorService.listAvailableModels();
+
+      if (models.length > 0) {
+        dom.geminiModelSelect.innerHTML = '';
+        models.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = `${m.displayName} (${m.id})`;
+          dom.geminiModelSelect.appendChild(opt);
+        });
+
+        // Pick preferred or first
+        const preferred = models.find(m => m.id.includes('flash')) || models[0];
+        dom.geminiModelSelect.value = preferred.id;
+        tutorService.setModel(preferred.id);
+        updateTutorBadge();
+
+        dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Successfully detected <strong>${models.length} models</strong>! Selected: <strong>${preferred.id}</strong></span>`;
+      } else {
+        dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">⚠️ Could not list models automatically. Check key restrictions or select manually.</span>`;
+      }
+    });
+  }
 }
 
 // --- TABS SWITCHER ---

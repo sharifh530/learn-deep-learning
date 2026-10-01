@@ -14,7 +14,7 @@ Rules for your answers:
 export class AITutorService {
   constructor() {
     this.apiKey = localStorage.getItem('neuroquest_gemini_key') || '';
-    this.model = localStorage.getItem('neuroquest_gemini_model') || 'gemini-1.5-flash';
+    this.model = localStorage.getItem('neuroquest_gemini_model') || 'gemini-2.0-flash';
     this.providerType = localStorage.getItem('neuroquest_provider_type') || 'gemini'; // 'gemini' | 'custom_agent'
     this.customAgentUrl = localStorage.getItem('neuroquest_custom_agent_url') || '';
   }
@@ -33,8 +33,8 @@ export class AITutorService {
   }
 
   setModel(model) {
-    this.model = model;
-    localStorage.setItem('neuroquest_gemini_model', model);
+    this.model = model.trim().replace(/^models\//, '');
+    localStorage.setItem('neuroquest_gemini_model', this.model);
   }
 
   setProvider(provider, customUrl = '') {
@@ -42,6 +42,31 @@ export class AITutorService {
     this.customAgentUrl = customUrl.trim();
     localStorage.setItem('neuroquest_provider_type', provider);
     localStorage.setItem('neuroquest_custom_agent_url', this.customAgentUrl);
+  }
+
+  async listAvailableModels() {
+    if (!this.hasApiKey()) return [];
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!data.models || !Array.isArray(data.models)) return [];
+
+      return data.models
+        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => {
+          const cleanId = m.name.replace(/^models\//, '');
+          return {
+            id: cleanId,
+            displayName: m.displayName || cleanId,
+            description: m.description || ''
+          };
+        });
+    } catch (err) {
+      console.warn("Could not fetch models list:", err);
+      return [];
+    }
   }
 
   async ask(userPrompt, questContext = null) {
@@ -71,8 +96,10 @@ export class AITutorService {
       }
     };
 
+    const cleanModel = this.model.replace(/^models\//, '');
+
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${this.apiKey}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -83,9 +110,19 @@ export class AITutorService {
         const errData = await res.json().catch(() => ({}));
         const rawMsg = errData?.error?.message || `API error (${res.status}): ${res.statusText}`;
 
-        // Specifically detect Google Cloud blocked API error
+        // 1. Specifically detect Google Cloud blocked API error
         if (rawMsg.includes('generativelanguage.googleapis.com') || rawMsg.includes('blocked')) {
           return `⚠️ **Google Cloud Project Configuration Required**\n\nYour API key is active, but Google Cloud blocked requests to **Generative Language API** for this GCP project.\n\n### 🔧 How to fix this in 30 seconds:\n1. **Enable the API:** Open [Google Cloud Console: Generative Language API](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com) and click the blue **"Enable"** button for your project.\n2. **Check Key Restrictions:** In [Google Cloud Credentials](https://console.cloud.google.com/apis/credentials), click your API key. Under **API restrictions**, choose **"Don't restrict key"** or ensure **"Generative Language API"** is checked.\n3. **Alternative (Instant Free Key):** If you prefer a 1-click key without GCP project setup, generate a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).`;
+        }
+
+        // 2. Specifically detect Model Not Found / Not Supported error
+        if (rawMsg.includes('is not found') || rawMsg.includes('Call ModelService.ListModels')) {
+          const available = await this.listAvailableModels();
+          if (available.length > 0) {
+            const modelList = available.map(m => `- \`${m.id}\` (${m.displayName})`).join('\n');
+            return `⚠️ **Model \`${cleanModel}\` is not available on your API key.**\n\nHere are the models your key has access to:\n${modelList}\n\n👉 **Quick Fix:** Click **Settings ⚙️** and select one of the available models above (e.g., \`${available[0].id}\`), or click **"Detect Available Models"**!`;
+          }
+          return `⚠️ **Model \`${cleanModel}\` is not found for this API key.**\n\nTry selecting \`gemini-2.0-flash\` or \`gemini-3.5-flash-lite\` in **Settings ⚙️**.`;
         }
 
         throw new Error(rawMsg);
