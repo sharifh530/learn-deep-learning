@@ -62,6 +62,7 @@ const dom = {
   // Tutor Drawer
   aiTutorDrawer: document.getElementById('ai-tutor-drawer'),
   btnCloseTutor: document.getElementById('btn-close-tutor'),
+  tutorModelBadge: document.getElementById('tutor-model-badge'),
   tutorChatHistory: document.getElementById('tutor-chat-history'),
   tutorInputText: document.getElementById('tutor-input-text'),
   btnSendTutor: document.getElementById('btn-send-tutor'),
@@ -1048,6 +1049,16 @@ function setupSettings() {
   dom.btnOpenSettings.addEventListener('click', openModal);
   dom.btnCloseSettings.addEventListener('click', closeModal);
 
+function updateTutorBadge() {
+  if (dom.tutorModelBadge) {
+    if (tutorService.providerType === 'custom_agent') {
+      dom.tutorModelBadge.textContent = 'Custom Cloud Agent';
+    } else {
+      dom.tutorModelBadge.textContent = tutorService.model;
+    }
+  }
+}
+
   dom.btnSaveSettings.addEventListener('click', () => {
     const provider = dom.aiProviderSelect.value;
     const key = dom.geminiKeyInput.value;
@@ -1061,6 +1072,7 @@ function setupSettings() {
     state.backendUrl = backend;
     localStorage.setItem('nq_backend_url', backend);
 
+    updateTutorBadge();
     closeModal();
     checkBackendStatus();
   });
@@ -1112,6 +1124,7 @@ function initApp() {
   setupCodeLab();
   setupAiTutor();
   setupSettings();
+  updateTutorBadge();
 
   checkBackendStatus();
   setInterval(checkBackendStatus, 15000);
