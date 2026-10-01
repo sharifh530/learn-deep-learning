@@ -65,6 +65,7 @@ const dom = {
   btnCloseTutorModal: document.getElementById('btn-close-tutor-modal'),
   btnClearChat: document.getElementById('btn-clear-chat'),
   tutorQuestContextPill: document.getElementById('tutor-quest-context-pill'),
+  tutorQuestSelect: document.getElementById('tutor-quest-select'),
   tutorModelBadge: document.getElementById('tutor-model-badge'),
   tutorChatHistory: document.getElementById('tutor-chat-history'),
   tutorInputText: document.getElementById('tutor-input-text'),
@@ -217,6 +218,11 @@ function renderActiveQuest() {
 
   // Render Quiz
   renderQuiz(quest);
+
+  // Synchronize AI Tutor suggestion prompt deck with currently active quest
+  if (typeof renderTutorChips === 'function') {
+    renderTutorChips();
+  }
 }
 
 // --- Interactive Sandbox Renderers ---
@@ -973,61 +979,285 @@ function renderQuiz(quest) {
 }
 
 // --- AI TUTOR (SENSEI TENSOR DOJO) MODAL ---
-function setupAiTutor() {
-  const questPrompts = {
-    'quest-1': [
-      { label: '☕ Why weights act like knobs?', prompt: 'Explain why weights act like volume knobs on coffee ingredients with a playful metaphor.' },
-      { label: '☕ How does bias shift the zero point?', prompt: 'Why do we need a bias term even if all coffee ingredients are zero?' },
-      { label: '🐍 Code a 3-input neuron', prompt: 'Show me how to code a single artificial neuron with 3 inputs and a bias in clean Python NumPy.' },
-      { label: '🎯 Quiz me on Quest 1', prompt: 'Give me a quick 1-question quiz about weights and bias to test my intuition!' }
-    ],
-    'quest-2': [
-      { label: '⚡ Why can\'t linear layers solve XOR?', prompt: 'Why can\'t a single straight line separate diagonal XOR dots without an activation function?' },
-      { label: '⚡ When to use ReLU vs Sigmoid?', prompt: 'When should I use ReLU versus Sigmoid or Tanh in neural networks?' },
-      { label: '⚡ What is the dying ReLU problem?', prompt: 'Explain what happens when a neuron gets stuck outputting 0 with ReLU.' },
-      { label: '🎯 Quiz me on Quest 2', prompt: 'Give me a quick pop quiz on activation functions and non-linearity!' }
-    ],
-    'quest-3': [
-      { label: '⛰️ Explain gradients with a mountain', prompt: 'Use a foggy mountain and rolling marbles to explain loss functions and gradient descent.' },
-      { label: '⛰️ What is learning rate overshoot?', prompt: 'What happens mathematically and visually when the learning rate alpha is set too large?' },
-      { label: '🐍 10 lines of PyTorch training', prompt: 'Write a complete 10-line PyTorch script demonstrating gradient descent optimization with loss.backward().' },
-      { label: '🎯 Quiz me on Quest 3', prompt: 'Test me with a tricky question on learning rates and gradient descent!' }
-    ],
-    'quest-4': [
-      { label: '🎨 How do 3x3 filters find edges?', prompt: 'How does sliding a 3x3 matrix across image pixels detect horizontal and vertical edges?' },
-      { label: '🎨 Why use Max Pooling?', prompt: 'Why do CNNs downsample with MaxPool2d instead of just making images smaller beforehand?' },
-      { label: '🎨 Explain DoodleCNN architecture', prompt: 'Break down the DoodleCNN architecture line-by-line: Conv2d -> ReLU -> MaxPool2d -> Linear.' },
-      { label: '🎯 Quiz me on Convolutions', prompt: 'Give me a challenging question about CNN feature maps and pooling!' }
-    ]
-  };
+const CHAT_STORAGE_KEY = 'nq_chat_history';
 
-  const renderTutorChips = () => {
+const questPrompts = {
+  'quest-1': [
+    { label: '☕ Why weights act like knobs?', prompt: 'Explain why weights act like volume knobs on coffee ingredients with a playful metaphor.' },
+    { label: '☕ How does bias shift the zero point?', prompt: 'Why do we need a bias term even if all coffee ingredients are zero?' },
+    { label: '🐍 Code a 3-input neuron', prompt: 'Show me how to code a single artificial neuron with 3 inputs and a bias in clean Python NumPy.' },
+    { label: '🎯 Quiz me on Quest 1', prompt: 'Give me a quick 1-question quiz about weights and bias to test my intuition!' }
+  ],
+  'quest-2': [
+    { label: '⚡ Why can\'t linear layers solve XOR?', prompt: 'Why can\'t a single straight line separate diagonal XOR dots without an activation function?' },
+    { label: '⚡ When to use ReLU vs Sigmoid?', prompt: 'When should I use ReLU versus Sigmoid or Tanh in neural networks?' },
+    { label: '⚡ What is the dying ReLU problem?', prompt: 'Explain what happens when a neuron gets stuck outputting 0 with ReLU.' },
+    { label: '🎯 Quiz me on Quest 2', prompt: 'Give me a quick pop quiz on activation functions and non-linearity!' }
+  ],
+  'quest-3': [
+    { label: '⛰️ Explain gradients with a mountain', prompt: 'Use a foggy mountain and rolling marbles to explain loss functions and gradient descent.' },
+    { label: '⛰️ What is learning rate overshoot?', prompt: 'What happens mathematically and visually when the learning rate alpha is set too large?' },
+    { label: '🐍 10 lines of PyTorch training', prompt: 'Write a complete 10-line PyTorch script demonstrating gradient descent optimization with loss.backward().' },
+    { label: '🎯 Quiz me on Quest 3', prompt: 'Test me with a tricky question on learning rates and gradient descent!' }
+  ],
+  'quest-4': [
+    { label: '🎨 How do 3x3 filters find edges?', prompt: 'How does sliding a 3x3 matrix across image pixels detect horizontal and vertical edges?' },
+    { label: '🎨 Why use Max Pooling?', prompt: 'Why do CNNs downsample with MaxPool2d instead of just making images smaller beforehand?' },
+    { label: '🎨 Explain DoodleCNN architecture', prompt: 'Break down the DoodleCNN architecture line-by-line: Conv2d -> ReLU -> MaxPool2d -> Linear.' },
+    { label: '🎯 Quiz me on Convolutions', prompt: 'Give me a challenging question about CNN feature maps and pooling!' }
+  ]
+};
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getStoredChatHistory() {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.warn('Failed to parse chat history from localStorage', e);
+    return [];
+  }
+}
+
+function persistChatMessage(sender, text, time) {
+  try {
+    const history = getStoredChatHistory();
     const quest = getActiveQuest();
-    const chips = questPrompts[quest.id] || [
-      { label: '💡 Explain like I\'m 10', prompt: 'Explain the current deep learning concept like I am 10 years old.' },
-      { label: '🐍 Show Python snippet', prompt: 'Provide a clean, runnable Python snippet explaining this concept.' },
-      { label: '🎯 Quiz Me (+XP)', prompt: 'Give me a quick pop quiz on deep learning!' }
-    ];
+    history.push({
+      sender,
+      text,
+      time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      questId: quest ? quest.id : null,
+      timestamp: Date.now()
+    });
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(history));
+  } catch (e) {
+    console.warn('Failed to save chat message to localStorage', e);
+  }
+}
 
-    dom.tutorPresetChips.innerHTML = '';
-    chips.forEach(c => {
-      const btn = document.createElement('button');
-      btn.className = 'chip';
-      btn.textContent = c.label;
-      btn.addEventListener('click', () => handleSend(c.prompt));
-      dom.tutorPresetChips.appendChild(btn);
+function enhanceCodeBlocks(containerEl) {
+  if (!containerEl) return;
+  const pres = containerEl.querySelectorAll('pre');
+  pres.forEach(pre => {
+    if (pre.parentElement.classList.contains('chat-code-block-wrapper')) return;
+
+    const codeEl = pre.querySelector('code');
+    const rawCode = (codeEl ? codeEl.textContent : pre.textContent).trim();
+    const langMatch = codeEl ? codeEl.className.match(/language-(\w+)/) : null;
+    const lang = langMatch ? langMatch[1] : 'python';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-code-block-wrapper';
+
+    const header = document.createElement('div');
+    header.className = 'chat-code-header';
+    header.innerHTML = `
+      <span class="chat-code-lang">${lang}</span>
+      <div class="chat-code-actions">
+        <button class="chat-code-btn btn-copy-code" title="Copy code">📋 Copy</button>
+        <button class="chat-code-btn btn-send-lab" title="Load into Python Lab">▶ Send to Python Lab</button>
+      </div>
+    `;
+
+    const copyBtn = header.querySelector('.btn-copy-code');
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(rawCode).then(() => {
+        copyBtn.textContent = '✓ Copied!';
+        setTimeout(() => copyBtn.textContent = '📋 Copy', 1800);
+      });
     });
 
-    if (dom.tutorQuestContextPill) {
-      dom.tutorQuestContextPill.textContent = `${quest.icon} Quest ${quest.number}: ${quest.title}`;
-    }
-  };
+    const sendLabBtn = header.querySelector('.btn-send-lab');
+    sendLabBtn.addEventListener('click', () => {
+      dom.codeEditorArea.value = rawCode;
+      dom.tabBtns.forEach(b => b.classList.remove('active'));
+      dom.tabContents.forEach(c => c.classList.remove('active'));
+      const codeTab = document.getElementById('tab-code-btn');
+      const codeContent = document.getElementById('content-code');
+      if (codeTab) codeTab.classList.add('active');
+      if (codeContent) codeContent.classList.add('active');
+      if (dom.aiTutorModal) dom.aiTutorModal.style.display = 'none';
+      dom.codeEditorArea.focus();
+      dom.codeEditorArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(header);
+    wrapper.appendChild(pre);
+  });
+}
+
+function renderMessageBubble(sender, text, time = null, shouldScroll = true) {
+  const bubble = document.createElement('div');
+  bubble.className = `chat-bubble ${sender}`;
+
+  const isAi = sender === 'ai';
+  const avatar = isAi ? '🥋' : '🧑‍💻';
+  const author = isAi ? 'Sensei Tensor' : 'You';
+  const timestamp = time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  bubble.innerHTML = `
+    <div class="bubble-header">
+      <span class="bubble-avatar">${avatar}</span>
+      <span class="bubble-author">${author}</span>
+      <span class="bubble-time">${timestamp}</span>
+    </div>
+    <div class="bubble-content">
+      ${isAi ? marked.parse(text) : `<p>${escapeHtml(text)}</p>`}
+    </div>
+  `;
+
+  if (isAi) {
+    enhanceCodeBlocks(bubble.querySelector('.bubble-content'));
+  }
+
+  dom.tutorChatHistory.appendChild(bubble);
+  if (shouldScroll) {
+    dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
+  }
+  return bubble;
+}
+
+function renderDefaultWelcomeMessage() {
+  dom.tutorChatHistory.innerHTML = `
+    <div class="chat-bubble ai">
+      <div class="bubble-header">
+        <span class="bubble-avatar">🥋</span>
+        <span class="bubble-author">Sensei Tensor</span>
+        <span class="bubble-time">Dojo Master</span>
+      </div>
+      <div class="bubble-content">
+        <p>Osu! Welcome to the <strong>Sensei Tensor Dojo</strong> 🥋🧠.</p>
+        <p>I am your dedicated Deep Learning mentor. Whether you're curious about how weights act like volume knobs, why non-linearity bends space, rolling marbles down gradient slopes, or debugging PyTorch convolutional layers, ask away!</p>
+      </div>
+    </div>
+  `;
+}
+
+function loadStoredChatHistory() {
+  const history = getStoredChatHistory();
+  if (history && history.length > 0) {
+    dom.tutorChatHistory.innerHTML = '';
+    history.forEach(item => {
+      renderMessageBubble(item.sender, item.text, item.time, false);
+    });
+    dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
+  } else {
+    renderDefaultWelcomeMessage();
+  }
+}
+
+function clearChatHistory() {
+  localStorage.removeItem(CHAT_STORAGE_KEY);
+  dom.tutorChatHistory.innerHTML = `
+    <div class="chat-bubble ai">
+      <div class="bubble-header">
+        <span class="bubble-avatar">🥋</span>
+        <span class="bubble-author">Sensei Tensor</span>
+        <span class="bubble-time">Dojo Master</span>
+      </div>
+      <div class="bubble-content">
+        <p>✨ <strong>Conversation cleared.</strong> Dojo memory reset!</p>
+        <p>Ready for your next inquiry, Tensor Cadet! Try one of the suggested prompts below based on your current quest.</p>
+      </div>
+    </div>
+  `;
+  if (dom.btnClearChat) {
+    const originalText = dom.btnClearChat.textContent;
+    dom.btnClearChat.textContent = '✓ Cleared!';
+    setTimeout(() => {
+      dom.btnClearChat.textContent = originalText;
+    }, 1800);
+  }
+}
+
+function renderTutorChips() {
+  if (!dom.tutorPresetChips) return;
+  const quest = getActiveQuest();
+  const chips = questPrompts[quest.id] || [
+    { label: '💡 Explain like I\'m 10', prompt: 'Explain the current deep learning concept like I am 10 years old.' },
+    { label: '🐍 Show Python snippet', prompt: 'Provide a clean, runnable Python snippet explaining this concept.' },
+    { label: '🎯 Quiz Me (+XP)', prompt: 'Give me a quick pop quiz on deep learning!' }
+  ];
+
+  dom.tutorPresetChips.innerHTML = '';
+
+  const tag = document.createElement('span');
+  tag.className = 'chips-quest-tag';
+  tag.innerHTML = `<span>${quest.icon} Quest ${quest.number} Suggestions:</span>`;
+  dom.tutorPresetChips.appendChild(tag);
+
+  chips.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.textContent = c.label;
+    btn.title = `Ask: "${c.prompt}"`;
+    btn.addEventListener('click', () => handleSend(c.prompt));
+    dom.tutorPresetChips.appendChild(btn);
+  });
+
+  if (dom.tutorQuestContextPill) {
+    dom.tutorQuestContextPill.textContent = `${quest.icon} Quest ${quest.number}: ${quest.title}`;
+  }
+  if (dom.tutorQuestSelect) {
+    dom.tutorQuestSelect.value = quest.id;
+  }
+}
+
+async function handleSend(customPrompt = null) {
+  const prompt = customPrompt || (dom.tutorInputText ? dom.tutorInputText.value.trim() : '');
+  if (!prompt) return;
+
+  const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  renderMessageBubble('user', prompt, userTime);
+  persistChatMessage('user', prompt, userTime);
+
+  if (!customPrompt && dom.tutorInputText) dom.tutorInputText.value = '';
+
+  const thinkingBubble = document.createElement('div');
+  thinkingBubble.className = 'chat-bubble ai';
+  thinkingBubble.innerHTML = `
+    <div class="bubble-header">
+      <span class="bubble-avatar">🥋</span>
+      <span class="bubble-author">Sensei Tensor</span>
+    </div>
+    <div class="bubble-content">
+      <em>Sensei Tensor is meditating on your query...</em>
+    </div>
+  `;
+  dom.tutorChatHistory.appendChild(thinkingBubble);
+  dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
+
+  const quest = getActiveQuest();
+  const answer = await tutorService.ask(prompt, quest);
+
+  thinkingBubble.remove();
+  const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  renderMessageBubble('ai', answer, aiTime);
+  persistChatMessage('ai', answer, aiTime);
+}
+
+function setupAiTutor() {
+  // Load existing chat history from localStorage (or show welcome message)
+  loadStoredChatHistory();
 
   const openModal = () => {
     renderTutorChips();
     updateTutorBadge();
     dom.aiTutorModal.style.display = 'flex';
-    setTimeout(() => dom.tutorInputText.focus(), 100);
+    setTimeout(() => {
+      if (dom.tutorInputText) dom.tutorInputText.focus();
+    }, 100);
   };
 
   const closeModal = () => {
@@ -1045,148 +1275,40 @@ function setupAiTutor() {
 
   // Clear chat
   if (dom.btnClearChat) {
-    dom.btnClearChat.addEventListener('click', () => {
-      dom.tutorChatHistory.innerHTML = `
-        <div class="chat-bubble ai">
-          <div class="bubble-header">
-            <span class="bubble-avatar">🥋</span>
-            <span class="bubble-author">Sensei Tensor</span>
-            <span class="bubble-time">Dojo Master</span>
-          </div>
-          <div class="bubble-content">
-            <p>Conversation cleared. Ready for your next inquiry, Tensor Cadet!</p>
-          </div>
-        </div>
-      `;
+    dom.btnClearChat.addEventListener('click', clearChatHistory);
+  }
+
+  // Quest selector in modal header (synced with Quest Map)
+  if (dom.tutorQuestSelect) {
+    dom.tutorQuestSelect.addEventListener('change', (e) => {
+      state.activeQuestId = e.target.value;
+      renderQuestList();
+      renderActiveQuest();
+    });
+  }
+
+  // Send controls
+  if (dom.btnSendTutor) {
+    dom.btnSendTutor.addEventListener('click', () => handleSend());
+  }
+  if (dom.tutorInputText) {
+    dom.tutorInputText.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
     });
   }
 
   // Global Escape key
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (dom.aiTutorModal.style.display === 'flex') closeModal();
-      if (dom.settingsModal.style.display === 'flex') dom.settingsModal.style.display = 'none';
+      if (dom.aiTutorModal && dom.aiTutorModal.style.display === 'flex') closeModal();
+      if (dom.settingsModal && dom.settingsModal.style.display === 'flex') dom.settingsModal.style.display = 'none';
     }
   });
 
-  const enhanceCodeBlocks = (containerEl) => {
-    const pres = containerEl.querySelectorAll('pre');
-    pres.forEach(pre => {
-      // Avoid re-wrapping
-      if (pre.parentElement.classList.contains('chat-code-block-wrapper')) return;
-
-      const codeEl = pre.querySelector('code');
-      const rawCode = (codeEl ? codeEl.textContent : pre.textContent).trim();
-      const langMatch = codeEl ? codeEl.className.match(/language-(\w+)/) : null;
-      const lang = langMatch ? langMatch[1] : 'python';
-
-      const wrapper = document.createElement('div');
-      wrapper.className = 'chat-code-block-wrapper';
-
-      const header = document.createElement('div');
-      header.className = 'chat-code-header';
-      header.innerHTML = `
-        <span class="chat-code-lang">${lang}</span>
-        <div class="chat-code-actions">
-          <button class="chat-code-btn btn-copy-code" title="Copy code">📋 Copy</button>
-          <button class="chat-code-btn btn-send-lab" title="Load into Python Lab">▶ Send to Python Lab</button>
-        </div>
-      `;
-
-      // Copy logic
-      const copyBtn = header.querySelector('.btn-copy-code');
-      copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(rawCode).then(() => {
-          copyBtn.textContent = '✓ Copied!';
-          setTimeout(() => copyBtn.textContent = '📋 Copy', 1800);
-        });
-      });
-
-      // Send to Python Lab logic
-      const sendLabBtn = header.querySelector('.btn-send-lab');
-      sendLabBtn.addEventListener('click', () => {
-        dom.codeEditorArea.value = rawCode;
-        // Switch tab to code
-        dom.tabBtns.forEach(b => b.classList.remove('active'));
-        dom.tabContents.forEach(c => c.classList.remove('active'));
-        document.getElementById('tab-code-btn').classList.add('active');
-        document.getElementById('content-code').classList.add('active');
-        closeModal();
-        dom.codeEditorArea.focus();
-        dom.codeEditorArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
-
-      pre.parentNode.insertBefore(wrapper, pre);
-      wrapper.appendChild(header);
-      wrapper.appendChild(pre);
-    });
-  };
-
-  const appendMessage = (sender, text) => {
-    const bubble = document.createElement('div');
-    bubble.className = `chat-bubble ${sender}`;
-
-    const isAi = sender === 'ai';
-    const avatar = isAi ? '🥋' : '🧑‍💻';
-    const author = isAi ? 'Sensei Tensor' : 'You';
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    bubble.innerHTML = `
-      <div class="bubble-header">
-        <span class="bubble-avatar">${avatar}</span>
-        <span class="bubble-author">${author}</span>
-        <span class="bubble-time">${time}</span>
-      </div>
-      <div class="bubble-content">
-        ${isAi ? marked.parse(text) : `<p>${text}</p>`}
-      </div>
-    `;
-
-    if (isAi) {
-      enhanceCodeBlocks(bubble.querySelector('.bubble-content'));
-    }
-
-    dom.tutorChatHistory.appendChild(bubble);
-    dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
-  };
-
-  const handleSend = async (customPrompt = null) => {
-    const prompt = customPrompt || dom.tutorInputText.value.trim();
-    if (!prompt) return;
-
-    appendMessage('user', prompt);
-    if (!customPrompt) dom.tutorInputText.value = '';
-
-    const thinkingBubble = document.createElement('div');
-    thinkingBubble.className = 'chat-bubble ai';
-    thinkingBubble.innerHTML = `
-      <div class="bubble-header">
-        <span class="bubble-avatar">🥋</span>
-        <span class="bubble-author">Sensei Tensor</span>
-      </div>
-      <div class="bubble-content">
-        <em>Sensei Tensor is meditating on your query...</em>
-      </div>
-    `;
-    dom.tutorChatHistory.appendChild(thinkingBubble);
-    dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
-
-    const quest = getActiveQuest();
-    const answer = await tutorService.ask(prompt, quest);
-
-    thinkingBubble.remove();
-    appendMessage('ai', answer);
-  };
-
-  dom.btnSendTutor.addEventListener('click', () => handleSend());
-  dom.tutorInputText.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  });
-
-  // Initial chips
+  // Initial chips based on active quest
   renderTutorChips();
 }
 
