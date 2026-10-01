@@ -14,7 +14,7 @@ Rules for your answers:
 export class AITutorService {
   constructor() {
     this.apiKey = localStorage.getItem('neuroquest_gemini_key') || '';
-    this.model = localStorage.getItem('neuroquest_gemini_model') || 'gemini-2.0-flash';
+    this.model = localStorage.getItem('neuroquest_gemini_model') || 'gemini-3.8-flash';
     this.providerType = localStorage.getItem('neuroquest_provider_type') || 'gemini'; // 'gemini' | 'custom_agent'
     this.customAgentUrl = localStorage.getItem('neuroquest_custom_agent_url') || '';
   }

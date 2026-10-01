@@ -1060,6 +1060,11 @@ function updateTutorBadge() {
   }
 }
 
+  dom.geminiModelSelect.addEventListener('change', () => {
+    tutorService.setModel(dom.geminiModelSelect.value);
+    updateTutorBadge();
+  });
+
   dom.btnSaveSettings.addEventListener('click', () => {
     const provider = dom.aiProviderSelect.value;
     const key = dom.geminiKeyInput.value;
@@ -1082,6 +1087,7 @@ function updateTutorBadge() {
     const key = dom.geminiKeyInput.value.trim();
     const provider = dom.aiProviderSelect.value;
     const customUrl = dom.customAgentUrlInput.value.trim();
+    const model = dom.geminiModelSelect.value;
 
     if (!key && provider !== 'custom_agent') {
       dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">Please enter an API key first.</span>`;
@@ -1092,9 +1098,11 @@ function updateTutorBadge() {
       return;
     }
 
-    dom.settingsTestStatus.innerHTML = `<span>⏳ Testing connection to AI tutor...</span>`;
+    dom.settingsTestStatus.innerHTML = `<span>⏳ Testing connection to AI tutor with <strong>${model}</strong>...</span>`;
     tutorService.setProvider(provider, customUrl);
     tutorService.setApiKey(key);
+    tutorService.setModel(model);
+    updateTutorBadge();
 
     const testAns = await tutorService.ask("Test connection! Reply with 'Osu! Sensei Tensor is online!' in 5 words.");
     dom.settingsTestStatus.innerHTML = marked.parse(testAns);
