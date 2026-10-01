@@ -82,7 +82,10 @@
 
           <!-- Section Switcher Tabs -->
           <div class="workspace-tabs">
-            <button class="tab-btn active" data-tab="interactive" id="tab-interactive-btn">
+            <button class="tab-btn active" data-tab="lesson" id="tab-lesson-btn">
+              <span>📖</span> Concept Lesson
+            </button>
+            <button class="tab-btn" data-tab="interactive" id="tab-interactive-btn">
               <span>🎮</span> Playful Sandbox
             </button>
             <button class="tab-btn" data-tab="code" id="tab-code-btn">
@@ -94,7 +97,13 @@
           </div>
 
           <!-- Tab Contents -->
-          <div class="tab-content active" id="content-interactive">
+          <div class="tab-content active" id="content-lesson">
+            <div id="lesson-container" class="lesson-stage">
+              <!-- Rendered Concept Lesson -->
+            </div>
+          </div>
+
+          <div class="tab-content" id="content-interactive">
             <div id="interactive-container" class="interactive-stage">
               <!-- Rendered Sandbox Widget -->
             </div>

@@ -60,6 +60,7 @@ const dom = {
   tabBtns: document.querySelectorAll('.tab-btn'),
   tabContents: document.querySelectorAll('.tab-content'),
   interactiveContainer: document.getElementById('interactive-container'),
+  lessonContainer: document.getElementById('lesson-container'),
   // Code Lab
   codeEditorArea: document.getElementById('code-editor-area'),
   btnRunCode: document.getElementById('btn-run-code'),
@@ -216,11 +217,38 @@ function renderActiveQuest() {
         <span>💡 Mental Model:</span>
         <span>${quest.mentalModel}</span>
       </div>
+      <div class="hero-actions-row" style="margin-top: 0.8rem; display: flex; gap: 0.6rem; align-items: center;">
+        <button class="btn-hero-lesson" id="btn-hero-read-lesson" style="background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.45); color: #ddd6fe; padding: 0.35rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+          <span>📖</span> Read Concept Lesson
+        </button>
+        <button class="btn-hero-sandbox" id="btn-hero-jump-sandbox" style="background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.4); color: #a5f3fc; padding: 0.35rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+          <span>🎮</span> Try Playful Sandbox
+        </button>
+      </div>
     </div>
   `;
 
+  // Hero action buttons
+  const btnHeroLesson = dom.questHero.querySelector('#btn-hero-read-lesson');
+  if (btnHeroLesson) {
+    btnHeroLesson.addEventListener('click', () => {
+      const lessonTab = document.querySelector('.tab-btn[data-tab="lesson"]');
+      if (lessonTab) lessonTab.click();
+    });
+  }
+  const btnHeroSandbox = dom.questHero.querySelector('#btn-hero-jump-sandbox');
+  if (btnHeroSandbox) {
+    btnHeroSandbox.addEventListener('click', () => {
+      const sandboxTab = document.querySelector('.tab-btn[data-tab="interactive"]');
+      if (sandboxTab) sandboxTab.click();
+    });
+  }
+
   // Code editor init
   dom.codeEditorArea.value = quest.codeSnippet;
+
+  // Render Concept Lesson
+  renderLesson(quest);
 
   // Render Sandbox based on type
   renderInteractiveWidget(quest);
@@ -231,6 +259,176 @@ function renderActiveQuest() {
   // Synchronize AI Tutor suggestion prompt deck with currently active quest
   if (typeof renderTutorChips === 'function') {
     renderTutorChips();
+  }
+}
+
+// --- FORMAT LESSON TEXT HELPER ---
+function formatLessonText(text) {
+  if (!text) return '';
+  return text
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\$(.*?)\$/g, '<code class="math-inline">$1</code>');
+}
+
+// --- LESSON COMPONENT ---
+function renderLesson(quest) {
+  if (!dom.lessonContainer) return;
+  dom.lessonContainer.innerHTML = '';
+
+  const lesson = quest.lesson;
+  if (!lesson) {
+    dom.lessonContainer.innerHTML = `
+      <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+        <p>Lesson content coming soon for this quest.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'lesson-article';
+
+  const sectionsHtml = (lesson.sections || []).map(sec => `
+    <div class="lesson-section-card">
+      <h3 class="lesson-section-title">${sec.heading}</h3>
+      <div class="lesson-section-body">
+        <p>${formatLessonText(sec.content)}</p>
+      </div>
+      ${sec.callout ? `
+        <div class="lesson-callout-box">
+          <span class="callout-icon">💡</span>
+          <div class="callout-text">${sec.callout}</div>
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+
+  const formulaBreakdownHtml = lesson.formulaCard && lesson.formulaCard.breakdown ? `
+    <div class="formula-breakdown-grid">
+      ${lesson.formulaCard.breakdown.map(item => `
+        <div class="formula-param-item">
+          <code class="param-symbol">${item.symbol}</code>
+          <span class="param-meaning">${item.meaning}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  const takeawaysHtml = (lesson.takeaways || []).map(t => `
+    <li class="takeaway-item">
+      <span class="takeaway-check">✓</span>
+      <span>${t}</span>
+    </li>
+  `).join('');
+
+  const pitfallsHtml = (lesson.commonPitfalls || []).map(p => `
+    <li class="pitfall-item">
+      <span class="pitfall-icon">⚠️</span>
+      <span>${p}</span>
+    </li>
+  `).join('');
+
+  card.innerHTML = `
+    <!-- Lesson Meta Header -->
+    <div class="lesson-meta-bar">
+      <div class="lesson-badges">
+        <span class="lesson-badge difficulty">${lesson.difficulty || 'Core Theory'}</span>
+        <span class="lesson-badge time">⏱️ ${lesson.readTime || '3 min read'}</span>
+        <span class="lesson-badge xp">⭐ +${quest.xp} XP Available</span>
+      </div>
+      <div class="lesson-hook-text">
+        <em>${lesson.hook || ''}</em>
+      </div>
+    </div>
+
+    <!-- Analogy Card -->
+    ${lesson.analogy ? `
+      <div class="lesson-analogy-card">
+        <div class="analogy-header">
+          <span class="analogy-tag">CORE MENTAL MODEL</span>
+          <h4 class="analogy-title">${lesson.analogy.title}</h4>
+        </div>
+        <p class="analogy-desc">${lesson.analogy.description}</p>
+      </div>
+    ` : ''}
+
+    <!-- Structured Lesson Sections -->
+    <div class="lesson-sections-container">
+      ${sectionsHtml}
+    </div>
+
+    <!-- Formula Card -->
+    ${lesson.formulaCard ? `
+      <div class="lesson-formula-card">
+        <div class="formula-card-header">
+          <span>📐</span>
+          <h4>${lesson.formulaCard.title || 'Mathematical Engine'}</h4>
+        </div>
+        <div class="formula-display-box">
+          <code>${lesson.formulaCard.equation}</code>
+        </div>
+        ${formulaBreakdownHtml}
+      </div>
+    ` : ''}
+
+    <!-- Dual Cards: Takeaways & Pitfalls -->
+    <div class="lesson-dual-cards">
+      <div class="lesson-summary-box takeaways">
+        <div class="summary-box-title">
+          <span>🎯</span>
+          <h4>Key Principles & Takeaways</h4>
+        </div>
+        <ul class="takeaway-list">
+          ${takeawaysHtml}
+        </ul>
+      </div>
+
+      <div class="lesson-summary-box pitfalls">
+        <div class="summary-box-title">
+          <span>⚠️</span>
+          <h4>Common Pitfalls & Gotchas</h4>
+        </div>
+        <ul class="pitfall-list">
+          ${pitfallsHtml}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Action Footer -->
+    <div class="lesson-action-footer">
+      <div class="lesson-footer-prompt">
+        <span>Ready to experiment with these concepts hands-on?</span>
+      </div>
+      <div class="lesson-footer-btns">
+        <button class="btn-lesson-action btn-to-sandbox" id="btn-lesson-jump-sandbox">
+          <span>🎮 Jump to Playful Sandbox</span>
+          <span class="arrow-icon">➔</span>
+        </button>
+        <button class="btn-lesson-action btn-to-tutor" id="btn-lesson-ask-tutor">
+          <span>🥋 Ask Sensei Tensor about this</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  dom.lessonContainer.appendChild(card);
+
+  // Wire buttons
+  const btnJump = card.querySelector('#btn-lesson-jump-sandbox');
+  if (btnJump) {
+    btnJump.addEventListener('click', () => {
+      const sandboxTabBtn = document.querySelector('.tab-btn[data-tab="interactive"]');
+      if (sandboxTabBtn) sandboxTabBtn.click();
+    });
+  }
+
+  const btnTutor = card.querySelector('#btn-lesson-ask-tutor');
+  if (btnTutor) {
+    btnTutor.addEventListener('click', () => {
+      openAITutorModal();
+    });
   }
 }
 
