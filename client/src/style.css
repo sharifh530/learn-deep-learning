@@ -1135,159 +1135,491 @@ body {
    AI TUTOR DRAWER
    ========================================================================== */
 
-.ai-tutor-drawer {
+/* ==========================================================================
+   FLOATING AI TUTOR QUICK TRIGGER BUTTON
+   ========================================================================== */
+.floating-tutor-btn {
   position: fixed;
-  top: 66px;
-  right: -420px;
-  width: 400px;
-  height: calc(100vh - 66px);
-  background: rgba(13, 19, 34, 0.96);
-  backdrop-filter: blur(20px);
-  border-left: 1px solid rgba(139, 92, 246, 0.3);
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1.4rem;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-full);
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.5), 0 0 15px rgba(6, 182, 212, 0.4);
+  z-index: 85;
+  transition: all var(--transition-smooth);
+}
+
+.floating-tutor-btn:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 15px 35px -5px rgba(124, 58, 237, 0.7), 0 0 25px rgba(6, 182, 212, 0.6);
+}
+
+.floating-btn-avatar {
+  font-size: 1.35rem;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+}
+
+.floating-btn-text {
+  letter-spacing: 0.02em;
+}
+
+/* ==========================================================================
+   SENSEI TENSOR DOJO MODAL WINDOW
+   ========================================================================== */
+.tutor-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+  padding: 1.5rem;
+}
+
+.tutor-modal-card {
+  width: 95%;
+  max-width: 920px;
+  height: 84vh;
+  max-height: 860px;
+  background: #0b0f19;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 50px rgba(139, 92, 246, 0.3), 0 25px 50px -12px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
-  z-index: 90;
-  transition: right var(--transition-smooth);
-  box-shadow: -8px 0 25px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: modalScaleUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.ai-tutor-drawer.open {
-  right: 0;
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.96) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.tutor-header {
+/* Modal Header */
+.tutor-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.4rem;
+  padding: 1.1rem 1.6rem;
+  background: rgba(18, 24, 43, 0.85);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
 }
 
-.tutor-avatar {
-  font-size: 1.8rem;
-}
-
-.tutor-info {
-  flex: 1;
-  margin-left: 0.8rem;
-}
-
-.tutor-info h3 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-.tutor-status {
-  font-size: 0.72rem;
-  color: var(--accent-cyan);
-  font-weight: 600;
-}
-
-.btn-close-tutor {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 1.5rem;
-  cursor: pointer;
-}
-
-.tutor-chat-history {
-  flex: 1;
-  padding: 1.2rem;
-  overflow-y: auto;
+.tutor-modal-branding {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 1rem;
 }
 
-.chat-bubble {
-  max-width: 90%;
-  padding: 0.85rem 1.1rem;
+.tutor-modal-avatar {
+  font-size: 2rem;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+}
+
+.tutor-modal-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tutor-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tutor-title-row h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, #ffffff 40%, var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.tutor-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+}
+
+.tutor-quest-context {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.15);
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-full);
+  display: inline-block;
+}
+
+.tutor-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tutor-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tutor-action-btn:hover {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fca5a5;
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.tutor-close-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tutor-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+/* Chat Body */
+.tutor-modal-body {
+  flex: 1;
+  padding: 1.6rem 2rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  background: radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.05) 0%, transparent 60%);
+}
+
+.chat-bubble {
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  animation: bubbleSlideIn 0.22s ease-out;
+}
+
+@keyframes bubbleSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .chat-bubble.ai {
   align-self: flex-start;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  color: #f1f5f9;
 }
 
 .chat-bubble.user {
   align-self: flex-end;
-  background: linear-gradient(135deg, var(--accent-violet), var(--accent-blue));
-  color: #ffffff;
 }
 
+.bubble-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  padding: 0 0.2rem;
+}
+
+.chat-bubble.user .bubble-header {
+  justify-content: flex-end;
+}
+
+.bubble-content {
+  padding: 1.1rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.chat-bubble.ai .bubble-content {
+  background: rgba(18, 26, 47, 0.85);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #f1f5f9;
+  border-top-left-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.chat-bubble.user .bubble-content {
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  color: #ffffff;
+  border-top-right-radius: 4px;
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+}
+
+/* Rich Markdown in AI Bubbles */
+.chat-bubble.ai .bubble-content h1,
+.chat-bubble.ai .bubble-content h2,
+.chat-bubble.ai .bubble-content h3 {
+  color: #fff;
+  margin: 0.8rem 0 0.4rem 0;
+  font-weight: 700;
+}
+
+.chat-bubble.ai .bubble-content p {
+  margin-bottom: 0.75rem;
+}
+
+.chat-bubble.ai .bubble-content p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-bubble.ai .bubble-content ul,
+.chat-bubble.ai .bubble-content ol {
+  margin: 0.5rem 0 0.8rem 1.4rem;
+}
+
+.chat-bubble.ai .bubble-content li {
+  margin-bottom: 0.3rem;
+}
+
+.chat-bubble.ai .bubble-content blockquote {
+  border-left: 3px solid var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.08);
+  padding: 0.6rem 1rem;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: 0.8rem 0;
+  color: #a5f3fc;
+}
+
+.chat-bubble.ai .bubble-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8rem 0;
+  font-size: 0.88rem;
+}
+
+.chat-bubble.ai .bubble-content th,
+.chat-bubble.ai .bubble-content td {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.chat-bubble.ai .bubble-content th {
+  background: rgba(139, 92, 246, 0.2);
+  color: #fff;
+}
+
+/* Interactive Code Blocks inside AI Chat */
+.chat-code-block-wrapper {
+  margin: 0.9rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #040711;
+}
+
+.chat-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-code-lang {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+}
+
+.chat-code-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-code-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chat-code-btn:hover {
+  background: var(--accent-violet);
+  color: #fff;
+  border-color: var(--accent-violet);
+}
+
+.chat-code-btn.btn-send-lab:hover {
+  background: var(--accent-emerald);
+  border-color: var(--accent-emerald);
+}
+
+.chat-code-block-wrapper pre {
+  margin: 0;
+  padding: 0.9rem 1.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: #86efac;
+  overflow-x: auto;
+}
+
+/* Chips Deck */
 .tutor-preset-chips {
   display: flex;
   gap: 0.5rem;
-  padding: 0.6rem 1.2rem;
+  padding: 0.75rem 1.6rem;
+  background: rgba(13, 19, 34, 0.7);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   overflow-x: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
 }
 
 .chip {
   white-space: nowrap;
-  padding: 0.35rem 0.75rem;
+  padding: 0.4rem 0.9rem;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #ddd6fe;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .chip:hover {
-  background: rgba(139, 92, 246, 0.2);
-  color: #ddd6fe;
-  border-color: var(--accent-violet);
+  background: rgba(139, 92, 246, 0.25);
+  border-color: var(--accent-cyan);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
 }
 
-.tutor-input-box {
+/* Modal Footer & Input */
+.tutor-modal-footer {
+  padding: 1.1rem 1.6rem;
+  background: rgba(10, 14, 26, 0.95);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.6rem;
-  padding: 0.9rem 1.2rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.tutor-input-box textarea {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-sm);
-  color: #fff;
-  font-family: var(--font-main);
-  font-size: 0.88rem;
-  padding: 0.6rem;
-  outline: none;
-  resize: none;
-}
-
-.btn-send-tutor {
-  background: var(--accent-violet);
-  color: #fff;
-  border: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  font-size: 1.1rem;
-  cursor: pointer;
+.tutor-input-wrapper {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.8rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.9rem;
   transition: all var(--transition-fast);
 }
 
+.tutor-input-wrapper:focus-within {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.25);
+}
+
+.tutor-input-wrapper textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+}
+
+.btn-send-tutor {
+  background: linear-gradient(135deg, var(--accent-violet), #06b6d4);
+  color: #fff;
+  border: none;
+  padding: 0.6rem 1.3rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all var(--transition-fast);
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
+}
+
 .btn-send-tutor:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 12px var(--accent-violet);
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.6);
+}
+
+.tutor-input-hints {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.tutor-input-hints em {
+  color: #34d399;
+}
+
+.keyboard-hint strong {
+  color: var(--text-muted);
 }
 
 /* ==========================================================================
@@ -1433,8 +1765,14 @@ body {
   .neuron-widget-grid, .doodle-arena-grid {
     grid-template-columns: 1fr;
   }
-  .ai-tutor-drawer {
-    width: 100%;
-    right: -100%;
+  .tutor-modal-card {
+    width: 98%;
+    height: 94vh;
+  }
+  .floating-tutor-btn {
+    bottom: 1.2rem;
+    right: 1.2rem;
+    padding: 0.6rem 1.1rem;
+    font-size: 0.85rem;
   }
 }

@@ -133,36 +133,73 @@
             </div>
           </div>
         </main>
+      </div>
 
-        <!-- Floating/Slide-out AI Tutor Drawer -->
-        <aside class="ai-tutor-drawer" id="ai-tutor-drawer">
-          <div class="tutor-header">
-            <div class="tutor-avatar">🥋</div>
-            <div class="tutor-info">
-              <h3>Sensei Tensor</h3>
-              <span class="tutor-status" id="tutor-model-badge">Google Gemini AI</span>
+      <!-- Floating AI Tutor Quick Trigger Button -->
+      <button class="floating-tutor-btn" id="floating-btn-tutor" title="Open Sensei Tensor Dojo">
+        <span class="floating-btn-avatar">🥋</span>
+        <span class="floating-btn-text">Ask Sensei</span>
+        <span class="floating-pulse-ring"></span>
+      </button>
+
+      <!-- Sensei Tensor Dojo Modal Window -->
+      <div class="modal-overlay tutor-modal-overlay" id="ai-tutor-modal" style="display: none;">
+        <div class="tutor-modal-card">
+          <!-- Header -->
+          <div class="tutor-modal-header">
+            <div class="tutor-modal-branding">
+              <div class="tutor-modal-avatar">🥋</div>
+              <div class="tutor-modal-titles">
+                <div class="tutor-title-row">
+                  <h3>Sensei Tensor Dojo</h3>
+                  <span class="tutor-badge" id="tutor-model-badge">gemini-3.8-flash</span>
+                </div>
+                <div class="tutor-context-row">
+                  <span class="tutor-quest-context" id="tutor-quest-context-pill">☕ Quest 1: Coffee Neuron</span>
+                </div>
+              </div>
             </div>
-            <button class="btn-close-tutor" id="btn-close-tutor" title="Close AI Tutor">&times;</button>
+            <div class="tutor-modal-actions">
+              <button class="tutor-action-btn" id="btn-clear-chat" title="Clear conversation history">🗑️ Clear Chat</button>
+              <button class="tutor-close-btn" id="btn-close-tutor-modal" title="Close Sensei Tensor Dojo (Esc)">&times;</button>
+            </div>
           </div>
 
-          <div class="tutor-chat-history" id="tutor-chat-history">
+          <!-- Chat History -->
+          <div class="tutor-modal-body" id="tutor-chat-history">
             <div class="chat-bubble ai">
-              <p>Greetings, young practitioner! I am <strong>Sensei Tensor</strong> 🥋. Whether you're wondering how weights balance like seesaws, why ReLU cuts off the dark side, or debugging a PyTorch tensor shape, ask away!</p>
+              <div class="bubble-header">
+                <span class="bubble-avatar">🥋</span>
+                <span class="bubble-author">Sensei Tensor</span>
+                <span class="bubble-time">Dojo Master</span>
+              </div>
+              <div class="bubble-content">
+                <p>Osu! Welcome to the <strong>Sensei Tensor Dojo</strong> 🥋🧠.</p>
+                <p>I am your dedicated Deep Learning mentor. Whether you're curious about how weights act like volume knobs, why non-linearity bends space, rolling marbles down gradient slopes, or debugging PyTorch convolutional layers, ask away!</p>
+              </div>
             </div>
           </div>
 
+          <!-- Interactive Quest Prompt Deck -->
           <div class="tutor-preset-chips" id="tutor-preset-chips">
-            <button class="chip" data-prompt="Explain this quest's concept like I'm 10 years old with an analogy!">💡 Explain like I'm 10</button>
-            <button class="chip" data-prompt="Why do we need activation functions instead of just stacking linear weights?">⚡ Why Activation?</button>
-            <button class="chip" data-prompt="How does a Convolution filter detect edges in an image?">🔍 Convolutions & Edges</button>
-            <button class="chip" data-prompt="Give me a quick pop quiz question on deep learning!">🎯 Quiz Me</button>
+            <!-- Dynamically populated per active quest -->
           </div>
 
-          <div class="tutor-input-box">
-            <textarea id="tutor-input-text" placeholder="Ask Sensei Tensor anything about Deep Learning..." rows="2"></textarea>
-            <button id="btn-send-tutor" class="btn-send-tutor" title="Send message">➔</button>
+          <!-- Input Controls -->
+          <div class="tutor-modal-footer">
+            <div class="tutor-input-wrapper">
+              <textarea id="tutor-input-text" placeholder="Ask Sensei Tensor about concepts, math analogies, or PyTorch code... (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
+              <button id="btn-send-tutor" class="btn-send-tutor" title="Send message (Enter)">
+                <span>Send</span>
+                <span class="send-arrow">➔</span>
+              </button>
+            </div>
+            <div class="tutor-input-hints">
+              <span>💡 <strong>Tip:</strong> Code blocks have a <em>"▶ Send to Python Lab"</em> button to test code instantly!</span>
+              <span class="keyboard-hint">Press <strong>Enter</strong> to send • <strong>Esc</strong> to close</span>
+            </div>
           </div>
-        </aside>
+        </div>
       </div>
 
       <!-- Settings & API Key Modal -->

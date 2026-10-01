@@ -59,9 +59,12 @@ const dom = {
   btnClearTerminal: document.getElementById('btn-clear-terminal'),
   // Quiz
   quizContainer: document.getElementById('quiz-container'),
-  // Tutor Drawer
-  aiTutorDrawer: document.getElementById('ai-tutor-drawer'),
-  btnCloseTutor: document.getElementById('btn-close-tutor'),
+  // Tutor Modal & Floating button
+  aiTutorModal: document.getElementById('ai-tutor-modal'),
+  floatingBtnTutor: document.getElementById('floating-btn-tutor'),
+  btnCloseTutorModal: document.getElementById('btn-close-tutor-modal'),
+  btnClearChat: document.getElementById('btn-clear-chat'),
+  tutorQuestContextPill: document.getElementById('tutor-quest-context-pill'),
   tutorModelBadge: document.getElementById('tutor-model-badge'),
   tutorChatHistory: document.getElementById('tutor-chat-history'),
   tutorInputText: document.getElementById('tutor-input-text'),
@@ -969,19 +972,180 @@ function renderQuiz(quest) {
   });
 }
 
-// --- AI TUTOR (SENSEI TENSOR) DRAWER ---
+// --- AI TUTOR (SENSEI TENSOR DOJO) MODAL ---
 function setupAiTutor() {
-  const toggleDrawer = () => {
-    dom.aiTutorDrawer.classList.toggle('open');
+  const questPrompts = {
+    'quest-1': [
+      { label: '☕ Why weights act like knobs?', prompt: 'Explain why weights act like volume knobs on coffee ingredients with a playful metaphor.' },
+      { label: '☕ How does bias shift the zero point?', prompt: 'Why do we need a bias term even if all coffee ingredients are zero?' },
+      { label: '🐍 Code a 3-input neuron', prompt: 'Show me how to code a single artificial neuron with 3 inputs and a bias in clean Python NumPy.' },
+      { label: '🎯 Quiz me on Quest 1', prompt: 'Give me a quick 1-question quiz about weights and bias to test my intuition!' }
+    ],
+    'quest-2': [
+      { label: '⚡ Why can\'t linear layers solve XOR?', prompt: 'Why can\'t a single straight line separate diagonal XOR dots without an activation function?' },
+      { label: '⚡ When to use ReLU vs Sigmoid?', prompt: 'When should I use ReLU versus Sigmoid or Tanh in neural networks?' },
+      { label: '⚡ What is the dying ReLU problem?', prompt: 'Explain what happens when a neuron gets stuck outputting 0 with ReLU.' },
+      { label: '🎯 Quiz me on Quest 2', prompt: 'Give me a quick pop quiz on activation functions and non-linearity!' }
+    ],
+    'quest-3': [
+      { label: '⛰️ Explain gradients with a mountain', prompt: 'Use a foggy mountain and rolling marbles to explain loss functions and gradient descent.' },
+      { label: '⛰️ What is learning rate overshoot?', prompt: 'What happens mathematically and visually when the learning rate alpha is set too large?' },
+      { label: '🐍 10 lines of PyTorch training', prompt: 'Write a complete 10-line PyTorch script demonstrating gradient descent optimization with loss.backward().' },
+      { label: '🎯 Quiz me on Quest 3', prompt: 'Test me with a tricky question on learning rates and gradient descent!' }
+    ],
+    'quest-4': [
+      { label: '🎨 How do 3x3 filters find edges?', prompt: 'How does sliding a 3x3 matrix across image pixels detect horizontal and vertical edges?' },
+      { label: '🎨 Why use Max Pooling?', prompt: 'Why do CNNs downsample with MaxPool2d instead of just making images smaller beforehand?' },
+      { label: '🎨 Explain DoodleCNN architecture', prompt: 'Break down the DoodleCNN architecture line-by-line: Conv2d -> ReLU -> MaxPool2d -> Linear.' },
+      { label: '🎯 Quiz me on Convolutions', prompt: 'Give me a challenging question about CNN feature maps and pooling!' }
+    ]
   };
 
-  dom.btnToggleTutor.addEventListener('click', toggleDrawer);
-  dom.btnCloseTutor.addEventListener('click', toggleDrawer);
+  const renderTutorChips = () => {
+    const quest = getActiveQuest();
+    const chips = questPrompts[quest.id] || [
+      { label: '💡 Explain like I\'m 10', prompt: 'Explain the current deep learning concept like I am 10 years old.' },
+      { label: '🐍 Show Python snippet', prompt: 'Provide a clean, runnable Python snippet explaining this concept.' },
+      { label: '🎯 Quiz Me (+XP)', prompt: 'Give me a quick pop quiz on deep learning!' }
+    ];
+
+    dom.tutorPresetChips.innerHTML = '';
+    chips.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.textContent = c.label;
+      btn.addEventListener('click', () => handleSend(c.prompt));
+      dom.tutorPresetChips.appendChild(btn);
+    });
+
+    if (dom.tutorQuestContextPill) {
+      dom.tutorQuestContextPill.textContent = `${quest.icon} Quest ${quest.number}: ${quest.title}`;
+    }
+  };
+
+  const openModal = () => {
+    renderTutorChips();
+    updateTutorBadge();
+    dom.aiTutorModal.style.display = 'flex';
+    setTimeout(() => dom.tutorInputText.focus(), 100);
+  };
+
+  const closeModal = () => {
+    dom.aiTutorModal.style.display = 'none';
+  };
+
+  // Triggers
+  dom.btnToggleTutor.addEventListener('click', openModal);
+  if (dom.floatingBtnTutor) {
+    dom.floatingBtnTutor.addEventListener('click', openModal);
+  }
+  if (dom.btnCloseTutorModal) {
+    dom.btnCloseTutorModal.addEventListener('click', closeModal);
+  }
+
+  // Clear chat
+  if (dom.btnClearChat) {
+    dom.btnClearChat.addEventListener('click', () => {
+      dom.tutorChatHistory.innerHTML = `
+        <div class="chat-bubble ai">
+          <div class="bubble-header">
+            <span class="bubble-avatar">🥋</span>
+            <span class="bubble-author">Sensei Tensor</span>
+            <span class="bubble-time">Dojo Master</span>
+          </div>
+          <div class="bubble-content">
+            <p>Conversation cleared. Ready for your next inquiry, Tensor Cadet!</p>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  // Global Escape key
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (dom.aiTutorModal.style.display === 'flex') closeModal();
+      if (dom.settingsModal.style.display === 'flex') dom.settingsModal.style.display = 'none';
+    }
+  });
+
+  const enhanceCodeBlocks = (containerEl) => {
+    const pres = containerEl.querySelectorAll('pre');
+    pres.forEach(pre => {
+      // Avoid re-wrapping
+      if (pre.parentElement.classList.contains('chat-code-block-wrapper')) return;
+
+      const codeEl = pre.querySelector('code');
+      const rawCode = (codeEl ? codeEl.textContent : pre.textContent).trim();
+      const langMatch = codeEl ? codeEl.className.match(/language-(\w+)/) : null;
+      const lang = langMatch ? langMatch[1] : 'python';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chat-code-block-wrapper';
+
+      const header = document.createElement('div');
+      header.className = 'chat-code-header';
+      header.innerHTML = `
+        <span class="chat-code-lang">${lang}</span>
+        <div class="chat-code-actions">
+          <button class="chat-code-btn btn-copy-code" title="Copy code">📋 Copy</button>
+          <button class="chat-code-btn btn-send-lab" title="Load into Python Lab">▶ Send to Python Lab</button>
+        </div>
+      `;
+
+      // Copy logic
+      const copyBtn = header.querySelector('.btn-copy-code');
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(rawCode).then(() => {
+          copyBtn.textContent = '✓ Copied!';
+          setTimeout(() => copyBtn.textContent = '📋 Copy', 1800);
+        });
+      });
+
+      // Send to Python Lab logic
+      const sendLabBtn = header.querySelector('.btn-send-lab');
+      sendLabBtn.addEventListener('click', () => {
+        dom.codeEditorArea.value = rawCode;
+        // Switch tab to code
+        dom.tabBtns.forEach(b => b.classList.remove('active'));
+        dom.tabContents.forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-code-btn').classList.add('active');
+        document.getElementById('content-code').classList.add('active');
+        closeModal();
+        dom.codeEditorArea.focus();
+        dom.codeEditorArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(header);
+      wrapper.appendChild(pre);
+    });
+  };
 
   const appendMessage = (sender, text) => {
     const bubble = document.createElement('div');
     bubble.className = `chat-bubble ${sender}`;
-    bubble.innerHTML = sender === 'ai' ? marked.parse(text) : `<p>${text}</p>`;
+
+    const isAi = sender === 'ai';
+    const avatar = isAi ? '🥋' : '🧑‍💻';
+    const author = isAi ? 'Sensei Tensor' : 'You';
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    bubble.innerHTML = `
+      <div class="bubble-header">
+        <span class="bubble-avatar">${avatar}</span>
+        <span class="bubble-author">${author}</span>
+        <span class="bubble-time">${time}</span>
+      </div>
+      <div class="bubble-content">
+        ${isAi ? marked.parse(text) : `<p>${text}</p>`}
+      </div>
+    `;
+
+    if (isAi) {
+      enhanceCodeBlocks(bubble.querySelector('.bubble-content'));
+    }
+
     dom.tutorChatHistory.appendChild(bubble);
     dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
   };
@@ -995,7 +1159,15 @@ function setupAiTutor() {
 
     const thinkingBubble = document.createElement('div');
     thinkingBubble.className = 'chat-bubble ai';
-    thinkingBubble.innerHTML = `<em>Sensei Tensor is meditating on your query...</em>`;
+    thinkingBubble.innerHTML = `
+      <div class="bubble-header">
+        <span class="bubble-avatar">🥋</span>
+        <span class="bubble-author">Sensei Tensor</span>
+      </div>
+      <div class="bubble-content">
+        <em>Sensei Tensor is meditating on your query...</em>
+      </div>
+    `;
     dom.tutorChatHistory.appendChild(thinkingBubble);
     dom.tutorChatHistory.scrollTop = dom.tutorChatHistory.scrollHeight;
 
@@ -1014,12 +1186,8 @@ function setupAiTutor() {
     }
   });
 
-  // Preset prompt chips
-  dom.tutorPresetChips.querySelectorAll('.chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      handleSend(chip.dataset.prompt);
-    });
-  });
+  // Initial chips
+  renderTutorChips();
 }
 
 // --- SETTINGS MODAL & API KEY ---
