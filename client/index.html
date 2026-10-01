@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="NeuroQuest: Interactive gamified Deep Learning studio for Python developers." />
+    <title>NeuroQuest 🧠 | Interactive Deep Learning Studio</title>
+    <!-- Modern Typography: Outfit & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Top Navigation Bar -->
+      <header class="navbar">
+        <div class="nav-brand">
+          <div class="brand-icon">🧠</div>
+          <div class="brand-titles">
+            <span class="brand-title">NeuroQuest</span>
+            <span class="brand-badge">Deep Learning Studio</span>
+          </div>
+        </div>
+
+        <div class="nav-stats">
+          <div class="stat-badge level-badge" id="user-level-badge">
+            <span class="badge-icon">⭐</span>
+            <span id="user-level-text">Lvl 1 • Tensor Novice</span>
+          </div>
+          <div class="xp-container">
+            <div class="xp-bar-bg">
+              <div class="xp-bar-fill" id="xp-bar-fill" style="width: 15%"></div>
+            </div>
+            <span class="xp-label" id="xp-label-text">100 / 750 XP</span>
+          </div>
+          <div class="backend-status-pill" id="backend-status-pill" title="Python Engine Connection Status">
+            <span class="status-dot"></span>
+            <span id="backend-status-text">Engine: Connecting...</span>
+          </div>
+        </div>
+
+        <div class="nav-actions">
+          <button class="nav-btn btn-settings" id="btn-open-settings" title="Settings & Google API Key">
+            <span>⚙️</span>
+            <span class="btn-text">Settings</span>
+          </button>
+          <button class="nav-btn btn-tutor" id="btn-toggle-tutor" title="Ask AI Tutor (Sensei Tensor)">
+            <span>🥋</span>
+            <span class="btn-text">Ask AI</span>
+            <span class="nav-tutor-glow"></span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Application Layout -->
+      <div class="layout-container">
+        <!-- Sidebar: Quest Map -->
+        <aside class="sidebar-quests">
+          <div class="sidebar-header">
+            <h3>QUEST MAP</h3>
+            <span class="quest-count" id="quest-completion-count">1/4 Ready</span>
+          </div>
+          <div class="quest-list" id="quest-list-container">
+            <!-- Quests populated by main.js -->
+          </div>
+
+          <div class="sidebar-capstone-banner">
+            <div class="capstone-icon">🎨</div>
+            <div class="capstone-info">
+              <h4>Real-World Capstone</h4>
+              <p>DoodleVision AI (PyTorch CNN)</p>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Stage: Active Quest Workspace -->
+        <main class="main-stage" id="main-stage">
+          <div class="quest-hero" id="quest-hero">
+            <!-- Quest title, tags, story dynamically injected -->
+          </div>
+
+          <!-- Section Switcher Tabs -->
+          <div class="workspace-tabs">
+            <button class="tab-btn active" data-tab="interactive" id="tab-interactive-btn">
+              <span>🎮</span> Playful Sandbox
+            </button>
+            <button class="tab-btn" data-tab="code" id="tab-code-btn">
+              <span>🐍</span> Python Lab
+            </button>
+            <button class="tab-btn" data-tab="quiz" id="tab-quiz-btn">
+              <span>🎯</span> Knowledge Check
+            </button>
+          </div>
+
+          <!-- Tab Contents -->
+          <div class="tab-content active" id="content-interactive">
+            <div id="interactive-container" class="interactive-stage">
+              <!-- Rendered Sandbox Widget -->
+            </div>
+          </div>
+
+          <div class="tab-content" id="content-code">
+            <div class="code-workspace">
+              <div class="code-header">
+                <div class="code-title">
+                  <span>🐍</span> Hands-On Python Sandbox
+                </div>
+                <div class="code-actions">
+                  <button class="btn-reset-code" id="btn-reset-code" title="Reset to original snippet">↺ Reset</button>
+                  <button class="btn-run-code" id="btn-run-code">▶ Run in Python Engine</button>
+                </div>
+              </div>
+              <textarea id="code-editor-area" spellcheck="false" class="code-editor-textarea"></textarea>
+              <div class="terminal-panel">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                  </div>
+                  <span class="terminal-title">Output Terminal</span>
+                  <button class="terminal-clear" id="btn-clear-terminal">Clear</button>
+                </div>
+                <pre class="terminal-body" id="terminal-output">// Output will appear here after clicking 'Run in Python Engine'...</pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-content" id="content-quiz">
+            <div class="quiz-container" id="quiz-container">
+              <!-- Rendered Quiz Questions -->
+            </div>
+          </div>
+        </main>
+
+        <!-- Floating/Slide-out AI Tutor Drawer -->
+        <aside class="ai-tutor-drawer" id="ai-tutor-drawer">
+          <div class="tutor-header">
+            <div class="tutor-avatar">🥋</div>
+            <div class="tutor-info">
+              <h3>Sensei Tensor</h3>
+              <span class="tutor-status" id="tutor-model-badge">Google Gemini AI</span>
+            </div>
+            <button class="btn-close-tutor" id="btn-close-tutor" title="Close AI Tutor">&times;</button>
+          </div>
+
+          <div class="tutor-chat-history" id="tutor-chat-history">
+            <div class="chat-bubble ai">
+              <p>Greetings, young practitioner! I am <strong>Sensei Tensor</strong> 🥋. Whether you're wondering how weights balance like seesaws, why ReLU cuts off the dark side, or debugging a PyTorch tensor shape, ask away!</p>
+            </div>
+          </div>
+
+          <div class="tutor-preset-chips" id="tutor-preset-chips">
+            <button class="chip" data-prompt="Explain this quest's concept like I'm 10 years old with an analogy!">💡 Explain like I'm 10</button>
+            <button class="chip" data-prompt="Why do we need activation functions instead of just stacking linear weights?">⚡ Why Activation?</button>
+            <button class="chip" data-prompt="How does a Convolution filter detect edges in an image?">🔍 Convolutions & Edges</button>
+            <button class="chip" data-prompt="Give me a quick pop quiz question on deep learning!">🎯 Quiz Me</button>
+          </div>
+
+          <div class="tutor-input-box">
+            <textarea id="tutor-input-text" placeholder="Ask Sensei Tensor anything about Deep Learning..." rows="2"></textarea>
+            <button id="btn-send-tutor" class="btn-send-tutor" title="Send message">➔</button>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Settings & API Key Modal -->
+      <div class="modal-overlay" id="settings-modal" style="display: none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3>⚙️ Platform & API Settings</h3>
+            <button class="modal-close" id="btn-close-settings">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="gemini-key-input">Google Gemini / Agent Platform API Key:</label>
+              <input type="password" id="gemini-key-input" placeholder="AIzaSy..." class="form-control" />
+              <small class="form-hint">
+                🔑 Get your free key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a>. Your key is saved locally in your browser and never leaves your machine.
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label for="gemini-model-select">AI Model:</label>
+              <select id="gemini-model-select" class="form-control">
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Super Fast & Generous)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Next-Gen)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep Reasoning)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="backend-url-input">Python Engine Endpoint:</label>
+              <input type="text" id="backend-url-input" value="http://localhost:8000" class="form-control" />
+            </div>
+
+            <div class="settings-status" id="settings-test-status"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" id="btn-test-api">Test Connection</button>
+            <button class="btn-primary" id="btn-save-settings">Save & Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
