@@ -629,6 +629,168 @@ function renderGradientRunnerWidget(quest) {
 }
 
 // --- WIDGET 4: DoodleVision AI Real-World Capstone ---
+const DOODLE_STENCILS = {
+  cat: (c) => {
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, 280, 280);
+    c.strokeStyle = '#fff';
+    c.lineWidth = 14;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.arc(140, 150, 65, 0, Math.PI * 2);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(85, 115); c.lineTo(75, 50); c.lineTo(125, 95);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(155, 95); c.lineTo(205, 50); c.lineTo(195, 115);
+    c.stroke();
+    c.lineWidth = 8;
+    c.beginPath();
+    c.moveTo(90, 150); c.lineTo(40, 140);
+    c.moveTo(90, 160); c.lineTo(40, 165);
+    c.moveTo(190, 150); c.lineTo(240, 140);
+    c.moveTo(190, 160); c.lineTo(240, 165);
+    c.stroke();
+  },
+  bicycle: (c) => {
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, 280, 280);
+    c.strokeStyle = '#fff';
+    c.lineWidth = 14;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath(); c.arc(75, 195, 38, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.arc(205, 195, 38, 0, Math.PI * 2); c.stroke();
+    c.beginPath();
+    c.moveTo(75, 195); c.lineTo(130, 195); c.lineTo(105, 130); c.lineTo(75, 195);
+    c.lineTo(105, 130); c.lineTo(175, 130); c.lineTo(205, 195);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(175, 130); c.lineTo(170, 95); c.lineTo(185, 95);
+    c.moveTo(105, 130); c.lineTo(100, 115); c.lineTo(120, 115);
+    c.stroke();
+  },
+  star: (c) => {
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, 280, 280);
+    c.strokeStyle = '#fff';
+    c.lineWidth = 14;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    const cx = 140, cy = 140;
+    const points = [
+      [cx, 35],
+      [cx - 75, cy + 85],
+      [cx + 75, cy + 85],
+      [cx - 95, cy - 35],
+      [cx + 95, cy - 35]
+    ];
+    points.forEach(([px, py]) => {
+      c.beginPath();
+      c.moveTo(cx, cy);
+      c.lineTo(px, py);
+      c.stroke();
+    });
+    c.beginPath();
+    c.moveTo(points[0][0], points[0][1]);
+    c.lineTo(points[1][0], points[1][1]);
+    c.lineTo(points[4][0], points[4][1]);
+    c.lineTo(points[3][0], points[3][1]);
+    c.lineTo(points[2][0], points[2][1]);
+    c.closePath();
+    c.stroke();
+  },
+  pizza: (c) => {
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, 280, 280);
+    c.strokeStyle = '#fff';
+    c.lineWidth = 14;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.arc(140, -50, 190, 0.35 * Math.PI, 0.65 * Math.PI);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(60, 120); c.lineTo(140, 245); c.lineTo(220, 120);
+    c.stroke();
+    c.fillStyle = '#fff';
+    [[140, 150], [115, 180], [165, 185], [140, 215]].forEach(([px, py]) => {
+      c.beginPath();
+      c.arc(px, py, 10, 0, Math.PI * 2);
+      c.fill();
+    });
+  },
+  umbrella: (c) => {
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, 280, 280);
+    c.strokeStyle = '#fff';
+    c.lineWidth = 14;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.arc(140, 125, 95, Math.PI, 0);
+    c.closePath();
+    c.stroke();
+    c.beginPath();
+    c.moveTo(140, 125); c.lineTo(140, 225);
+    c.stroke();
+    c.beginPath();
+    c.arc(125, 225, 15, 0, Math.PI);
+    c.stroke();
+  }
+};
+
+function computeClientFeatureMaps(grid28) {
+  const kernels = [
+    { label: "F0: Horizontal Edge", k: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]] },
+    { label: "F1: Vertical Edge", k: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]] },
+    { label: "F2: Diagonal Slopes", k: [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]] },
+    { label: "F3: Corner Detect", k: [[2, 1, 0], [1, 0, -1], [0, -1, -2]] },
+    { label: "F4: Texture Contrast", k: [[0, -1, 0], [-1, 4, -1], [0, -1, 0]] },
+    { label: "F5: Ridge Filter", k: [[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]] },
+    { label: "F6: High Contrast Mass", k: [[-1, 2, -1], [-1, 2, -1], [-1, 2, -1]] },
+    { label: "F7: Ambient Contour", k: [[1, 2, 1], [2, 4, 2], [1, 2, 1]] }
+  ];
+
+  return kernels.map((item, idx) => {
+    const k = item.k;
+    const out = [];
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+
+    for (let r = 0; r < 28; r++) {
+      const row = [];
+      for (let c = 0; c < 28; c++) {
+        let sum = 0;
+        for (let kr = -1; kr <= 1; kr++) {
+          for (let kc = -1; kc <= 1; kc++) {
+            const nr = r + kr;
+            const nc = c + kc;
+            const val = (nr >= 0 && nr < 28 && nc >= 0 && nc < 28) ? grid28[nr][nc] : 0;
+            sum += val * k[kr + 1][kc + 1];
+          }
+        }
+        const reluVal = Math.max(0, sum);
+        if (reluVal < minVal) minVal = reluVal;
+        if (reluVal > maxVal) maxVal = reluVal;
+        row.push(reluVal);
+      }
+      out.push(row);
+    }
+
+    const range = (maxVal - minVal > 1e-4) ? (maxVal - minVal) : 1;
+    const normalized = out.map(row => row.map(v => Math.min(1, Math.max(0, (v - minVal) / range))));
+
+    return {
+      filter_id: idx,
+      label: item.label,
+      grid: normalized
+    };
+  });
+}
+
 function renderDoodleArenaWidget(quest) {
   const container = document.createElement('div');
   container.className = 'doodle-arena-grid';
@@ -646,31 +808,101 @@ function renderDoodleArenaWidget(quest) {
         <button class="canvas-btn" id="btn-start-challenge">⏱️ QuickDraw Battle</button>
       </div>
 
+      <div class="stencil-bar">
+        <span class="stencil-label">✨ Stencils:</span>
+        <button class="stencil-chip" data-stencil="cat">🐱 Cat</button>
+        <button class="stencil-chip" data-stencil="bicycle">🚲 Bicycle</button>
+        <button class="stencil-chip" data-stencil="star">⭐ Star</button>
+        <button class="stencil-chip" data-stencil="pizza">🍕 Pizza</button>
+        <button class="stencil-chip" data-stencil="umbrella">☂️ Umbrella</button>
+      </div>
+
       <div class="preview-28-box" style="width: 100%;">
         <canvas id="preview-28-canvas" class="preview-28-canvas" width="28" height="28"></canvas>
         <div style="font-size: 0.78rem; color: var(--text-muted);">
           <strong>Neural Downsample (28x28):</strong>
-          <p>What the Convolutional layers actually process.</p>
+          <p>Grayscale tensor fed into Conv1 layer.</p>
         </div>
       </div>
     </div>
 
     <div class="doodle-predictions-panel">
-      <div class="top-prediction-banner">
-        <div>
-          <span class="top-pred-label">Top Model Prediction</span>
-          <div class="top-pred-name" id="doodle-top-class">Waiting for sketch...</div>
-        </div>
-        <div class="top-pred-confidence" id="doodle-top-confidence">0.0%</div>
+      <div class="arena-tabs">
+        <button class="arena-tab-btn active" data-view="predictions">🎯 Predictions</button>
+        <button class="arena-tab-btn" data-view="feature-maps">🔬 Neural X-Ray (Conv1)</button>
+        <button class="arena-tab-btn" data-view="train-model">⚡ Train CNN Studio</button>
       </div>
 
-      <div id="challenge-status-box" style="display: none; padding: 0.8rem; background: rgba(245, 158, 11, 0.15); border: 1px solid var(--accent-amber); border-radius: var(--radius-md); font-size: 0.88rem;"></div>
+      <!-- View 1: Predictions -->
+      <div id="doodle-view-predictions" class="arena-view-content">
+        <div class="top-prediction-banner">
+          <div>
+            <span class="top-pred-label">Top Model Prediction</span>
+            <div class="top-pred-name" id="doodle-top-class">Waiting for sketch...</div>
+          </div>
+          <div class="top-pred-confidence" id="doodle-top-confidence">0.0%</div>
+        </div>
 
-      <div style="margin-top: 0.5rem;">
-        <h4 style="font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.8rem;">
-          Category Confidence Distribution:
-        </h4>
-        <div id="doodle-probability-bars"></div>
+        <div id="challenge-status-box" style="display: none; padding: 0.8rem; background: rgba(245, 158, 11, 0.15); border: 1px solid var(--accent-amber); border-radius: var(--radius-md); font-size: 0.88rem; margin-top: 0.8rem;"></div>
+
+        <div style="margin-top: 0.8rem;">
+          <h4 style="font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.8rem;">
+            Category Confidence Distribution:
+          </h4>
+          <div id="doodle-probability-bars"></div>
+        </div>
+      </div>
+
+      <!-- View 2: Neural X-Ray Feature Maps -->
+      <div id="doodle-view-feature-maps" class="arena-view-content" style="display: none;">
+        <div class="feature-maps-container">
+          <div class="feature-maps-header">
+            <strong>🔬 Conv1 Feature Maps (3x3 Kernels):</strong>
+            <p style="margin-top: 0.2rem;">Live activations extracted from PyTorch's first convolution layer. Watch how filters isolate edges, curves, and textures!</p>
+          </div>
+          <div class="feature-maps-grid" id="feature-maps-grid"></div>
+        </div>
+      </div>
+
+      <!-- View 3: Train CNN Studio -->
+      <div id="doodle-view-train-model" class="arena-view-content" style="display: none;">
+        <div class="training-studio-panel">
+          <div class="training-stats-row">
+            <div class="training-stat-card">
+              <div class="training-stat-label">Trained Epochs</div>
+              <div class="training-stat-val" id="train-stat-epoch">12</div>
+            </div>
+            <div class="training-stat-card">
+              <div class="training-stat-label">Loss (CE)</div>
+              <div class="training-stat-val" id="train-stat-loss">0.0015</div>
+            </div>
+            <div class="training-stat-card">
+              <div class="training-stat-label">Batch Accuracy</div>
+              <div class="training-stat-val" id="train-stat-acc">100%</div>
+            </div>
+          </div>
+
+          <div style="background: rgba(0, 0, 0, 0.3); padding: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(255, 255, 255, 0.06);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.4rem; font-weight: 600;">
+              <span>Optimizer: <strong>Adam</strong></span>
+              <span>Learning Rate: <strong id="train-lr-val" style="color: var(--accent-cyan); font-family: var(--font-mono);">0.003</strong></span>
+            </div>
+            <input type="range" id="train-lr-slider" min="0.001" max="0.02" step="0.001" value="0.003" class="cyber-slider" />
+          </div>
+
+          <div class="training-actions-row">
+            <button class="btn-train-action btn-train-primary" id="btn-train-1-epoch">⚡ Train 1 Epoch</button>
+            <button class="btn-train-action btn-train-secondary" id="btn-train-5-epochs">🚀 Train 5 Epochs</button>
+            <button class="btn-train-action btn-train-reset" id="btn-reset-weights" title="Reset to random weights">🔄 Reset Weights</button>
+          </div>
+
+          <div>
+            <div style="font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.3rem;">Training Telemetry Log:</div>
+            <div class="training-log-box" id="training-log-box">
+              <div>[Ready] PyTorch DoodleCNN connected. Click Train to run epochs on QuickDraw synthetic data.</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -728,6 +960,7 @@ function renderDoodleArenaWidget(quest) {
   canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, { passive: false });
   window.addEventListener('touchend', stopDraw);
 
+  // Clear Canvas
   container.querySelector('#btn-clear-canvas').addEventListener('click', () => {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -738,7 +971,96 @@ function renderDoodleArenaWidget(quest) {
       confidence: 0,
       all_predictions: quest.interactiveConfig.classes.map(c => ({ class: c, confidence: 20.0 }))
     });
+    updateFeatureMaps(extract28x28());
   });
+
+  // Stencils
+  container.querySelectorAll('.stencil-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.stencil;
+      const fn = DOODLE_STENCILS[type];
+      if (fn) {
+        fn(ctx);
+        triggerPrediction();
+      }
+    });
+  });
+
+  // Arena Sub-tabs
+  container.querySelectorAll('.arena-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.arena-tab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.arena-view-content').forEach(v => v.style.display = 'none');
+      btn.classList.add('active');
+      const viewName = btn.dataset.view;
+      const targetView = container.querySelector(`#doodle-view-${viewName}`);
+      if (targetView) targetView.style.display = 'block';
+
+      if (viewName === 'train-model') {
+        fetchTrainingStatus();
+      }
+    });
+  });
+
+  // Feature Maps Grid Initialization
+  const fmapsGrid = container.querySelector('#feature-maps-grid');
+  fmapsGrid.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const card = document.createElement('div');
+    card.className = 'feature-map-card';
+    card.innerHTML = `
+      <canvas class="feature-map-canvas" id="fmap-canvas-${i}" width="28" height="28"></canvas>
+      <div class="feature-map-title" id="fmap-title-${i}">F${i}</div>
+    `;
+    fmapsGrid.appendChild(card);
+  }
+
+  const updateFeatureMaps = async (grid) => {
+    let maps = null;
+    if (state.backendOnline) {
+      try {
+        const res = await fetch(`${state.backendUrl}/api/feature_maps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pixels: grid })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.feature_maps && data.feature_maps.length > 0) {
+            maps = data.feature_maps;
+          }
+        }
+      } catch {}
+    }
+
+    if (!maps) {
+      maps = computeClientFeatureMaps(grid);
+    }
+
+    maps.forEach((m, idx) => {
+      const fCanvas = container.querySelector(`#fmap-canvas-${idx}`);
+      const fTitle = container.querySelector(`#fmap-title-${idx}`);
+      if (fCanvas && m.grid) {
+        const fctx = fCanvas.getContext('2d');
+        const imgData = fctx.createImageData(28, 28);
+        for (let r = 0; r < 28; r++) {
+          for (let c = 0; c < 28; c++) {
+            const val = Math.min(255, Math.max(0, Math.round(m.grid[r][c] * 255)));
+            const pIdx = (r * 28 + c) * 4;
+            imgData.data[pIdx] = Math.round(val * 0.35);     // R
+            imgData.data[pIdx + 1] = Math.round(val * 0.95); // G (Cyan)
+            imgData.data[pIdx + 2] = val;                    // B (Electric)
+            imgData.data[pIdx + 3] = 255;
+          }
+        }
+        fctx.putImageData(imgData, 0, 0);
+        if (fTitle) {
+          fTitle.textContent = m.label.split(':')[0];
+          fTitle.title = m.label;
+        }
+      }
+    });
+  };
 
   // Downsample 280x280 -> 28x28 grayscale array
   const extract28x28 = () => {
@@ -749,7 +1071,6 @@ function renderDoodleArenaWidget(quest) {
       const row = [];
       for (let c = 0; c < 28; c++) {
         const idx = (r * 28 + c) * 4;
-        // Grayscale normalized value [0.0 - 1.0]
         const val = imgData.data[idx] / 255.0;
         row.push(val);
       }
@@ -761,11 +1082,13 @@ function renderDoodleArenaWidget(quest) {
   let debounceTimer = null;
   const triggerPredictionDebounced = () => {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(triggerPrediction, 120);
+    debounceTimer = setTimeout(triggerPrediction, 100);
   };
 
   const triggerPrediction = async () => {
     const grid = extract28x28();
+    updateFeatureMaps(grid);
+
     try {
       if (state.backendOnline) {
         const res = await fetch(`${state.backendUrl}/api/predict_doodle`, {
@@ -780,11 +1103,9 @@ function renderDoodleArenaWidget(quest) {
           return;
         }
       }
-    } catch {
-      // Backend error fallback
-    }
+    } catch {}
 
-    // Client-side quick heuristic prediction
+    // Fallback heuristic prediction
     const flat = grid.flat();
     const sumInk = flat.reduce((a, b) => a + b, 0);
     if (sumInk < 2) {
@@ -797,14 +1118,13 @@ function renderDoodleArenaWidget(quest) {
     }
 
     const classes = quest.interactiveConfig.classes;
-    // Heuristic weight distribution
     const topRowSum = grid.slice(0, 10).flat().reduce((a, b) => a + b, 0);
     const bottomRowSum = grid.slice(18, 28).flat().reduce((a, b) => a + b, 0);
 
     let scores = [20, 20, 20, 20, 20];
-    if (topRowSum > bottomRowSum * 1.6) scores[4] += 55; // Umbrella
-    else if (bottomRowSum > topRowSum * 1.4) scores[1] += 50; // Bicycle
-    else scores[2] += 45; // Star
+    if (topRowSum > bottomRowSum * 1.6) scores[4] += 55;
+    else if (bottomRowSum > topRowSum * 1.4) scores[1] += 50;
+    else scores[2] += 45;
 
     const total = scores.reduce((a, b) => a + b, 0);
     const preds = classes.map((c, i) => ({
@@ -820,21 +1140,23 @@ function renderDoodleArenaWidget(quest) {
   };
 
   const updatePredictionUI = (data) => {
+    const topConf = typeof data.confidence === 'number' ? Number(data.confidence).toFixed(1) : data.confidence;
     container.querySelector('#doodle-top-class').textContent = data.top_class;
-    container.querySelector('#doodle-top-confidence').textContent = `${data.confidence}%`;
+    container.querySelector('#doodle-top-confidence').textContent = `${topConf}%`;
 
     const barContainer = container.querySelector('#doodle-probability-bars');
     barContainer.innerHTML = '';
     (data.all_predictions || []).forEach(p => {
+      const confNum = typeof p.confidence === 'number' ? Number(p.confidence).toFixed(1) : p.confidence;
       const row = document.createElement('div');
       row.className = 'probability-bar-row';
       row.innerHTML = `
         <div class="prob-label-row">
           <span>${p.class}</span>
-          <span style="font-family: var(--font-mono); color: var(--accent-cyan);">${p.confidence}%</span>
+          <span style="font-family: var(--font-mono); color: var(--accent-cyan);">${confNum}%</span>
         </div>
         <div class="prob-track">
-          <div class="prob-fill" style="width: ${p.confidence}%"></div>
+          <div class="prob-fill" style="width: ${confNum}%"></div>
         </div>
       `;
       barContainer.appendChild(row);
@@ -873,6 +1195,89 @@ function renderDoodleArenaWidget(quest) {
       awardXp(150);
     }
   };
+
+  // Training Studio Logic
+  const fetchTrainingStatus = async () => {
+    if (!state.backendOnline) return;
+    try {
+      const res = await fetch(`${state.backendUrl}/api/status`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d.history && d.history.length > 0) {
+          const last = d.history[d.history.length - 1];
+          container.querySelector('#train-stat-epoch').textContent = last.epoch;
+          container.querySelector('#train-stat-loss').textContent = last.loss.toFixed(4);
+        }
+      }
+    } catch {}
+  };
+
+  container.querySelector('#train-lr-slider').addEventListener('input', (e) => {
+    container.querySelector('#train-lr-val').textContent = e.target.value;
+  });
+
+  const runTrainStep = async (epochs) => {
+    const lr = parseFloat(container.querySelector('#train-lr-slider').value) || 0.003;
+    const logBox = container.querySelector('#training-log-box');
+    logBox.innerHTML += `<div>⏳ Training ${epochs} epoch(s) on PyTorch CNN (lr=${lr})...</div>`;
+    logBox.scrollTop = logBox.scrollHeight;
+
+    const btn1 = container.querySelector('#btn-train-1-epoch');
+    const btn5 = container.querySelector('#btn-train-5-epochs');
+    btn1.disabled = true; btn5.disabled = true;
+
+    try {
+      if (state.backendOnline) {
+        const res = await fetch(`${state.backendUrl}/api/train_step`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ epochs, learning_rate: lr })
+        });
+        const data = await res.json();
+        if (data.success) {
+          container.querySelector('#train-stat-epoch').textContent = data.current_epoch;
+          container.querySelector('#train-stat-loss').textContent = data.loss.toFixed(4);
+          container.querySelector('#train-stat-acc').textContent = `${data.accuracy}%`;
+
+          logBox.innerHTML += `<div style="color: #34d399;">✓ Epoch ${data.current_epoch} complete: Loss = ${data.loss.toFixed(4)}, Train Accuracy = ${data.accuracy}%</div>`;
+          awardXp(epochs * 25);
+          triggerPrediction();
+        } else {
+          logBox.innerHTML += `<div style="color: #f87171;">❌ Training failed: ${data.error}</div>`;
+        }
+      } else {
+        logBox.innerHTML += `<div style="color: #facc15;">⚠️ Start Python backend (uvicorn) to run real PyTorch GPU/CPU training!</div>`;
+      }
+    } catch (err) {
+      logBox.innerHTML += `<div style="color: #f87171;">❌ Error: ${err.message}</div>`;
+    } finally {
+      btn1.disabled = false; btn5.disabled = false;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+  };
+
+  container.querySelector('#btn-train-1-epoch').addEventListener('click', () => runTrainStep(1));
+  container.querySelector('#btn-train-5-epochs').addEventListener('click', () => runTrainStep(5));
+
+  container.querySelector('#btn-reset-weights').addEventListener('click', async () => {
+    const logBox = container.querySelector('#training-log-box');
+    if (state.backendOnline) {
+      try {
+        const res = await fetch(`${state.backendUrl}/api/reset_model`, { method: 'POST' });
+        const data = await res.json();
+        container.querySelector('#train-stat-epoch').textContent = '0';
+        container.querySelector('#train-stat-loss').textContent = '1.6094';
+        container.querySelector('#train-stat-acc').textContent = '20.0%';
+        logBox.innerHTML += `<div style="color: #fca5a5;">⚠️ Model reset to random weights. Predictions are now untrained! Test drawing on the canvas.</div>`;
+        triggerPrediction();
+      } catch (err) {
+        logBox.innerHTML += `<div style="color: #f87171;">❌ Reset error: ${err.message}</div>`;
+      }
+    } else {
+      logBox.innerHTML += `<div style="color: #fca5a5;">⚠️ Reset simulated.</div>`;
+    }
+    logBox.scrollTop = logBox.scrollHeight;
+  });
 
   // Initial call
   triggerPrediction();

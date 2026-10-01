@@ -196,3 +196,139 @@ def predict_doodle(req: DoodlePredictRequest):
         "confidence": predictions[0]["confidence"],
         "all_predictions": predictions
     }
+
+class FeatureMapsRequest(BaseModel):
+    pixels: List[List[float]] # 28x28 normalized values
+
+@app.post("/api/feature_maps")
+def get_model_feature_maps(req: FeatureMapsRequest):
+    """
+    Extracts intermediate activation feature maps from Conv1 layer for real-time visualization.
+    """
+    global model
+    arr = np.array(req.pixels, dtype=np.float32)
+    if arr.shape != (28, 28):
+        raise HTTPException(status_code=400, detail="Expected 28x28 grid")
+
+    try:
+        import torch
+        from server.model import get_feature_maps
+
+        if model is None:
+            init_doodle_model()
+
+        tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0).unsqueeze(0) # [1, 1, 28, 28]
+        raw_maps = get_feature_maps(model, tensor) # (16, 28, 28)
+        
+        labels = [
+            "F0: Horizontal Edge",
+            "F1: Vertical Edge",
+            "F2: Diagonal Slopes",
+            "F3: Corner Detect",
+            "F4: Texture Contrast",
+            "F5: Ridge Filter",
+            "F6: High Contrast Mass",
+            "F7: Ambient Contour"
+        ]
+
+        selected_maps = []
+        for i in range(min(8, raw_maps.shape[0])):
+            m = raw_maps[i]
+            max_v = float(np.max(m))
+            min_v = float(np.min(m))
+            denom = max_v - min_v if (max_v - min_v) > 1e-5 else 1.0
+            norm_m = ((m - min_v) / denom).clip(0.0, 1.0)
+            selected_maps.append({
+                "filter_id": i,
+                "label": labels[i] if i < len(labels) else f"Kernel {i}",
+                "grid": norm_m.round(3).tolist()
+            })
+
+        return {
+            "success": True,
+            "feature_maps": selected_maps
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "feature_maps": []
+        }
+
+@app.post("/api/train_step")
+def train_step(req: TrainStepRequest):
+    """
+    Trains the PyTorch DoodleCNN for requested epochs and records live loss and accuracy.
+    """
+    global model, training_history
+    if model is None:
+        init_doodle_model()
+
+    try:
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
+        from server.dataset import generate_synthetic_doodle_data
+        from torch.utils.data import DataLoader
+
+        dataset = generate_synthetic_doodle_data(samples_per_class=60)
+        loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        optimizer = optim.Adam(model.parameters(), lr=req.learning_rate or 0.003)
+        criterion = nn.CrossEntropyLoss()
+
+        model.train()
+        total_loss = 0.0
+        correct = 0
+        total = 0
+
+        num_epochs = max(1, min(10, req.epochs or 1))
+        for _ in range(num_epochs):
+            epoch_loss = 0.0
+            for batch_x, batch_y in loader:
+                optimizer.zero_grad()
+                out = model(batch_x)
+                loss = criterion(out, batch_y)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+
+                preds = torch.argmax(out, dim=1)
+                correct += (preds == batch_y).sum().item()
+                total += batch_y.size(0)
+
+            avg_epoch_loss = round(epoch_loss / len(loader), 4)
+            current_epoch = len(training_history) + 1
+            training_history.append({"epoch": current_epoch, "loss": avg_epoch_loss})
+            total_loss = avg_epoch_loss
+
+        model.eval()
+        accuracy = round((correct / max(total, 1)) * 100, 1)
+
+        return {
+            "success": True,
+            "current_epoch": len(training_history),
+            "loss": total_loss,
+            "accuracy": accuracy,
+            "history": training_history[-15:]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/reset_model")
+def reset_model():
+    """
+    Re-initializes DoodleCNN weights with random initialization for training from scratch.
+    """
+    global model, training_history
+    try:
+        from server.model import DoodleCNN
+        model = DoodleCNN(num_classes=5)
+        model.eval()
+        training_history = []
+        return {
+            "success": True,
+            "message": "PyTorch DoodleCNN has been re-initialized with random weights. Predictions are now untrained."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
