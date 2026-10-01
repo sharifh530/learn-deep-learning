@@ -4,6 +4,7 @@ import contextlib
 import base64
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -331,4 +332,87 @@ def reset_model():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/export_weights")
+def export_weights():
+    """
+    Downloads the trained PyTorch state_dict as a binary .pth file.
+    """
+    global model
+    if model is None:
+        init_doodle_model()
+
+    try:
+        import torch
+        buf = io.BytesIO()
+        torch.save(model.state_dict(), buf)
+        buf.seek(0)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": "attachment; filename=doodle_cnn.pth"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/export_script")
+def export_inference_script():
+    """
+    Returns a clean, standalone Python inference script that loads doodle_cnn.pth.
+    """
+    script = '''# Standalone Inference Script for DoodleVision AI (PyTorch)
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+CLASS_NAMES = ["Cat 🐱", "Bicycle 🚲", "Star ⭐", "Pizza 🍕", "Umbrella ☂️"]
+
+class DoodleCNN(nn.Module):
+    def __init__(self, num_classes=5):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.pool1 = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(32 * 7 * 7, 64)
+        self.dropout = nn.Dropout(0.25)
+        self.fc2 = nn.Linear(64, num_classes)
+
+    def forward(self, x):
+        x = self.pool1(F.relu(self.conv1(x)))
+        x = self.pool2(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        return self.fc2(x)
+
+def load_and_predict(weights_path="doodle_cnn.pth", image_28x28=None):
+    model = DoodleCNN()
+    model.load_state_dict(torch.load(weights_path, map_location="cpu"))
+    model.eval()
+
+    if image_28x28 is None:
+        # Dummy test input
+        image_28x28 = np.zeros((28, 28), dtype=np.float32)
+
+    tensor = torch.tensor(image_28x28).unsqueeze(0).unsqueeze(0)
+    with torch.no_grad():
+        logits = model(tensor)
+        probs = F.softmax(logits, dim=1).squeeze(0).numpy()
+
+    best_idx = np.argmax(probs)
+    print(f"Top Prediction: {CLASS_NAMES[best_idx]} ({probs[best_idx]*100:.1f}%)")
+    for name, p in zip(CLASS_NAMES, probs):
+        print(f" - {name}: {p*100:.1f}%")
+
+if __name__ == "__main__":
+    print("Testing DoodleVision CNN...")
+    load_and_predict()
+'''
+    return PlainTextResponse(
+        content=script,
+        headers={"Content-Disposition": "attachment; filename=serve_doodle.py"}
+    )
+
 

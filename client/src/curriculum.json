@@ -149,6 +149,73 @@
           "explanation": "Max pooling downsamples spatial dimensions (e.g., 28x28 to 14x14), making the network faster and less sensitive to slight shifts in position."
         }
       ]
+    },
+    {
+      "id": "quest-5",
+      "number": 5,
+      "title": "The Convolution Kernel Detective",
+      "subtitle": "3x3 Kernels, Sobel Edge Filters, Strides, Padding & Feature Math",
+      "icon": "🔍",
+      "tag": "COMPUTER VISION INTERNALS",
+      "xp": 250,
+      "story": "How does a deep learning model 'see' horizontal lines, sharp corners, or blurry textures? It slides a miniature matrix—a 3×3 Kernel—over every pixel cluster! In this quest, step into the shoes of a Computer Vision Detective. Tweak 3×3 matrix weights, experiment with legendary filters (Sobel Horizontal, Sobel Vertical, Laplacian Ridge, Sharpen, Gaussian Blur, Emboss), adjust Stride & Padding, and inspect the live sliding dot-product math on every pixel!",
+      "mentalModel": "A convolution kernel acts like a 3×3 pattern stencil. As it slides across the image, pixels matching the stencil multiply to high positive numbers, lighting up the feature map!",
+      "interactiveType": "kernel_detective",
+      "interactiveConfig": {
+        "defaultKernel": [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+        "presets": {
+          "sobel_h": { "name": "Sobel Horizontal", "matrix": [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], "desc": "Detects horizontal boundaries by contrasting top vs bottom rows." },
+          "sobel_v": { "name": "Sobel Vertical", "matrix": [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], "desc": "Detects vertical borders by contrasting left vs right columns." },
+          "ridge": { "name": "Laplacian Ridge", "matrix": [[0, 1, 0], [1, -4, 1], [0, 1, 0]], "desc": "Detects rapid gradient transitions in all directions (edge outline)." },
+          "sharpen": { "name": "Sharpen", "matrix": [[0, -1, 0], [-1, 5, -1], [0, -1, 0]], "desc": "Amplifies contrast against surrounding neighbors." },
+          "blur": { "name": "Gaussian Blur", "matrix": [[0.0625, 0.125, 0.0625], [0.125, 0.25, 0.125], [0.0625, 0.125, 0.0625]], "desc": "Softens pixel transitions by computing distance-weighted local averages." },
+          "emboss": { "name": "Emboss (3D)", "matrix": [[-2, -1, 0], [-1, 1, 1], [0, 1, 2]], "desc": "Creates a stylized 3D stamped/raised lighting effect." },
+          "identity": { "name": "Identity (Passthrough)", "matrix": [[0, 0, 0], [0, 1, 0], [0, 0, 0]], "desc": "Leaves the center pixel 100% untouched." }
+        }
+      },
+      "codeSnippet": "import torch\nimport torch.nn.functional as F\n\n# Create a 1-channel 1x1x5x5 mini-image\nx = torch.tensor([[\n    [0.0, 0.0, 0.0, 0.0, 0.0],\n    [0.0, 1.0, 1.0, 1.0, 0.0],\n    [0.0, 1.0, 1.0, 1.0, 0.0],\n    [0.0, 1.0, 1.0, 1.0, 0.0],\n    [0.0, 0.0, 0.0, 0.0, 0.0]\n]]).unsqueeze(0)  # Shape: (1, 1, 5, 5)\n\n# Define Sobel Horizontal Kernel (Shape: out_channels, in_channels, kH, kW)\nkernel = torch.tensor([[\n    [-1.0, -2.0, -1.0],\n    [ 0.0,  0.0,  0.0],\n    [ 1.0,  2.0,  1.0]\n]]).unsqueeze(0).unsqueeze(0)\n\n# Perform 2D convolution with Stride=1, Padding=1 (Same Padding)\nout_same = F.conv2d(x, kernel, stride=1, padding=1)\n# Perform 2D convolution with Stride=1, Padding=0 (Valid Padding)\nout_valid = F.conv2d(x, kernel, stride=1, padding=0)\n\nprint(\"Input Shape:\", x.shape)\nprint(\"Same Padding Output (5x5):\\n\", out_same.squeeze().numpy())\nprint(\"Valid Padding Output (3x3):\\n\", out_valid.squeeze().numpy())",
+      "takeaways": [
+        "A 3x3 kernel slides across image pixels, computing dot-products between its weights and local pixel patches.",
+        "Output spatial dimension formula: Out = floor((In - Kernel + 2*Pad) / Stride) + 1.",
+        "Stride > 1 skips pixel steps, downsampling the spatial resolution.",
+        "Valid padding shrinks borders; Same padding (pad = (k-1)/2) preserves spatial dimensions.",
+        "Convolutional layers learn hundreds of such specialized kernels automatically via backpropagation!"
+      ],
+      "quiz": [
+        {
+          "question": "If an input image is 28×28, kernel is 3×3, padding is 0 (Valid), and stride is 1, what is the output dimension?",
+          "options": [
+            "28×28",
+            "26×26 (Formula: 28 - 3 + 1 = 26)",
+            "14×14",
+            "30×30"
+          ],
+          "answer": 1,
+          "explanation": "With Valid padding (padding=0) and stride=1, the 3x3 kernel cannot center on border pixels, so the output loses 1 pixel on every border: (28 - 3)/1 + 1 = 26."
+        },
+        {
+          "question": "What does a 3x3 kernel with negative numbers on top row and positive numbers on bottom row detect?",
+          "options": [
+            "Vertical edges (left vs right contrast)",
+            "Horizontal edges (top vs bottom contrast)",
+            "Audio frequency modulation",
+            "Random background noise"
+          ],
+          "answer": 1,
+          "explanation": "A horizontal Sobel filter computes the difference between pixels in the bottom row and the top row, sparking high responses when a horizontal contrast edge passes through."
+        },
+        {
+          "question": "Why does a Gaussian Blur kernel have values that sum to approximately 1.0?",
+          "options": [
+            "To preserve overall image brightness without artificially brightening or darkening the picture",
+            "To turn the image completely black",
+            "To invert all color channels",
+            "Because PyTorch requires all tensors to sum to 1"
+          ],
+          "answer": 0,
+          "explanation": "Normalizing kernel coefficients so they sum to 1 ensures the average brightness of the image remains stable while high-frequency noise is smoothed out."
+        }
+      ]
     }
   ]
 }

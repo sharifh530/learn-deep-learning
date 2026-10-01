@@ -28,7 +28,16 @@ const state = {
   doodleTimer: null,
   challengeTarget: null,
   challengeCountdown: 0,
-  challengeTimerId: null
+  challengeTimerId: null,
+  // Kernel Detective state
+  kernelWeights: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+  kernelStride: 1,
+  kernelPadding: 'same',
+  kernelActivation: 'none',
+  kernelBias: 0,
+  kernelActivePreset: 'sobel_h',
+  kernelPattern: 'shapes',
+  kernelInspectCoord: { x: 14, y: 14 }
 };
 
 const tutorService = new AITutorService();
@@ -241,6 +250,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'doodle_arena':
       renderDoodleArenaWidget(quest);
+      break;
+    case 'kernel_detective':
+      renderKernelDetectiveWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -902,6 +914,29 @@ function renderDoodleArenaWidget(quest) {
               <div>[Ready] PyTorch DoodleCNN connected. Click Train to run epochs on QuickDraw synthetic data.</div>
             </div>
           </div>
+
+          <div class="model-export-panel" style="margin-top: 1rem; padding: 0.85rem; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-sm);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+              <span style="font-weight: 700; font-size: 0.82rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.4rem;">
+                📦 <span>Model Export & Production Serving</span>
+              </span>
+              <span style="font-size: 0.72rem; color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-family: var(--font-mono);">PyTorch 2.x • 425 KB</span>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.6rem; line-height: 1.4;">
+              Export your trained neural network weights or download the turnkey Python server to test live inference on your local machine.
+            </p>
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+              <button class="btn-train-action btn-train-secondary" id="btn-export-weights" style="font-size: 0.78rem; padding: 0.45rem 0.8rem; cursor: pointer;">
+                💾 Download Weights (.pth)
+              </button>
+              <button class="btn-train-action btn-train-secondary" id="btn-export-script" style="font-size: 0.78rem; padding: 0.45rem 0.8rem; cursor: pointer;">
+                🐍 Download serve_doodle.py
+              </button>
+            </div>
+            <div style="margin-top: 0.6rem; font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono); background: rgba(0,0,0,0.4); padding: 0.4rem 0.6rem; border-radius: 4px;">
+              $ python serve_doodle.py  # Run local inference CLI
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1279,8 +1314,785 @@ function renderDoodleArenaWidget(quest) {
     logBox.scrollTop = logBox.scrollHeight;
   });
 
+  // Model Export buttons
+  const btnExportWeights = container.querySelector('#btn-export-weights');
+  const btnExportScript = container.querySelector('#btn-export-script');
+
+  if (btnExportWeights) {
+    btnExportWeights.addEventListener('click', () => {
+      window.open(`${state.backendUrl}/api/export_weights`, '_blank');
+    });
+  }
+  if (btnExportScript) {
+    btnExportScript.addEventListener('click', () => {
+      window.open(`${state.backendUrl}/api/export_script`, '_blank');
+    });
+  }
+
   // Initial call
   triggerPrediction();
+}
+
+// --- WIDGET 5: The Convolution Kernel Detective ---
+const KERNEL_PRESETS = {
+  sobel_h: {
+    name: 'Sobel Horizontal',
+    icon: '🧭',
+    matrix: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+    desc: 'Detects horizontal boundaries by contrasting bottom row with top row.'
+  },
+  sobel_v: {
+    name: 'Sobel Vertical',
+    icon: '🧭',
+    matrix: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+    desc: 'Detects vertical borders by contrasting right column with left column.'
+  },
+  ridge: {
+    name: 'Laplacian Ridge',
+    icon: '⚡',
+    matrix: [[0, 1, 0], [1, -4, 1], [0, 1, 0]],
+    desc: 'High response on rapid multidirectional pixel contrast (edge outline).'
+  },
+  sharpen: {
+    name: 'Sharpen',
+    icon: '🗡️',
+    matrix: [[0, -1, 0], [-1, 5, -1], [0, -1, 0]],
+    desc: 'Boosts high frequencies by subtracting local blur from the center pixel.'
+  },
+  blur: {
+    name: 'Gaussian Blur',
+    icon: '🌫️',
+    matrix: [[0.0625, 0.125, 0.0625], [0.125, 0.25, 0.125], [0.0625, 0.125, 0.0625]],
+    desc: 'Distance-weighted neighborhood averaging that smooths high-frequency noise.'
+  },
+  emboss: {
+    name: 'Emboss (3D)',
+    icon: '💎',
+    matrix: [[-2, -1, 0], [-1, 1, 1], [0, 1, 2]],
+    desc: 'Simulates top-left directional lighting, giving an embossed 3D relief.'
+  },
+  identity: {
+    name: 'Identity',
+    icon: '🔘',
+    matrix: [[0, 0, 0], [0, 1, 0], [0, 0, 0]],
+    desc: 'Transfers pixels 1:1 without alteration.'
+  }
+};
+
+function renderKernelDetectiveWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'kernel-detective-container';
+
+  container.innerHTML = `
+    <!-- Top Dimensions Banner -->
+    <div class="kernel-dimension-banner">
+      <div class="dim-badge-group">
+        <div class="dim-badge">
+          <span class="dim-label">Input Tensor:</span>
+          <span class="dim-val" id="kernel-dim-in">1 × 28 × 28</span>
+        </div>
+        <div class="dim-op">➔ [ Conv2D: 3×3 Kernel ] ➔</div>
+        <div class="dim-badge active">
+          <span class="dim-label">Output Feature Map:</span>
+          <span class="dim-val" id="kernel-dim-out">1 × 28 × 28</span>
+        </div>
+      </div>
+      <div class="dim-formula-tag" id="kernel-formula-tag">
+        Formula: ⌊(28 - 3 + 2×1)/1⌋ + 1 = 28
+      </div>
+    </div>
+
+    <!-- 3-Column Detective Layout -->
+    <div class="kernel-detective-grid">
+      <!-- Col 1: 3x3 Weights & Presets -->
+      <div class="kernel-col-controls">
+        <div class="kernel-panel-header">
+          <span>🎛️ 3×3 Kernel Stencil</span>
+          <span class="kernel-active-tag" id="kernel-active-tag">Sobel Horizontal</span>
+        </div>
+
+        <!-- Presets Buttons -->
+        <div class="kernel-presets-shelf">
+          <div class="kernel-section-label">Legendary Filter Presets:</div>
+          <div class="kernel-presets-grid" id="kernel-presets-grid">
+            <button class="btn-kernel-preset active" data-preset="sobel_h" title="Detects horizontal edges">Sobel H 🧭</button>
+            <button class="btn-kernel-preset" data-preset="sobel_v" title="Detects vertical borders">Sobel V 🧭</button>
+            <button class="btn-kernel-preset" data-preset="ridge" title="Detects outlines in all directions">Laplacian ⚡</button>
+            <button class="btn-kernel-preset" data-preset="sharpen" title="Sharpens transitions">Sharpen 🗡️</button>
+            <button class="btn-kernel-preset" data-preset="blur" title="Smooths noise">Gaussian 🌫️</button>
+            <button class="btn-kernel-preset" data-preset="emboss" title="3D relief effect">Emboss 💎</button>
+            <button class="btn-kernel-preset" data-preset="identity" title="Passthrough center">Identity 🔘</button>
+            <button class="btn-kernel-preset" data-preset="random" title="Random weight initialization">Random 🧪</button>
+          </div>
+        </div>
+
+        <!-- 3x3 Matrix Grid -->
+        <div class="kernel-matrix-card">
+          <div class="kernel-section-label" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Interactive Weights (K):</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono);">Hover / edit any cell</span>
+          </div>
+          <div class="kernel-matrix-grid" id="kernel-matrix-grid">
+            <!-- 9 cells generated by script -->
+          </div>
+        </div>
+
+        <!-- Hyperparameters Box -->
+        <div class="kernel-hyperparams-card">
+          <div class="kernel-section-label">Convolution Hyperparameters:</div>
+          
+          <div class="kernel-param-row">
+            <span class="param-name">Stride (S):</span>
+            <div class="param-segmented-ctrl" id="kernel-stride-ctrl">
+              <button class="param-btn active" data-val="1">1 (Pixel-by-Pixel)</button>
+              <button class="param-btn" data-val="2">2 (Downsample 2×)</button>
+            </div>
+          </div>
+
+          <div class="kernel-param-row">
+            <span class="param-name">Padding (P):</span>
+            <div class="param-segmented-ctrl" id="kernel-padding-ctrl">
+              <button class="param-btn active" data-val="same">Same (P=1)</button>
+              <button class="param-btn" data-val="valid">Valid (P=0)</button>
+            </div>
+          </div>
+
+          <div class="kernel-param-row">
+            <span class="param-name">Activation:</span>
+            <div class="param-segmented-ctrl" id="kernel-act-ctrl">
+              <button class="param-btn active" data-val="none">Linear (Raw)</button>
+              <button class="param-btn" data-val="relu">ReLU (max(0, x))</button>
+            </div>
+          </div>
+
+          <div class="kernel-param-row">
+            <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 0.2rem;">
+              <span class="param-name">Bias Offset:</span>
+              <span id="kernel-bias-val" style="color: var(--accent-cyan); font-family: var(--font-mono); font-size: 0.8rem;">0.0</span>
+            </div>
+            <input type="range" id="kernel-bias-slider" min="-100" max="100" value="0" step="5" class="cyber-slider" style="width: 100%;" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Col 2: Input Canvas & Magnifier -->
+      <div class="kernel-col-canvas">
+        <div class="kernel-panel-header">
+          <span>🖼️ Input Image (28×28)</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">Hover / Drag Reticle</span>
+        </div>
+
+        <!-- Pattern selector -->
+        <div class="pattern-pill-group" id="kernel-pattern-group">
+          <button class="pattern-pill-btn active" data-pattern="shapes">Shapes ⭕</button>
+          <button class="pattern-pill-btn" data-pattern="checkerboard">Checker 🏁</button>
+          <button class="pattern-pill-btn" data-pattern="star">Star 🌟</button>
+          <button class="pattern-pill-btn" data-pattern="cat">Cat 🐱</button>
+          <button class="pattern-pill-btn" data-pattern="draw">Draw ✍️</button>
+        </div>
+
+        <!-- Input Canvas Wrapper with Overlaid Magnifier Reticle -->
+        <div class="canvas-reticle-wrapper" id="canvas-reticle-wrapper">
+          <canvas id="kernel-input-canvas" width="28" height="28" class="kernel-pixel-canvas"></canvas>
+          <div class="kernel-reticle-box" id="kernel-reticle-box">
+            <div class="reticle-corner tl"></div>
+            <div class="reticle-corner tr"></div>
+            <div class="reticle-corner bl"></div>
+            <div class="reticle-corner br"></div>
+            <div class="reticle-center-dot"></div>
+          </div>
+        </div>
+
+        <div class="canvas-sub-actions">
+          <span style="font-size: 0.72rem; color: var(--text-muted);">Reticle Focus: <strong id="reticle-coord-text" style="color: var(--accent-amber); font-family: var(--font-mono);">(X: 14, Y: 14)</strong></span>
+          <button class="btn-clear-canvas" id="btn-clear-kernel-draw" style="display: none; padding: 0.2rem 0.6rem; font-size: 0.72rem;">Clear</button>
+        </div>
+      </div>
+
+      <!-- Col 3: Convolved Feature Map & Live Dot Product Math -->
+      <div class="kernel-col-math">
+        <div class="kernel-panel-header">
+          <span>✨ Output Feature Map</span>
+          <span id="output-canvas-res" style="font-size: 0.72rem; color: var(--accent-cyan); font-family: var(--font-mono);">28×28</span>
+        </div>
+
+        <!-- Output Canvas Wrapper -->
+        <div class="output-canvas-wrapper" id="output-canvas-wrapper">
+          <canvas id="kernel-output-canvas" width="28" height="28" class="kernel-pixel-canvas"></canvas>
+          <div class="output-reticle-dot" id="output-reticle-dot"></div>
+        </div>
+
+        <!-- Live Dot Product Arithmetic Breakdown Card -->
+        <div class="kernel-math-card">
+          <div class="math-card-header">
+            <span class="math-card-title">🔬 Live Dot-Product Arithmetic</span>
+            <span class="math-card-cell-badge" id="math-output-cell-badge">Out[14, 14]</span>
+          </div>
+
+          <div class="math-formula-box">
+            <div class="math-formula-row">
+              <span class="math-sym">y</span> = <span class="math-fn" id="math-fn-label">Linear</span>( <span class="math-sigma">∑</span> (P<sub>i,j</sub> × K<sub>i,j</sub>) + Bias )
+            </div>
+          </div>
+
+          <!-- 3x3 calculation mini-table -->
+          <div class="math-matrix-comparison">
+            <div class="math-matrix-col">
+              <div class="math-col-label">Pixels (P)</div>
+              <div class="math-mini-grid" id="math-mini-pixels"></div>
+            </div>
+            <div class="math-matrix-op">×</div>
+            <div class="math-matrix-col">
+              <div class="math-col-label">Kernel (K)</div>
+              <div class="math-mini-grid" id="math-mini-kernel"></div>
+            </div>
+            <div class="math-matrix-op">=</div>
+            <div class="math-matrix-col">
+              <div class="math-col-label">Product</div>
+              <div class="math-mini-grid" id="math-mini-product"></div>
+            </div>
+          </div>
+
+          <div class="math-sum-breakdown">
+            <div class="math-sum-row">
+              <span>Dot Product Sum:</span>
+              <strong id="math-sum-val" style="color: var(--accent-cyan); font-family: var(--font-mono);">0.0</strong>
+            </div>
+            <div class="math-sum-row">
+              <span>After Activation:</span>
+              <strong id="math-act-val" style="color: #34d399; font-family: var(--font-mono);">0.0</strong>
+            </div>
+          </div>
+
+          <div class="math-insight-callout" id="math-insight-callout">
+            Hover over any pixel in the input image to see how its 3×3 neighborhood multiplies against the kernel weights!
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // References
+  const inCanvas = container.querySelector('#kernel-input-canvas');
+  const inCtx = inCanvas.getContext('2d');
+  const outCanvas = container.querySelector('#kernel-output-canvas');
+  const outCtx = outCanvas.getContext('2d');
+  const reticleBox = container.querySelector('#kernel-reticle-box');
+  const outputDot = container.querySelector('#output-reticle-dot');
+  const canvasWrapper = container.querySelector('#canvas-reticle-wrapper');
+  const matrixGrid = container.querySelector('#kernel-matrix-grid');
+  const biasSlider = container.querySelector('#kernel-bias-slider');
+  const biasVal = container.querySelector('#kernel-bias-val');
+  const activeTag = container.querySelector('#kernel-active-tag');
+  const coordText = container.querySelector('#reticle-coord-text');
+  const btnClearDraw = container.querySelector('#btn-clear-kernel-draw');
+
+  // Dimension elements
+  const dimOut = container.querySelector('#kernel-dim-out');
+  const formulaTag = container.querySelector('#kernel-formula-tag');
+  const outputRes = container.querySelector('#output-canvas-res');
+
+  // Math breakdown elements
+  const miniPixels = container.querySelector('#math-mini-pixels');
+  const miniKernel = container.querySelector('#math-mini-kernel');
+  const miniProduct = container.querySelector('#math-mini-product');
+  const mathSumVal = container.querySelector('#math-sum-val');
+  const mathActVal = container.querySelector('#math-act-val');
+  const mathCellBadge = container.querySelector('#math-output-cell-badge');
+  const mathFnLabel = container.querySelector('#math-fn-label');
+  const mathInsight = container.querySelector('#math-insight-callout');
+
+  // Internal 28x28 pixel buffer (0..255)
+  const inputGrid = Array.from({ length: 28 }, () => new Float32Array(28));
+  let outputGrid = [];
+  let isFreeDrawing = false;
+
+  // --- Draw Pattern ---
+  function drawPattern(pattern) {
+    state.kernelPattern = pattern;
+    inCtx.fillStyle = '#000000';
+    inCtx.fillRect(0, 0, 28, 28);
+    inCtx.strokeStyle = '#ffffff';
+    inCtx.fillStyle = '#ffffff';
+
+    if (pattern === 'shapes') {
+      // Circle at top-left
+      inCtx.beginPath();
+      inCtx.arc(9, 9, 5, 0, Math.PI * 2);
+      inCtx.fill();
+      // Square at bottom-right
+      inCtx.fillRect(15, 15, 9, 9);
+      // Diagonal stripe
+      inCtx.lineWidth = 2;
+      inCtx.beginPath();
+      inCtx.moveTo(2, 26);
+      inCtx.lineTo(26, 2);
+      inCtx.stroke();
+    } else if (pattern === 'checkerboard') {
+      const tileSize = 7;
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          if ((r + c) % 2 === 0) {
+            inCtx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+          }
+        }
+      }
+    } else if (pattern === 'star') {
+      const cx = 14, cy = 14, spikes = 5, outerR = 10, innerR = 4;
+      let rot = Math.PI / 2 * 3;
+      let step = Math.PI / spikes;
+      inCtx.beginPath();
+      inCtx.moveTo(cx, cy - outerR);
+      for (let i = 0; i < spikes; i++) {
+        let x = cx + Math.cos(rot) * outerR;
+        let y = cy + Math.sin(rot) * outerR;
+        inCtx.lineTo(x, y);
+        rot += step;
+        x = cx + Math.cos(rot) * innerR;
+        y = cy + Math.sin(rot) * innerR;
+        inCtx.lineTo(x, y);
+        rot += step;
+      }
+      inCtx.lineTo(cx, cy - outerR);
+      inCtx.closePath();
+      inCtx.fill();
+    } else if (pattern === 'cat') {
+      // Cat head silhouette
+      inCtx.beginPath();
+      inCtx.arc(14, 16, 8, 0, Math.PI * 2);
+      inCtx.fill();
+      // Left ear
+      inCtx.beginPath();
+      inCtx.moveTo(7, 13);
+      inCtx.lineTo(7, 5);
+      inCtx.lineTo(13, 10);
+      inCtx.fill();
+      // Right ear
+      inCtx.beginPath();
+      inCtx.moveTo(21, 13);
+      inCtx.lineTo(21, 5);
+      inCtx.lineTo(15, 10);
+      inCtx.fill();
+      // Whiskers
+      inCtx.lineWidth = 1;
+      inCtx.beginPath();
+      inCtx.moveTo(4, 16); inCtx.lineTo(10, 16);
+      inCtx.moveTo(4, 19); inCtx.lineTo(10, 18);
+      inCtx.moveTo(18, 16); inCtx.lineTo(24, 16);
+      inCtx.moveTo(18, 18); inCtx.lineTo(24, 19);
+      inCtx.stroke();
+    } else if (pattern === 'draw') {
+      // Clear for drawing
+      btnClearDraw.style.display = 'inline-block';
+    }
+
+    if (pattern !== 'draw') {
+      btnClearDraw.style.display = 'none';
+    }
+
+    // Read back pixel intensities
+    const imgData = inCtx.getImageData(0, 0, 28, 28);
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        inputGrid[y][x] = imgData.data[(y * 28 + x) * 4];
+      }
+    }
+
+    runConvolution();
+  }
+
+  // --- Render 3x3 Matrix Grid Inputs ---
+  function renderMatrixInputs() {
+    matrixGrid.innerHTML = '';
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const val = state.kernelWeights[r][c];
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = 'any';
+        input.className = 'kernel-cell-input';
+        input.value = typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(3)) : val;
+        input.title = `Weight K[${r}, ${c}]`;
+
+        input.addEventListener('input', (e) => {
+          const num = parseFloat(e.target.value) || 0;
+          state.kernelWeights[r][c] = num;
+          state.kernelActivePreset = 'custom';
+          activeTag.textContent = 'Custom Kernel';
+          container.querySelectorAll('.btn-kernel-preset').forEach(b => b.classList.remove('active'));
+          runConvolution();
+        });
+
+        matrixGrid.appendChild(input);
+      }
+    }
+  }
+
+  // --- 2D Convolution Engine ---
+  function runConvolution() {
+    const K = state.kernelWeights;
+    const S = state.kernelStride;
+    const isSame = state.kernelPadding === 'same';
+    const P = isSame ? 1 : 0;
+    const bias = state.kernelBias;
+    const isRelu = state.kernelActivation === 'relu';
+
+    mathFnLabel.textContent = isRelu ? 'ReLU' : 'Linear';
+
+    // Dimension Formula: Out = floor((In - Kernel + 2*Pad)/Stride) + 1
+    const outW = Math.floor((28 - 3 + 2 * P) / S) + 1;
+    const outH = Math.floor((28 - 3 + 2 * P) / S) + 1;
+
+    dimOut.textContent = `1 × ${outW} × ${outH}`;
+    formulaTag.textContent = `Formula: ⌊(28 - 3 + 2×${P})/${S}⌋ + 1 = ${outW}`;
+    outputRes.textContent = `${outW}×${outH}`;
+
+    // Prepare padded grid of size (28 + 2P) x (28 + 2P)
+    const padSize = 28 + 2 * P;
+    const padded = Array.from({ length: padSize }, () => new Float32Array(padSize));
+
+    for (let y = 0; y < 28; y++) {
+      for (let x = 0; x < 28; x++) {
+        padded[y + P][x + P] = inputGrid[y][x];
+      }
+    }
+
+    // Allocate outputGrid
+    outputGrid = Array.from({ length: outH }, () => new Float32Array(outW));
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+
+    for (let outY = 0; outY < outH; outY++) {
+      for (let outX = 0; outX < outW; outX++) {
+        const startY = outY * S;
+        const startX = outX * S;
+        let sum = 0;
+
+        for (let kr = 0; kr < 3; kr++) {
+          for (let kc = 0; kc < 3; kc++) {
+            sum += K[kr][kc] * padded[startY + kr][startX + kc];
+          }
+        }
+        sum += bias;
+        const actVal = isRelu ? Math.max(0, sum) : sum;
+        outputGrid[outY][outX] = actVal;
+
+        if (actVal < minVal) minVal = actVal;
+        if (actVal > maxVal) maxVal = actVal;
+      }
+    }
+
+    // Render to output canvas
+    outCanvas.width = outW;
+    outCanvas.height = outH;
+    const outImgData = outCtx.createImageData(outW, outH);
+
+    const absMax = Math.max(Math.abs(minVal), Math.abs(maxVal), 1.0);
+
+    for (let y = 0; y < outH; y++) {
+      for (let x = 0; x < outW; x++) {
+        const val = outputGrid[y][x];
+        const idx = (y * outW + x) * 4;
+
+        if (isRelu) {
+          // ReLU: 0 is dark background, positive lights up vibrant cyan-gold
+          const norm = Math.min(255, Math.floor((val / absMax) * 255));
+          outImgData.data[idx] = Math.floor(norm * 0.4);     // R
+          outImgData.data[idx + 1] = Math.floor(norm * 0.9); // G
+          outImgData.data[idx + 2] = norm;                   // B
+          outImgData.data[idx + 3] = 255;
+        } else {
+          // Linear: positive = cyan/green, negative = violet/rose
+          if (val >= 0) {
+            const norm = Math.min(255, Math.floor((val / absMax) * 255));
+            outImgData.data[idx] = Math.floor(norm * 0.1);
+            outImgData.data[idx + 1] = Math.floor(norm * 0.85);
+            outImgData.data[idx + 2] = norm;
+            outImgData.data[idx + 3] = 255;
+          } else {
+            const norm = Math.min(255, Math.floor((-val / absMax) * 255));
+            outImgData.data[idx] = norm;
+            outImgData.data[idx + 1] = Math.floor(norm * 0.2);
+            outImgData.data[idx + 2] = Math.floor(norm * 0.4);
+            outImgData.data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+
+    outCtx.putImageData(outImgData, 0, 0);
+
+    // Update live math inspector at active focus coordinate
+    updateMathInspector();
+  }
+
+  // --- Live Math Inspector ---
+  function updateMathInspector() {
+    const { x, y } = state.kernelInspectCoord;
+    const S = state.kernelStride;
+    const isSame = state.kernelPadding === 'same';
+    const P = isSame ? 1 : 0;
+    const K = state.kernelWeights;
+    const bias = state.kernelBias;
+    const isRelu = state.kernelActivation === 'relu';
+
+    // Position of reticle on screen
+    const rect = inCanvas.getBoundingClientRect();
+    const cellW = rect.width / 28;
+    const cellH = rect.height / 28;
+
+    reticleBox.style.left = `${(x - 1) * cellW}px`;
+    reticleBox.style.top = `${(y - 1) * cellH}px`;
+    reticleBox.style.width = `${3 * cellW}px`;
+    reticleBox.style.height = `${3 * cellH}px`;
+
+    coordText.textContent = `(X: ${x}, Y: ${y})`;
+
+    // Check corresponding output cell
+    let outX = null, outY = null;
+    const padX = x + P;
+    const padY = y + P;
+
+    if (P === 1) {
+      if (x % S === 0 && y % S === 0) {
+        outX = Math.floor(x / S);
+        outY = Math.floor(y / S);
+      }
+    } else {
+      if ((x - 1) >= 0 && (y - 1) >= 0 && (x - 1) % S === 0 && (y - 1) % S === 0) {
+        outX = Math.floor((x - 1) / S);
+        outY = Math.floor((y - 1) / S);
+      }
+    }
+
+    const outW = Math.floor((28 - 3 + 2 * P) / S) + 1;
+    const outH = Math.floor((28 - 3 + 2 * P) / S) + 1;
+
+    if (outX !== null && outY !== null && outX < outW && outY < outH) {
+      mathCellBadge.textContent = `Out[${outY}, ${outX}]`;
+      const outRect = outCanvas.getBoundingClientRect();
+      const outCellW = outRect.width / outW;
+      const outCellH = outRect.height / outH;
+      outputDot.style.display = 'block';
+      outputDot.style.left = `${outX * outCellW}px`;
+      outputDot.style.top = `${outY * outCellH}px`;
+      outputDot.style.width = `${outCellW}px`;
+      outputDot.style.height = `${outCellH}px`;
+    } else {
+      mathCellBadge.textContent = `Skipped by Stride/Valid`;
+      outputDot.style.display = 'none';
+    }
+
+    // Extract 3x3 pixel values around (x, y)
+    miniPixels.innerHTML = '';
+    miniKernel.innerHTML = '';
+    miniProduct.innerHTML = '';
+
+    let sum = 0;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const curY = y - 1 + r;
+        const curX = x - 1 + c;
+        let pVal = 0;
+        if (curY >= 0 && curY < 28 && curX >= 0 && curX < 28) {
+          pVal = inputGrid[curY][curX];
+        }
+        const kVal = K[r][c];
+        const prod = pVal * kVal;
+        sum += prod;
+
+        // Pixel cell
+        const pCell = document.createElement('div');
+        pCell.className = 'math-cell';
+        pCell.textContent = Math.round(pVal);
+        pCell.style.background = `rgba(255, 255, 255, ${Math.min(1, Math.max(0.08, pVal / 255))})`;
+        if (pVal > 150) pCell.style.color = '#000';
+        miniPixels.appendChild(pCell);
+
+        // Kernel cell
+        const kCell = document.createElement('div');
+        kCell.className = 'math-cell';
+        kCell.textContent = Number.isInteger(kVal) ? kVal : kVal.toFixed(2);
+        if (kVal > 0) kCell.style.color = '#38bdf8';
+        else if (kVal < 0) kCell.style.color = '#f43f5e';
+        miniKernel.appendChild(kCell);
+
+        // Product cell
+        const prodCell = document.createElement('div');
+        prodCell.className = 'math-cell';
+        prodCell.textContent = Math.round(prod);
+        if (prod > 0) prodCell.style.color = '#34d399';
+        else if (prod < 0) prodCell.style.color = '#f87171';
+        miniProduct.appendChild(prodCell);
+      }
+    }
+
+    sum += bias;
+    const finalVal = isRelu ? Math.max(0, sum) : sum;
+
+    mathSumVal.textContent = sum.toFixed(1);
+    mathActVal.textContent = finalVal.toFixed(1);
+
+    // Contextual educational insight
+    const presetKey = state.kernelActivePreset;
+    if (presetKey === 'sobel_h') {
+      if (Math.abs(sum) > 200) {
+        mathInsight.innerHTML = `🧭 <strong>Strong Horizontal Edge!</strong> Notice how contrast between the top row and bottom row produces a high output gradient (${Math.round(sum)}).`;
+      } else {
+        mathInsight.innerHTML = `🧭 <strong>Uniform Area:</strong> Top and bottom rows cancel each other out (${Math.round(sum)}), indicating no horizontal edge here.`;
+      }
+    } else if (presetKey === 'sobel_v') {
+      if (Math.abs(sum) > 200) {
+        mathInsight.innerHTML = `🧭 <strong>Strong Vertical Edge!</strong> Notice how contrast between the left column and right column lights up this filter (${Math.round(sum)}).`;
+      } else {
+        mathInsight.innerHTML = `🧭 <strong>Uniform Area:</strong> Left and right columns balance out to near zero (${Math.round(sum)}).`;
+      }
+    } else if (presetKey === 'blur') {
+      mathInsight.innerHTML = `🌫️ <strong>Gaussian Smoothing:</strong> All weights are positive fractions summing to 1.0. Output (${Math.round(finalVal)}) is the weighted local average!`;
+    } else if (presetKey === 'ridge') {
+      mathInsight.innerHTML = `⚡ <strong>Laplacian Ridge:</strong> The center is contrasted against all four cardinal neighbors to detect outlines in every direction.`;
+    } else {
+      mathInsight.innerHTML = `💡 <strong>3×3 Dot Product:</strong> Output = (${Math.round(sum - bias)} dot product) + (${bias} bias) ${isRelu ? '➔ ReLU: ' + Math.round(finalVal) : ''}.`;
+    }
+  }
+
+  // --- Interaction: Reticle Drag / Hover ---
+  function handleCanvasPointer(e) {
+    const rect = inCanvas.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+
+    const normX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const normY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+    const pixelX = Math.floor(normX * 28);
+    const pixelY = Math.floor(normY * 28);
+
+    state.kernelInspectCoord = {
+      x: Math.max(0, Math.min(27, pixelX)),
+      y: Math.max(0, Math.min(27, pixelY))
+    };
+
+    if (state.kernelPattern === 'draw' && isFreeDrawing) {
+      inCtx.fillStyle = '#ffffff';
+      inCtx.beginPath();
+      inCtx.arc(pixelX, pixelY, 1.5, 0, Math.PI * 2);
+      inCtx.fill();
+
+      // Update inputGrid
+      const imgData = inCtx.getImageData(0, 0, 28, 28);
+      for (let y = 0; y < 28; y++) {
+        for (let x = 0; x < 28; x++) {
+          inputGrid[y][x] = imgData.data[(y * 28 + x) * 4];
+        }
+      }
+      runConvolution();
+    } else {
+      updateMathInspector();
+    }
+  }
+
+  canvasWrapper.addEventListener('mousemove', handleCanvasPointer);
+  canvasWrapper.addEventListener('mousedown', (e) => {
+    isFreeDrawing = true;
+    handleCanvasPointer(e);
+  });
+  window.addEventListener('mouseup', () => { isFreeDrawing = false; });
+
+  // Touch support
+  canvasWrapper.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    handleCanvasPointer(e);
+  }, { passive: false });
+
+  // --- Presets Click ---
+  container.querySelectorAll('.btn-kernel-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const presetKey = btn.dataset.preset;
+      container.querySelectorAll('.btn-kernel-preset').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (presetKey === 'random') {
+        state.kernelActivePreset = 'random';
+        activeTag.textContent = 'Random Filter';
+        state.kernelWeights = Array.from({ length: 3 }, () =>
+          Array.from({ length: 3 }, () => parseFloat((Math.random() * 2 - 1).toFixed(2)))
+        );
+      } else {
+        const p = KERNEL_PRESETS[presetKey];
+        if (p) {
+          state.kernelActivePreset = presetKey;
+          activeTag.textContent = p.name;
+          state.kernelWeights = p.matrix.map(row => [...row]);
+        }
+      }
+
+      awardXp(15);
+      renderMatrixInputs();
+      runConvolution();
+    });
+  });
+
+  // --- Patterns Click ---
+  container.querySelectorAll('.pattern-pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.pattern-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      drawPattern(btn.dataset.pattern);
+    });
+  });
+
+  btnClearDraw.addEventListener('click', () => {
+    inCtx.fillStyle = '#000000';
+    inCtx.fillRect(0, 0, 28, 28);
+    for (let y = 0; y < 28; y++) inputGrid[y].fill(0);
+    runConvolution();
+  });
+
+  // --- Hyperparams Segmented Controls ---
+  // Stride
+  container.querySelectorAll('#kernel-stride-ctrl .param-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('#kernel-stride-ctrl .param-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kernelStride = parseInt(btn.dataset.val, 10);
+      runConvolution();
+    });
+  });
+
+  // Padding
+  container.querySelectorAll('#kernel-padding-ctrl .param-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('#kernel-padding-ctrl .param-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kernelPadding = btn.dataset.val;
+      runConvolution();
+    });
+  });
+
+  // Activation
+  container.querySelectorAll('#kernel-act-ctrl .param-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('#kernel-act-ctrl .param-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.kernelActivation = btn.dataset.val;
+      runConvolution();
+    });
+  });
+
+  // Bias slider
+  biasSlider.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    state.kernelBias = val;
+    biasVal.textContent = val.toFixed(1);
+    runConvolution();
+  });
+
+  // Initial draw
+  renderMatrixInputs();
+  drawPattern('shapes');
 }
 
 // --- PYTHON CODE RUNNER & TERMINAL ---
@@ -1410,6 +2222,12 @@ const questPrompts = {
     { label: '🎨 Why use Max Pooling?', prompt: 'Why do CNNs downsample with MaxPool2d instead of just making images smaller beforehand?' },
     { label: '🎨 Explain DoodleCNN architecture', prompt: 'Break down the DoodleCNN architecture line-by-line: Conv2d -> ReLU -> MaxPool2d -> Linear.' },
     { label: '🎯 Quiz me on Convolutions', prompt: 'Give me a challenging question about CNN feature maps and pooling!' }
+  ],
+  'quest-5': [
+    { label: '🔍 How does a Sobel filter find edges?', prompt: 'Explain how the Sobel 3x3 matrix detects horizontal and vertical edges by calculating gradient intensity across neighboring pixels.' },
+    { label: '🔍 Explain Stride and Padding math', prompt: 'Walk through the formula for convolutional output dimensions: O = ((W - K + 2P)/S) + 1 with concrete examples.' },
+    { label: '🔍 What makes Gaussian blur smooth images?', prompt: 'Why do the fractions in a Gaussian blur kernel sum to 1.0, and how does it reduce high-frequency image noise?' },
+    { label: '🎯 Quiz me on Kernel Detective', prompt: 'Give me a challenging question about 3x3 convolution kernels, padding, and stride!' }
   ]
 };
 
