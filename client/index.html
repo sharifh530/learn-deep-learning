@@ -174,14 +174,30 @@
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label for="gemini-key-input">Google Gemini / Agent Platform API Key:</label>
-              <input type="password" id="gemini-key-input" placeholder="AIzaSy..." class="form-control" />
+              <label for="ai-provider-select">AI Provider / Connection Type:</label>
+              <select id="ai-provider-select" class="form-control">
+                <option value="gemini">Google Gemini API (Google AI Studio / GCP Generative Language)</option>
+                <option value="custom_agent">Google Cloud Agent / Custom Webhook Endpoint</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="group-gemini-key">
+              <label for="gemini-key-input">Google API Key / Bearer Token:</label>
+              <input type="password" id="gemini-key-input" placeholder="AIzaSy... or Bearer Token" class="form-control" />
               <small class="form-hint">
-                🔑 Get your free key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a>. Your key is saved locally in your browser and never leaves your machine.
+                🔑 Recommended: Get a free instant key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>.
               </small>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="group-custom-agent" style="display: none;">
+              <label for="custom-agent-url-input">Google Cloud Agent Webhook / Endpoint URL:</label>
+              <input type="text" id="custom-agent-url-input" placeholder="https://your-agent-endpoint-url..." class="form-control" />
+              <small class="form-hint">
+                Endpoint URL for your Vertex AI Agent Builder, Cloud Run agent, or Dialogflow CX webhook.
+              </small>
+            </div>
+
+            <div class="form-group" id="group-gemini-model">
               <label for="gemini-model-select">AI Model:</label>
               <select id="gemini-model-select" class="form-control">
                 <option value="gemini-1.5-flash">Gemini 1.5 Flash (Super Fast & Generous)</option>
@@ -190,12 +206,19 @@
               </select>
             </div>
 
-            <div class="form-group">
+            <div class="gcp-troubleshoot-box" style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: 8px; padding: 0.85rem; font-size: 0.8rem; line-height: 1.5;">
+              <strong style="color: #67e8f9;">💡 Using a Google Cloud (GCP) Key?</strong><br>
+              If connection test says <em>"API generativelanguage.googleapis.com is blocked"</em>:<br>
+              1. <a href="https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com" target="_blank" rel="noopener" style="color: #f59e0b; text-decoration: underline; font-weight: 600;">Enable Generative Language API in your GCP project</a>.<br>
+              2. Or grab a 1-click free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color: #34d399; text-decoration: underline; font-weight: 600;">Google AI Studio</a> (no GCP project restrictions).
+            </div>
+
+            <div class="form-group" style="margin-top: 0.5rem;">
               <label for="backend-url-input">Python Engine Endpoint:</label>
               <input type="text" id="backend-url-input" value="http://localhost:8000" class="form-control" />
             </div>
 
-            <div class="settings-status" id="settings-test-status"></div>
+            <div class="settings-status" id="settings-test-status" style="margin-top: 0.4rem; font-size: 0.85rem; line-height: 1.5;"></div>
           </div>
           <div class="modal-footer">
             <button class="btn-secondary" id="btn-test-api">Test Connection</button>

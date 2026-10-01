@@ -71,8 +71,12 @@ const dom = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   btnSaveSettings: document.getElementById('btn-save-settings'),
   btnTestApi: document.getElementById('btn-test-api'),
+  aiProviderSelect: document.getElementById('ai-provider-select'),
   geminiKeyInput: document.getElementById('gemini-key-input'),
   geminiModelSelect: document.getElementById('gemini-model-select'),
+  groupGeminiModel: document.getElementById('group-gemini-model'),
+  groupCustomAgent: document.getElementById('group-custom-agent'),
+  customAgentUrlInput: document.getElementById('custom-agent-url-input'),
   backendUrlInput: document.getElementById('backend-url-input'),
   settingsTestStatus: document.getElementById('settings-test-status')
 };
@@ -1018,11 +1022,22 @@ function setupAiTutor() {
 
 // --- SETTINGS MODAL & API KEY ---
 function setupSettings() {
+  const updateProviderVisibility = () => {
+    const isCustom = dom.aiProviderSelect.value === 'custom_agent';
+    dom.groupCustomAgent.style.display = isCustom ? 'block' : 'none';
+    dom.groupGeminiModel.style.display = isCustom ? 'none' : 'block';
+  };
+
+  dom.aiProviderSelect.addEventListener('change', updateProviderVisibility);
+
   const openModal = () => {
+    dom.aiProviderSelect.value = tutorService.providerType;
     dom.geminiKeyInput.value = tutorService.getApiKey();
+    dom.customAgentUrlInput.value = tutorService.customAgentUrl;
     dom.geminiModelSelect.value = tutorService.model;
     dom.backendUrlInput.value = state.backendUrl;
     dom.settingsTestStatus.textContent = '';
+    updateProviderVisibility();
     dom.settingsModal.style.display = 'flex';
   };
 
@@ -1034,10 +1049,13 @@ function setupSettings() {
   dom.btnCloseSettings.addEventListener('click', closeModal);
 
   dom.btnSaveSettings.addEventListener('click', () => {
+    const provider = dom.aiProviderSelect.value;
     const key = dom.geminiKeyInput.value;
+    const customUrl = dom.customAgentUrlInput.value.trim();
     const model = dom.geminiModelSelect.value;
     const backend = dom.backendUrlInput.value.trim() || 'http://localhost:8000';
 
+    tutorService.setProvider(provider, customUrl);
     tutorService.setApiKey(key);
     tutorService.setModel(model);
     state.backendUrl = backend;
@@ -1049,14 +1067,24 @@ function setupSettings() {
 
   dom.btnTestApi.addEventListener('click', async () => {
     const key = dom.geminiKeyInput.value.trim();
-    if (!key) {
-      dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">Please enter a key first.</span>`;
+    const provider = dom.aiProviderSelect.value;
+    const customUrl = dom.customAgentUrlInput.value.trim();
+
+    if (!key && provider !== 'custom_agent') {
+      dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">Please enter an API key first.</span>`;
       return;
     }
-    dom.settingsTestStatus.innerHTML = `<span>Testing connection to Google Gemini API...</span>`;
+    if (provider === 'custom_agent' && !customUrl) {
+      dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">Please enter a Custom Agent Endpoint URL.</span>`;
+      return;
+    }
+
+    dom.settingsTestStatus.innerHTML = `<span>⏳ Testing connection to AI tutor...</span>`;
+    tutorService.setProvider(provider, customUrl);
     tutorService.setApiKey(key);
+
     const testAns = await tutorService.ask("Test connection! Reply with 'Osu! Sensei Tensor is online!' in 5 words.");
-    dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">${testAns}</span>`;
+    dom.settingsTestStatus.innerHTML = marked.parse(testAns);
   });
 }
 
