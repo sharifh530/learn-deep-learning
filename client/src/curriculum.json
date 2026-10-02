@@ -848,10 +848,22 @@
           "title": "L2 Regularized Loss Objective",
           "equation": "\\mathcal{L}_{\\text{total}} = \\mathcal{L}_{\\text{task}} + \\frac{\\lambda}{2} \\sum_{j=1}^{M} w_j^2",
           "breakdown": [
-            { "symbol": "L_task", "meaning": "Standard prediction error (e.g. Cross-Entropy or Mean Squared Error)" },
-            { "symbol": "λ (lambda)", "meaning": "Regularization strength hyperparameter (weight decay coefficient, e.g. 1e-4)" },
-            { "symbol": "∑ w_j^2", "meaning": "Sum of squared weight magnitudes (L2 norm ||W||_2^2)" },
-            { "symbol": "L_total", "meaning": "Combined loss minimized by the optimizer, balancing fit vs simplicity" }
+            {
+              "symbol": "L_task",
+              "meaning": "Standard prediction error (e.g. Cross-Entropy or Mean Squared Error)"
+            },
+            {
+              "symbol": "λ (lambda)",
+              "meaning": "Regularization strength hyperparameter (weight decay coefficient, e.g. 1e-4)"
+            },
+            {
+              "symbol": "∑ w_j^2",
+              "meaning": "Sum of squared weight magnitudes (L2 norm ||W||_2^2)"
+            },
+            {
+              "symbol": "L_total",
+              "meaning": "Combined loss minimized by the optimizer, balancing fit vs simplicity"
+            }
           ]
         },
         "takeaways": [
@@ -865,6 +877,287 @@
           "Evaluating models with model.train() active: Leaves Dropout on, making test predictions stochastic and inaccurate.",
           "Setting regularization strength lambda too high: Causes heavy underfitting where the model refuses to learn.",
           "Evaluating test data on training set: Always split data into distinct Train, Validation, and Test sets."
+        ]
+      }
+    },
+    {
+      "id": "quest-7",
+      "number": 7,
+      "title": "The Attention Machine",
+      "subtitle": "Self-Attention, Transformers & The Query-Key-Value Dance",
+      "tag": "ATTENTION & TRANSFORMERS",
+      "icon": "⚡",
+      "xp": 300,
+      "story": "Before Transformers, neural networks processed language one word at a time like an old cassette tape. By word 50, word 1 was completely forgotten! In 2017, the revolutionary paper 'Attention Is All You Need' changed computing forever. Instead of a sequential crawl, every word broadcasts a Query ('What am I looking for?'), checks every other word's Key ('What do I offer?'), and blends their Values in parallel! Step into the cockpit of the mechanism powering ChatGPT, Claude, and modern AI.",
+      "mentalModel": "The Cocktail Party Spotlight: In a bustling room with dozens of conversations, your brain doesn't listen equally to all soundwaves. When someone mentions your name or a topic you care about, your attention spotlight instantly locks onto them, absorbing their message while dimming background chatter.",
+      "interactive": {
+        "type": "attention_workshop",
+        "dimension": 4,
+        "defaultSentenceIdx": 0,
+        "sentences": [
+          {
+            "id": "animal-tired",
+            "text": "The animal didn't cross the street because it was too tired.",
+            "tokens": [
+              "The",
+              "animal",
+              "didn't",
+              "cross",
+              "the",
+              "street",
+              "because",
+              "it",
+              "was",
+              "too",
+              "tired."
+            ],
+            "targetTokenIdx": 7,
+            "focusDescription": "Look at token 'it' — which word does 'it' resolve to: 'animal' or 'street'?"
+          },
+          {
+            "id": "bank-river",
+            "text": "The river bank was muddy after the heavy morning storm.",
+            "tokens": [
+              "The",
+              "river",
+              "bank",
+              "was",
+              "muddy",
+              "after",
+              "the",
+              "heavy",
+              "morning",
+              "storm."
+            ],
+            "targetTokenIdx": 2,
+            "focusDescription": "Look at token 'bank' — notice how attention binds it tightly to 'river' and 'muddy'!"
+          },
+          {
+            "id": "bank-finance",
+            "text": "The central bank raised interest rates to combat inflation.",
+            "tokens": [
+              "The",
+              "central",
+              "bank",
+              "raised",
+              "interest",
+              "rates",
+              "to",
+              "combat",
+              "inflation."
+            ],
+            "targetTokenIdx": 2,
+            "focusDescription": "Look at token 'bank' — here it binds to 'central', 'rates', and 'interest' instead of water!"
+          },
+          {
+            "id": "attention-slogan",
+            "text": "Attention is all you need for modern sequence modeling.",
+            "tokens": [
+              "Attention",
+              "is",
+              "all",
+              "you",
+              "need",
+              "for",
+              "modern",
+              "sequence",
+              "modeling."
+            ],
+            "targetTokenIdx": 0,
+            "focusDescription": "Watch how the concept of 'Attention' distributes affinity across the entire sentence."
+          }
+        ]
+      },
+      "codeSnippet": "import torch\nimport torch.nn.functional as F\n\n# 1. Simulate 4 tokens with embedding dimension d_k = 3\n# Tokens: [\"The\", \"animal\", \"was\", \"tired\"]\nQ = torch.tensor([\n    [1.0, 0.0, 0.5],\n    [0.2, 1.5, 0.1],\n    [0.1, 0.2, 0.9],\n    [0.3, 1.2, 0.8]\n])  # Shape: (4, 3)\n\nK = Q.clone()  # Self-attention: Keys derived from same sequence\nV = torch.tensor([\n    [10.0, 0.0],\n    [ 0.0, 5.0],\n    [ 1.0, 1.0],\n    [ 0.0, 8.0]\n])  # Value projection (4, 2)\n\nd_k = Q.size(-1)\n\n# 2. Scaled Dot-Product: (Q @ K.T) / sqrt(d_k)\nscores = torch.matmul(Q, K.transpose(-2, -1)) / (d_k ** 0.5)\n\n# 3. Apply Softmax across rows (sum to 1.0)\nattention_weights = F.softmax(scores, dim=-1)\n\n# 4. Multiply by Values\noutput = torch.matmul(attention_weights, V)\n\nprint(\"Attention Weights Matrix (4x4):\\n\", torch.round(attention_weights, decimals=3).numpy())\nprint(\"\\nContextual Output (4x2):\\n\", torch.round(output, decimals=2).numpy())",
+      "quiz": [
+        {
+          "question": "Why is the raw dot-product (Q @ K.T) divided by the square root of d_k (scaling factor) before softmax?",
+          "options": [
+            "To make the matrix multiplication run twice as fast on the GPU",
+            "To prevent dot-products from growing extremely large in high dimensions, which would push softmax into flat regions with vanishing gradients",
+            "To delete negative numbers from the weight matrix",
+            "Because PyTorch cannot calculate softmax without division"
+          ],
+          "answer": 1,
+          "explanation": "As dimension d_k increases, the variance of the dot product grows proportionally to d_k. Without scaling by 1/sqrt(d_k), dot products become huge, driving softmax into regions with near-zero gradients (saturation)."
+        },
+        {
+          "question": "In the sentence 'The animal didn't cross the street because it was too tired', what is the role of the Query vector for 'it'?",
+          "options": [
+            "It represents the final word in the dictionary",
+            "It acts as a search probe asking: 'Which preceding noun possesses the semantic properties that match being tired?'",
+            "It deletes all verbs from the sentence",
+            "It turns the word 'it' into an audio waveform"
+          ],
+          "answer": 1,
+          "explanation": "The Query vector is the seeker. For the pronoun 'it', Q projects an interrogative feature asking what entity 'was too tired', aligning strongly with the Key vector for 'animal'."
+        },
+        {
+          "question": "What is the primary architectural advantage of Multi-Head Attention over Single-Head Attention?",
+          "options": [
+            "It reduces the total number of parameters in the model to zero",
+            "It allows the model to jointly attend to information from different representation subspaces (e.g. one head tracks syntax, another tracks coreference, another tracks tense)",
+            "It forces all words to have equal 50% attention weights",
+            "It converts text into images"
+          ],
+          "answer": 1,
+          "explanation": "Multi-Head Attention runs multiple parallel attention mechanisms with different linear projections. One head can learn syntactic dependencies (verb-object), while another resolves pronoun coreference, and a third tracks distant semantic context."
+        }
+      ],
+      "lesson": {
+        "readTime": "5 min read",
+        "difficulty": "Advanced • Transformers & LLMs",
+        "hook": "How can an AI model process an entire 100,000-word book simultaneously, understanding how a character on page 1 connects to an event on page 300?",
+        "analogy": {
+          "title": "The Global Library Matchmaker (Query, Key, Value) 📚🔍",
+          "description": "Imagine a research library where every book is both a researcher and a resource. Each book holds up a Query sign ('I need context on French maritime law in 1780!'). Every book on the shelf has a Key tag on its spine ('Legal treatises, maritime history, 18th century'). When Query meets Key, an affinity score is computed. The higher the affinity, the more Value content the researcher copies down into their revised notes. In Transformers, every word does this with every other word in parallel!"
+        },
+        "sections": [
+          {
+            "heading": "1. The Sequential Bottleneck of Old AI",
+            "content": "Before 2017, natural language processing relied on **Recurrent Neural Networks (RNNs)** and **LSTMs**. An RNN read text sequentially: word 1 $\\to$ word 2 $\\to$ word 3 $\\dots$\nThis caused two massive problems:\n1. **Vanishing Memory:** By the time the hidden state reached word 100, the gradients from word 1 had vanished into oblivion.\n2. **Zero Parallelism:** You couldn't process word 50 until word 49 was finished. Training on massive internet datasets was painfully slow.\nThe Transformer solved this with **Self-Attention**: calculate relationships between all words simultaneously in a single matrix multiplication!",
+            "callout": "🚀 The Parallel Revolution: Transformers replaced sequential for-loops with parallel tensor contractions, unlocking modern GPU scaling and creating modern LLMs."
+          },
+          {
+            "heading": "2. The Holy Trinity: Query, Key, and Value",
+            "content": "Every input token $x_i$ is linearly projected into three specialized vector spaces:\n• **Query ($Q = X W_Q$):** What is this word looking for? (e.g. 'I am a pronoun; who is my antecedent?')\n• **Key ($K = X W_K$):** What does this word offer to others? (e.g. 'I am an animal, capable of fatigue.')\n• **Value ($V = X W_V$):** The actual semantic essence passed along if a match occurs.\nThe raw compatibility score between word $i$ and word $j$ is simply their inner product: $S_{ij} = q_i \\cdot k_j$. If the vectors point in the same direction, the score is high!",
+            "callout": "🎯 YouTube Analogy: Query = Your search query in the search bar. Key = The title and tags of a video. Value = The video stream itself that you watch."
+          },
+          {
+            "heading": "3. The Scale Factor $\\sqrt{d_k}$ Guardrail",
+            "content": "Why isn't attention just $\\mathrm{softmax}(Q K^T) V$? Notice the denominator $\\sqrt{d_k}$!\nAssume $q$ and $k$ are independent random variables with mean 0 and variance 1. Their dot product $q \\cdot k = \\sum_{i=1}^{d_k} q_i k_i$ has mean 0 but variance **$d_k$**.\nIn large models where $d_k = 64$ or $128$, raw dot products can easily reach $+50$ or $-50$. If you pass $+50$ into $\\mathrm{softmax}$, one token gets $99.999\\%$ of the probability and all others get $0\\%$.\nWhen softmax saturates into an argmax spike, its derivative flatlines to zero $\\left(\\frac{\\partial \\mathrm{softmax}}{\\partial z} \\approx 0\\right)$, completely killing gradient backpropagation!",
+            "callout": "🛡️ The Math Fix: Dividing by $\\sqrt{d_k}$ normalizes the variance back to 1.0, preserving healthy, non-vanishing gradient flow during training."
+          },
+          {
+            "heading": "4. Contextual Disambiguation in Action",
+            "content": "Consider the word **'bank'** in two sentences:\n• Sentence A: *'The river bank was muddy.'*\n• Sentence B: *'The investment bank approved the loan.'*\nIn a dictionary or static embedding (like early Word2Vec), 'bank' has one fixed vector. But in a Transformer:\n• In Sentence A, 'bank' attends strongly to 'river' and 'muddy'. Its output representation becomes water-related!\n• In Sentence B, 'bank' attends to 'investment' and 'loan'. Its output representation shifts to financial banking.\nThe word's meaning dynamically morphs based on its surrounding attention neighborhood!",
+            "callout": "🌊 Polysemy Solved: Self-attention enables dynamic contextualization: a word is defined by the company it keeps."
+          },
+          {
+            "heading": "5. Multi-Head Attention: Multi-Angle Vision",
+            "content": "Why stop at one attention matrix? A single attention head might get overwhelmed trying to track syntax, grammar, pronoun references, and sentiment all at once.\n**Multi-Head Attention** splits the embedding dimension into $h$ separate heads (e.g. 8 or 16 heads):\n$$\\mathrm{MultiHead}(Q, K, V) = \\mathrm{Concat}(\\text{head}_1, \\dots, \\text{head}_h) W_O$$\n• **Head 1:** Specializes in subject-verb agreement.\n• **Head 2:** Specializes in coreference resolution ('it' $\\to$ 'animal').\n• **Head 3:** Tracks local word order and punctuation.\nBy projecting into multiple representation subspaces, the model understands language with multidimensional nuance.",
+            "callout": "🧠 Ensemble of Heads: Just as humans look at an artwork from color, composition, and emotional angles simultaneously, multi-head attention views language from multiple semantic subspaces."
+          }
+        ],
+        "formulaCard": {
+          "title": "Scaled Dot-Product Attention Equation",
+          "equation": "\\mathrm{Attention}(Q, K, V) = \\mathrm{softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right) V",
+          "breakdown": [
+            {
+              "symbol": "Q (Queries)",
+              "meaning": "Matrix of search vectors representing what information each token is seeking"
+            },
+            {
+              "symbol": "K^T (Keys Transposed)",
+              "meaning": "Matrix of identity/feature vectors offered by every token in the sequence"
+            },
+            {
+              "symbol": "Q K^T",
+              "meaning": "N x N raw affinity matrix measuring dot-product compatibility for every token pair"
+            },
+            {
+              "symbol": "√d_k",
+              "meaning": "Scaling factor normalizing variance to prevent softmax saturation and vanishing gradients"
+            },
+            {
+              "symbol": "softmax(...)",
+              "meaning": "Row-wise normalized attention weights summing to 1.0 (probabilities)"
+            },
+            {
+              "symbol": "V (Values)",
+              "meaning": "Semantic content vectors blended proportionally by attention weights to produce contextual output"
+            }
+          ]
+        },
+        "takeaways": [
+          "Self-attention allows every word to attend to every other word in parallel with O(1) path length.",
+          "Queries ask questions, Keys provide matches, and Values provide the extracted information.",
+          "Dividing by sqrt(d_k) prevents softmax gradient flatlining when vector dimensionality is high.",
+          "Attention allows words like 'bank' or 'apple' to dynamically change meaning based on surrounding context.",
+          "Multi-Head Attention projects into multiple distinct subspaces to capture grammar, coreference, and semantics concurrently."
+        ],
+        "commonPitfalls": [
+          "Forgetting the sqrt(d_k) scale factor: Causes softmax to saturate into 0s and 1s, halting training gradients.",
+          "Confusing Keys with Values: Keys are used to determine HOW MUCH attention to pay; Values are WHAT gets transmitted.",
+          "Quadratic O(N^2) memory complexity: Full self-attention requires an N x N matrix, making raw attention expensive for extremely long sequences (e.g. >32k tokens)."
+        ]
+      },
+      "interactiveType": "attention_workshop",
+      "interactiveConfig": {
+        "dimension": 4,
+        "defaultSentenceIdx": 0,
+        "sentences": [
+          {
+            "id": "animal-tired",
+            "text": "The animal didn't cross the street because it was too tired.",
+            "tokens": [
+              "The",
+              "animal",
+              "didn't",
+              "cross",
+              "the",
+              "street",
+              "because",
+              "it",
+              "was",
+              "too",
+              "tired."
+            ],
+            "targetTokenIdx": 7,
+            "focusDescription": "Look at token 'it' — which word does 'it' resolve to: 'animal' or 'street'?"
+          },
+          {
+            "id": "bank-river",
+            "text": "The river bank was muddy after the heavy morning storm.",
+            "tokens": [
+              "The",
+              "river",
+              "bank",
+              "was",
+              "muddy",
+              "after",
+              "the",
+              "heavy",
+              "morning",
+              "storm."
+            ],
+            "targetTokenIdx": 2,
+            "focusDescription": "Look at token 'bank' — notice how attention binds it tightly to 'river' and 'muddy'!"
+          },
+          {
+            "id": "bank-finance",
+            "text": "The central bank raised interest rates to combat inflation.",
+            "tokens": [
+              "The",
+              "central",
+              "bank",
+              "raised",
+              "interest",
+              "rates",
+              "to",
+              "combat",
+              "inflation."
+            ],
+            "targetTokenIdx": 2,
+            "focusDescription": "Look at token 'bank' — here it binds to 'central', 'rates', and 'interest' instead of water!"
+          },
+          {
+            "id": "attention-slogan",
+            "text": "Attention is all you need for modern sequence modeling.",
+            "tokens": [
+              "Attention",
+              "is",
+              "all",
+              "you",
+              "need",
+              "for",
+              "modern",
+              "sequence",
+              "modeling."
+            ],
+            "targetTokenIdx": 0,
+            "focusDescription": "Watch how the concept of 'Attention' distributes affinity across the entire sentence."
+          }
         ]
       }
     }

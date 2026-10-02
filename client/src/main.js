@@ -44,7 +44,14 @@ const state = {
   regDataSize: 18,
   regDropout: 0.0,
   regWeightDecay: 0.0,
-  regAugmentActive: false
+  regAugmentActive: false,
+  // Attention Workshop state
+  attnSentenceIdx: 0,
+  attnFocusedToken: 7,
+  attnHead: 'head-2',
+  attnScaleEnabled: true,
+  attnCustomText: '',
+  attnQueryVectorOverride: null
 };
 
 const tutorService = new AITutorService();
@@ -461,6 +468,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'regularization_arena':
       renderRegularizationArenaWidget(quest);
+      break;
+    case 'attention_workshop':
+      renderAttentionWorkshopWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -2977,6 +2987,828 @@ function renderRegularizationArenaWidget(quest) {
   recomputeAndDraw();
 }
 
+// ==========================================================================
+// WIDGET 7: The Attention Machine (Transformers & Self-Attention Workshop)
+// ==========================================================================
+
+const WORD_EMBEDDINGS_4D = {
+  // Sentence 1: The animal didn't cross the street because it was too tired.
+  'the': [0.05, 0.05, 0.05, 0.95],
+  'animal': [0.95, 0.40, 0.15, 0.05],
+  "didn't": [0.05, 0.15, 0.70, 0.85],
+  'didnt': [0.05, 0.15, 0.70, 0.85],
+  'cross': [0.20, 0.20, 0.95, 0.10],
+  'street': [0.90, 0.05, 0.10, 0.05],
+  'because': [0.05, 0.10, 0.10, 0.95],
+  'it': [0.85, 0.65, 0.10, 0.15],
+  'was': [0.10, 0.30, 0.85, 0.40],
+  'too': [0.05, 0.70, 0.10, 0.80],
+  'tired': [0.15, 0.95, 0.05, 0.10],
+  'tired.': [0.15, 0.95, 0.05, 0.10],
+
+  // Sentence 2: The river bank was muddy after the heavy morning storm.
+  'river': [0.92, 0.85, 0.20, 0.05],
+  'bank': [0.90, 0.70, 0.05, 0.10],
+  'muddy': [0.25, 0.92, 0.05, 0.10],
+  'after': [0.05, 0.10, 0.10, 0.92],
+  'heavy': [0.20, 0.88, 0.05, 0.15],
+  'morning': [0.45, 0.60, 0.05, 0.10],
+  'storm': [0.85, 0.90, 0.30, 0.05],
+  'storm.': [0.85, 0.90, 0.30, 0.05],
+
+  // Sentence 3: The central bank raised interest rates to combat inflation.
+  'central': [0.45, 0.80, 0.10, 0.20],
+  'raised': [0.15, 0.25, 0.95, 0.10],
+  'interest': [0.80, 0.75, 0.10, 0.10],
+  'rates': [0.85, 0.70, 0.10, 0.05],
+  'to': [0.05, 0.05, 0.10, 0.90],
+  'combat': [0.15, 0.25, 0.92, 0.10],
+  'inflation': [0.80, 0.85, 0.10, 0.10],
+  'inflation.': [0.80, 0.85, 0.10, 0.10],
+
+  // Sentence 4: Attention is all you need for modern sequence modeling.
+  'attention': [0.90, 0.80, 0.30, 0.10],
+  'is': [0.10, 0.20, 0.80, 0.30],
+  'all': [0.10, 0.40, 0.10, 0.85],
+  'you': [0.80, 0.30, 0.10, 0.15],
+  'need': [0.20, 0.30, 0.90, 0.10],
+  'for': [0.05, 0.05, 0.10, 0.90],
+  'modern': [0.25, 0.75, 0.05, 0.20],
+  'sequence': [0.85, 0.50, 0.20, 0.10],
+  'modeling': [0.80, 0.65, 0.30, 0.10],
+  'modeling.': [0.80, 0.65, 0.30, 0.10]
+};
+
+function getWordVector4D(word) {
+  const clean = word.toLowerCase().replace(/[^a-z0-9']/g, '');
+  if (WORD_EMBEDDINGS_4D[clean]) {
+    return [...WORD_EMBEDDINGS_4D[clean]];
+  }
+  if (WORD_EMBEDDINGS_4D[word.toLowerCase()]) {
+    return [...WORD_EMBEDDINGS_4D[word.toLowerCase()]];
+  }
+  // Deterministic pseudo-random embedding for arbitrary user tokens
+  let h = 0;
+  for (let i = 0; i < clean.length; i++) {
+    h = (h * 31 + clean.charCodeAt(i)) & 0xffffffff;
+  }
+  const v0 = ((Math.abs(h) % 100) / 100) * 0.9 + 0.05;
+  const v1 = ((Math.abs(h >> 4) % 100) / 100) * 0.9 + 0.05;
+  const v2 = ((Math.abs(h >> 8) % 100) / 100) * 0.9 + 0.05;
+  const v3 = ((Math.abs(h >> 12) % 100) / 100) * 0.9 + 0.05;
+  return [v0, v1, v2, v3];
+}
+
+// Multi-Head Projection Transformations
+function projectToken(vector, role, headType) {
+  const [d0, d1, d2, d3] = vector;
+  if (headType === 'head-1') {
+    // Head 1: Syntax & Verb-Object Dependency
+    if (role === 'Q') {
+      return [d2 * 1.5, d0 * 0.8, d3 * 1.1, d1 * 0.3];
+    } else {
+      return [d0 * 1.6, d2 * 0.6, d3 * 1.0, d1 * 0.2];
+    }
+  } else if (headType === 'head-2') {
+    // Head 2: Coreference & Semantic Antecedent Binding
+    if (role === 'Q') {
+      return [d0 * 1.5, d1 * 1.6, d2 * 0.2, d3 * 0.1];
+    } else {
+      return [d0 * 1.4, d1 * 1.5, d2 * 0.1, d3 * 0.2];
+    }
+  } else if (headType === 'head-3') {
+    // Head 3: Positional Locality & Modifier Flow
+    if (role === 'Q') {
+      return [d3 * 1.3, d1 * 0.5, d2 * 0.7, d0 * 0.6];
+    } else {
+      return [d3 * 1.2, d1 * 0.6, d2 * 0.8, d0 * 0.5];
+    }
+  }
+  return [d0, d1, d2, d3];
+}
+
+function renderAttentionWorkshopWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'attention-workshop-container';
+
+  const sentences = quest.interactiveConfig?.sentences || [];
+  let currentSentenceIdx = state.attnSentenceIdx || 0;
+  let currentTokens = sentences[currentSentenceIdx]?.tokens || ["Attention", "is", "all", "you", "need"];
+  let focusedIdx = Math.min(state.attnFocusedToken, currentTokens.length - 1);
+  if (focusedIdx < 0) focusedIdx = 0;
+
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="attn-diagnostic-banner">
+      <div class="attn-status-col">
+        <span class="attn-status-badge" id="attn-status-badge">⚡ Scaled Dot-Product Active</span>
+        <div class="attn-status-desc" id="attn-status-desc">
+          Attention Mechanism: Every token broadcasts a Query, scans all Keys, and extracts weighted Values in parallel.
+        </div>
+      </div>
+      <div class="attn-metrics-rack">
+        <div class="attn-metric-item">
+          <span class="metric-label">Focused Query</span>
+          <strong class="metric-val query-token" id="metric-query-token">"it" (#7)</strong>
+        </div>
+        <div class="attn-metric-item">
+          <span class="metric-label">Top Key Match</span>
+          <strong class="metric-val key-token" id="metric-key-token">"animal" (68.4%)</strong>
+        </div>
+        <div class="attn-metric-item">
+          <span class="metric-label">Attention Entropy</span>
+          <strong class="metric-val entropy" id="metric-entropy">0.52 bits</strong>
+        </div>
+        <div class="attn-metric-item">
+          <span class="metric-label">Softmax State</span>
+          <strong class="metric-val gradient" id="metric-gradient-health">Healthy Flow 🟢</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sentence Selector & Preset Bar -->
+    <div class="attn-sentence-bar">
+      <div class="attn-sentence-select-wrap">
+        <label for="attn-sentence-select">📚 Benchmark Sentence:</label>
+        <select id="attn-sentence-select" class="cyber-select">
+          ${sentences.map((s, idx) => `
+            <option value="${idx}" ${idx === currentSentenceIdx ? 'selected' : ''}>
+              #${idx + 1}: ${s.text.length > 55 ? s.text.substring(0, 52) + '...' : s.text}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+      <div class="attn-custom-input-wrap">
+        <input type="text" id="attn-custom-input" placeholder="Or enter your custom sentence..." class="cyber-input" />
+        <button id="btn-apply-custom" class="btn-attn-sub">Tokenize ✨</button>
+      </div>
+    </div>
+
+    <!-- Interactive Token Ribbon -->
+    <div class="attn-tokens-ribbon-card">
+      <div class="ribbon-header">
+        <span>🔤 Sequence Tokens (Click any token to set as Query)</span>
+        <span class="ribbon-hint">Current Query: <span id="ribbon-active-query-name" style="color: var(--accent-cyan); font-weight: 700;">"it"</span></span>
+      </div>
+      <div class="attn-tokens-ribbon" id="attn-tokens-ribbon">
+        <!-- Rendered token chips -->
+      </div>
+    </div>
+
+    <!-- 2-Column Visualizer Stage -->
+    <div class="attn-stage-grid">
+      <!-- Col 1: Dynamic Attention Strands (Bezier Arcs) -->
+      <div class="attn-panel-card">
+        <div class="attn-panel-header">
+          <span>🕸️ Attention Arcs: Query ➔ All Keys</span>
+          <div class="attn-legend">
+            <span class="legend-item"><span class="legend-dot cyan"></span> Focused Query</span>
+            <span class="legend-item"><span class="legend-dot yellow"></span> Attended Keys</span>
+          </div>
+        </div>
+        <div class="attn-canvas-wrapper">
+          <canvas id="attn-arcs-canvas" width="540" height="280" class="attn-canvas"></canvas>
+        </div>
+        <div class="attn-panel-footer" id="attn-arcs-caption">
+          Arc thickness & glow represent the exact softmax probability $P(\\text{Key} \\mid \\text{Query})$.
+        </div>
+      </div>
+
+      <!-- Col 2: N x N Attention Matrix Heatmap -->
+      <div class="attn-panel-card">
+        <div class="attn-panel-header">
+          <span>🗺️ Self-Attention Matrix Heatmap ($N \\times N$)</span>
+          <div class="attn-legend">
+            <span class="legend-item"><span class="heatmap-swatch"></span> Softmax Weight ($0 \\to 1$)</span>
+          </div>
+        </div>
+        <div class="attn-canvas-wrapper">
+          <canvas id="attn-heatmap-canvas" width="540" height="280" class="attn-canvas"></canvas>
+        </div>
+        <div class="attn-panel-footer" id="attn-heatmap-hover-info">
+          Hover over any cell $(i, j)$ to inspect the exact dot product and softmax calculation.
+        </div>
+      </div>
+    </div>
+
+    <!-- Attention Controls & Multi-Head Deck -->
+    <div class="attn-controls-rack">
+      <!-- Multi-Head Tabs -->
+      <div class="attn-control-box">
+        <div class="control-header">
+          <span>🧠 Attention Head Subspace</span>
+          <span id="label-active-head" style="color: var(--accent-violet); font-size: 0.8rem; font-weight: 700;">Head 2: Coreference</span>
+        </div>
+        <div class="attn-segmented-btn-group" id="attn-head-group">
+          <button class="param-btn ${state.attnHead === 'head-1' ? 'active' : ''}" data-head="head-1">Head 1: Syntax</button>
+          <button class="param-btn ${state.attnHead === 'head-2' ? 'active' : ''}" data-head="head-2">Head 2: Coreference</button>
+          <button class="param-btn ${state.attnHead === 'head-3' ? 'active' : ''}" data-head="head-3">Head 3: Locality</button>
+          <button class="param-btn ${state.attnHead === 'all' ? 'active' : ''}" data-head="all">Average Ensemble</button>
+        </div>
+        <span class="control-hint">Each head projects Query and Key into a distinct linguistic subspace</span>
+      </div>
+
+      <!-- Scaling Factor sqrt(d_k) Toggle -->
+      <div class="attn-control-box">
+        <div class="control-header">
+          <span>🛡️ Scale Factor ($\\sqrt{d_k} = \\sqrt{4} = 2.0$)</span>
+          <span id="badge-scale-status" class="scale-badge ${state.attnScaleEnabled ? 'enabled' : 'disabled'}">
+            ${state.attnScaleEnabled ? 'Active (÷ 2.0)' : 'Disabled (Raw)'}
+          </span>
+        </div>
+        <button class="btn-toggle-scale ${state.attnScaleEnabled ? 'active' : ''}" id="btn-toggle-scale">
+          <span>${state.attnScaleEnabled ? '✓ Guardrail Enabled (÷ √d_k)' : '⚠️ Guardrail Bypassed (Saturate Softmax)'}</span>
+        </button>
+        <span class="control-hint">Disabling causes softmax saturation and gradient flatlining!</span>
+      </div>
+
+      <!-- Vector Inspector for Active Query Token -->
+      <div class="attn-control-box attn-vector-box" style="grid-column: span 2;">
+        <div class="control-header">
+          <span>🔬 4D Query Projection for <strong id="val-query-token-name" style="color: #38bdf8;">"${currentTokens[focusedIdx]}"</strong></span>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button id="btn-reset-vector" class="btn-subtle" title="Revert to base embedding">↺ Reset Vector</button>
+            <span class="dim-badge">Dimension $d_k = 4$</span>
+          </div>
+        </div>
+        <div class="attn-vector-sliders-grid" id="attn-vector-sliders">
+          <!-- Populated dynamically with 4 sliders -->
+        </div>
+        <span class="control-hint">Nudge Query features to watch real-time redistribution of attention across Keys!</span>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // References
+  const arcsCanvas = container.querySelector('#attn-arcs-canvas');
+  const arcsCtx = arcsCanvas.getContext('2d');
+  const heatmapCanvas = container.querySelector('#attn-heatmap-canvas');
+  const heatmapCtx = heatmapCanvas.getContext('2d');
+
+  const statusBadge = container.querySelector('#attn-status-badge');
+  const statusDesc = container.querySelector('#attn-status-desc');
+  const metricQuery = container.querySelector('#metric-query-token');
+  const metricKey = container.querySelector('#metric-key-token');
+  const metricEntropy = container.querySelector('#metric-entropy');
+  const metricGrad = container.querySelector('#metric-gradient-health');
+
+  const sentenceSelect = container.querySelector('#attn-sentence-select');
+  const customInput = container.querySelector('#attn-custom-input');
+  const btnApplyCustom = container.querySelector('#btn-apply-custom');
+  const tokensRibbon = container.querySelector('#attn-tokens-ribbon');
+  const ribbonQueryName = container.querySelector('#ribbon-active-query-name');
+  const valQueryTokenName = container.querySelector('#val-query-token-name');
+  const labelActiveHead = container.querySelector('#label-active-head');
+  const badgeScaleStatus = container.querySelector('#badge-scale-status');
+  const btnToggleScale = container.querySelector('#btn-toggle-scale');
+  const vectorSlidersContainer = container.querySelector('#attn-vector-sliders');
+  const btnResetVector = container.querySelector('#btn-reset-vector');
+  const heatmapHoverInfo = container.querySelector('#attn-heatmap-hover-info');
+
+  // Matrix and computed attention weights
+  let attentionMatrix = []; // N x N
+  let rawScoresMatrix = [];
+  let scaledScoresMatrix = [];
+
+  function computeAttention() {
+    const N = currentTokens.length;
+    attentionMatrix = Array.from({ length: N }, () => new Float64Array(N));
+    rawScoresMatrix = Array.from({ length: N }, () => new Float64Array(N));
+    scaledScoresMatrix = Array.from({ length: N }, () => new Float64Array(N));
+
+    const headMode = state.attnHead; // 'head-1', 'head-2', 'head-3', or 'all'
+    const headsToCompute = headMode === 'all' ? ['head-1', 'head-2', 'head-3'] : [headMode];
+
+    // Compute for each head and average if 'all'
+    for (const h of headsToCompute) {
+      for (let i = 0; i < N; i++) {
+        let baseVecI = getWordVector4D(currentTokens[i]);
+        if (i === focusedIdx && state.attnQueryVectorOverride) {
+          baseVecI = [...state.attnQueryVectorOverride];
+        }
+        const q_i = projectToken(baseVecI, 'Q', h);
+
+        const rowScores = new Float64Array(N);
+        for (let j = 0; j < N; j++) {
+          const baseVecJ = getWordVector4D(currentTokens[j]);
+          const k_j = projectToken(baseVecJ, 'K', h);
+
+          // Dot product
+          let dot = 0;
+          for (let d = 0; d < 4; d++) dot += q_i[d] * k_j[d];
+
+          // Positional bias for Head 3 (Locality)
+          if (h === 'head-3') {
+            dot += 2.2 / (1 + Math.pow(Math.abs(i - j), 1.3));
+          }
+
+          rowScores[j] = dot;
+          rawScoresMatrix[i][j] = dot;
+        }
+
+        // Scaling factor sqrt(d_k) = sqrt(4) = 2.0
+        const scaledRow = new Float64Array(N);
+        for (let j = 0; j < N; j++) {
+          if (state.attnScaleEnabled) {
+            scaledRow[j] = rowScores[j] / 2.0;
+          } else {
+            // Unscaled: amplified variance pushes softmax into extreme saturation
+            scaledRow[j] = rowScores[j] * 2.8;
+          }
+          scaledScoresMatrix[i][j] = scaledRow[j];
+        }
+
+        // Softmax: exp(z_j - max) / sum(exp(z_k - max))
+        let maxZ = -Infinity;
+        for (let j = 0; j < N; j++) if (scaledRow[j] > maxZ) maxZ = scaledRow[j];
+
+        let sumExp = 0;
+        const expRow = new Float64Array(N);
+        for (let j = 0; j < N; j++) {
+          expRow[j] = Math.exp(scaledRow[j] - maxZ);
+          sumExp += expRow[j];
+        }
+
+        for (let j = 0; j < N; j++) {
+          const prob = expRow[j] / (sumExp || 1);
+          attentionMatrix[i][j] += prob / headsToCompute.length;
+        }
+      }
+    }
+  }
+
+  function updateHUDMetrics() {
+    const N = currentTokens.length;
+    const qToken = currentTokens[focusedIdx] || 'token';
+    metricQuery.textContent = `"${qToken}" (#${focusedIdx})`;
+    ribbonQueryName.textContent = `"${qToken}"`;
+    valQueryTokenName.textContent = `"${qToken}"`;
+
+    // Find top attention target from focusedIdx
+    let maxProb = -1;
+    let topTargetIdx = focusedIdx;
+    let entropy = 0;
+
+    const row = attentionMatrix[focusedIdx] || [];
+    for (let j = 0; j < N; j++) {
+      const p = row[j] || 0;
+      if (p > maxProb && j !== focusedIdx) {
+        maxProb = p;
+        topTargetIdx = j;
+      }
+      if (p > 1e-9) {
+        entropy -= p * Math.log2(p);
+      }
+    }
+
+    const topTokenName = currentTokens[topTargetIdx] || 'none';
+    metricKey.textContent = `"${topTokenName}" (${((maxProb > 0 ? maxProb : row[focusedIdx]) * 100).toFixed(1)}%)`;
+    metricEntropy.textContent = `${entropy.toFixed(2)} bits ${entropy < 1.2 ? '(Sharp 🎯)' : '(Diffuse 🌊)'}`;
+
+    // Softmax Saturation check
+    const isSaturated = !state.attnScaleEnabled || maxProb > 0.95 || (row[focusedIdx] > 0.95);
+    if (!state.attnScaleEnabled) {
+      statusBadge.className = 'attn-status-badge saturated';
+      statusBadge.textContent = '⚠️ Softmax Saturated (Gradients Dead)';
+      statusDesc.textContent = 'Without sqrt(d_k) scaling, raw dot products explode! Softmax peaks into an argmax spike (99%+ on one token) where gradients flatline to zero.';
+      metricGrad.textContent = 'Flatlined 🛑 (0% Flow)';
+      metricGrad.style.color = '#f43f5e';
+    } else {
+      statusBadge.className = 'attn-status-badge';
+      statusBadge.textContent = '⚡ Scaled Dot-Product Active';
+      statusDesc.textContent = `Query "${qToken}" actively attends across all Keys. Notice how Query meets Key to gather contextual information.`;
+      metricGrad.textContent = 'Healthy Flow 🟢 (100%)';
+      metricGrad.style.color = '#34d399';
+    }
+  }
+
+  function renderTokenRibbon() {
+    tokensRibbon.innerHTML = '';
+    const N = currentTokens.length;
+    const weightsFromQuery = attentionMatrix[focusedIdx] || [];
+
+    currentTokens.forEach((token, idx) => {
+      const chip = document.createElement('div');
+      const isQuery = idx === focusedIdx;
+      const weight = weightsFromQuery[idx] || 0;
+
+      let affinityClass = '';
+      if (!isQuery) {
+        if (weight > 0.35) affinityClass = 'high-affinity';
+        else if (weight > 0.15) affinityClass = 'medium-affinity';
+      }
+
+      chip.className = `token-chip ${isQuery ? 'active-query' : ''} ${affinityClass}`;
+      chip.innerHTML = `
+        <span class="chip-idx">#${idx}</span>
+        <span class="chip-word">${escapeHtml(token)}</span>
+        <span class="chip-weight">${isQuery ? 'QUERY' : `${(weight * 100).toFixed(0)}%`}</span>
+      `;
+
+      chip.addEventListener('click', () => {
+        focusedIdx = idx;
+        state.attnFocusedToken = idx;
+        state.attnQueryVectorOverride = null;
+        recomputeAndDraw();
+      });
+
+      tokensRibbon.appendChild(chip);
+    });
+  }
+
+  function renderVectorSliders() {
+    vectorSlidersContainer.innerHTML = '';
+    const dimNames = ['Entity / Nouniness', 'State / Fatigue', 'Action / Transitivity', 'Syntax / Modifier'];
+    const baseVec = state.attnQueryVectorOverride || getWordVector4D(currentTokens[focusedIdx]);
+
+    baseVec.forEach((val, dim) => {
+      const item = document.createElement('div');
+      item.className = 'attn-slider-item';
+      item.innerHTML = `
+        <div class="slider-meta">
+          <span class="dim-name">d${dim}: ${dimNames[dim]}</span>
+          <strong class="dim-val" id="val-dim-${dim}">${val.toFixed(2)}</strong>
+        </div>
+        <input type="range" class="cyber-slider dim-slider" data-dim="${dim}" min="-2.0" max="2.0" step="0.05" value="${val}" />
+      `;
+
+      const slider = item.querySelector('.dim-slider');
+      slider.addEventListener('input', (e) => {
+        const newVal = parseFloat(e.target.value);
+        if (!state.attnQueryVectorOverride) {
+          state.attnQueryVectorOverride = [...baseVec];
+        }
+        state.attnQueryVectorOverride[dim] = newVal;
+        item.querySelector(`#val-dim-${dim}`).textContent = newVal.toFixed(2);
+        computeAttention();
+        updateHUDMetrics();
+        renderTokenRibbon();
+        drawArcs();
+        drawHeatmap();
+      });
+
+      vectorSlidersContainer.appendChild(item);
+    });
+  }
+
+  function drawArcs() {
+    const W_px = 540;
+    const H_px = 280;
+    arcsCtx.clearRect(0, 0, W_px, H_px);
+
+    const N = currentTokens.length;
+    const padL = 36;
+    const padR = 36;
+    const stepX = (W_px - padL - padR) / Math.max(1, N - 1);
+    const lineY = H_px - 45;
+
+    // Baseline track
+    arcsCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    arcsCtx.lineWidth = 1.5;
+    arcsCtx.beginPath();
+    arcsCtx.moveTo(padL, lineY);
+    arcsCtx.lineTo(W_px - padR, lineY);
+    arcsCtx.stroke();
+
+    const queryX = padL + focusedIdx * stepX;
+    const queryY = lineY;
+    const row = attentionMatrix[focusedIdx] || [];
+
+    // Find highest affinity target for floating badge
+    let maxWeight = -1;
+    let maxTargetIdx = -1;
+    for (let j = 0; j < N; j++) {
+      if (j !== focusedIdx && row[j] > maxWeight) {
+        maxWeight = row[j];
+        maxTargetIdx = j;
+      }
+    }
+
+    // Draw Attention Arcs from Query to all Keys
+    for (let j = 0; j < N; j++) {
+      const weight = row[j] || 0;
+      const keyX = padL + j * stepX;
+      const keyY = lineY;
+
+      if (j === focusedIdx) {
+        // Self-loop arc
+        const loopR = Math.max(10, Math.min(30, weight * 40));
+        arcsCtx.save();
+        arcsCtx.strokeStyle = `rgba(56, 189, 248, ${Math.max(0.2, weight)})`;
+        arcsCtx.lineWidth = Math.max(1, weight * 7);
+        arcsCtx.beginPath();
+        arcsCtx.arc(queryX, queryY - loopR, loopR, 0, Math.PI * 2);
+        arcsCtx.stroke();
+        arcsCtx.restore();
+        continue;
+      }
+
+      // Bezier curve
+      const dist = Math.abs(queryX - keyX);
+      const arcHeight = Math.min(180, Math.max(40, (dist / (W_px * 0.7)) * 140 + weight * 70));
+      const midY = queryY - arcHeight;
+
+      arcsCtx.save();
+      const isTop = j === maxTargetIdx && weight > 0.25;
+      if (isTop) {
+        arcsCtx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
+        arcsCtx.lineWidth = Math.max(3, weight * 10);
+        arcsCtx.shadowColor = '#facc15';
+        arcsCtx.shadowBlur = 14;
+      } else {
+        arcsCtx.strokeStyle = `rgba(6, 182, 212, ${Math.max(0.12, weight * 1.2)})`;
+        arcsCtx.lineWidth = Math.max(1, weight * 7);
+        arcsCtx.shadowColor = '#06b6d4';
+        arcsCtx.shadowBlur = weight > 0.2 ? 8 : 0;
+      }
+
+      arcsCtx.beginPath();
+      arcsCtx.moveTo(queryX, queryY - 8);
+      arcsCtx.bezierCurveTo(queryX, midY, keyX, midY, keyX, keyY - 8);
+      arcsCtx.stroke();
+      arcsCtx.restore();
+
+      // Draw percentage pill over top arc apex
+      if (isTop) {
+        const apexX = (queryX + keyX) / 2;
+        const apexY = midY - 6;
+        arcsCtx.save();
+        arcsCtx.fillStyle = '#0f172a';
+        arcsCtx.strokeStyle = '#facc15';
+        arcsCtx.lineWidth = 1.5;
+        const badgeW = 76;
+        const badgeH = 18;
+        arcsCtx.beginPath();
+        arcsCtx.roundRect(apexX - badgeW / 2, apexY - badgeH / 2, badgeW, badgeH, 6);
+        arcsCtx.fill();
+        arcsCtx.stroke();
+        arcsCtx.fillStyle = '#facc15';
+        arcsCtx.font = 'bold 9.5px JetBrains Mono, monospace';
+        arcsCtx.textAlign = 'center';
+        arcsCtx.textBaseline = 'middle';
+        arcsCtx.fillText(`Match: ${(weight * 100).toFixed(1)}%`, apexX, apexY);
+        arcsCtx.restore();
+      }
+    }
+
+    // Draw Token Pins and Labels along bottom
+    for (let i = 0; i < N; i++) {
+      const px = padL + i * stepX;
+      const isQuery = i === focusedIdx;
+      const isTop = i === maxTargetIdx;
+
+      // Pin circle
+      arcsCtx.save();
+      if (isQuery) {
+        arcsCtx.fillStyle = '#38bdf8';
+        arcsCtx.shadowColor = '#38bdf8';
+        arcsCtx.shadowBlur = 12;
+        arcsCtx.beginPath();
+        arcsCtx.arc(px, lineY, 7, 0, Math.PI * 2);
+        arcsCtx.fill();
+      } else if (isTop) {
+        arcsCtx.fillStyle = '#facc15';
+        arcsCtx.shadowColor = '#facc15';
+        arcsCtx.shadowBlur = 10;
+        arcsCtx.beginPath();
+        arcsCtx.arc(px, lineY, 5.5, 0, Math.PI * 2);
+        arcsCtx.fill();
+      } else {
+        arcsCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        arcsCtx.beginPath();
+        arcsCtx.arc(px, lineY, 4, 0, Math.PI * 2);
+        arcsCtx.fill();
+      }
+      arcsCtx.restore();
+
+      // Word Label
+      arcsCtx.save();
+      arcsCtx.font = isQuery ? 'bold 11px Outfit, sans-serif' : '10px Outfit, sans-serif';
+      arcsCtx.fillStyle = isQuery ? '#38bdf8' : (isTop ? '#facc15' : 'var(--text-muted)');
+      arcsCtx.textAlign = 'center';
+      const labelText = currentTokens[i].length > 7 ? currentTokens[i].substring(0, 6) + '..' : currentTokens[i];
+      arcsCtx.fillText(labelText, px, lineY + 18);
+      arcsCtx.restore();
+    }
+  }
+
+  function drawHeatmap(hoverRow = -1, hoverCol = -1) {
+    const W_px = 540;
+    const H_px = 280;
+    heatmapCtx.clearRect(0, 0, W_px, H_px);
+
+    const N = currentTokens.length;
+    const padL = 70;
+    const padT = 35;
+    const gridMaxW = W_px - padL - 25;
+    const gridMaxH = H_px - padT - 25;
+    const cellSize = Math.min(24, Math.floor(Math.min(gridMaxW, gridMaxH) / N));
+
+    // Draw Column Headers (Keys)
+    heatmapCtx.save();
+    heatmapCtx.font = '9px JetBrains Mono, monospace';
+    heatmapCtx.fillStyle = 'var(--text-muted)';
+    heatmapCtx.textAlign = 'center';
+    for (let c = 0; c < N; c++) {
+      const cx = padL + c * cellSize + cellSize / 2;
+      const rawWord = currentTokens[c];
+      const shortWord = rawWord.length > 3 ? rawWord.substring(0, 3) : rawWord;
+      heatmapCtx.fillText(shortWord, cx, padT - 8);
+    }
+    heatmapCtx.restore();
+
+    // Draw Cells & Row Headers (Queries)
+    for (let r = 0; r < N; r++) {
+      const ry = padT + r * cellSize;
+      const isQueryRow = r === focusedIdx;
+
+      // Row Label
+      heatmapCtx.save();
+      heatmapCtx.font = isQueryRow ? 'bold 10px JetBrains Mono, monospace' : '9px JetBrains Mono, monospace';
+      heatmapCtx.fillStyle = isQueryRow ? '#38bdf8' : 'var(--text-muted)';
+      heatmapCtx.textAlign = 'right';
+      heatmapCtx.textBaseline = 'middle';
+      const rowWord = currentTokens[r].length > 7 ? currentTokens[r].substring(0, 6) + '..' : currentTokens[r];
+      heatmapCtx.fillText(rowWord, padL - 8, ry + cellSize / 2);
+      heatmapCtx.restore();
+
+      for (let c = 0; c < N; c++) {
+        const cx = padL + c * cellSize;
+        const weight = attentionMatrix[r] ? (attentionMatrix[r][c] || 0) : 0;
+
+        // Color ramp: dark indigo (0.0) -> cyan (0.5) -> bright yellow (1.0)
+        let rVal, gVal, bVal;
+        if (weight <= 0.5) {
+          const t = weight / 0.5;
+          rVal = Math.round(15 + t * (6 - 15));
+          gVal = Math.round(23 + t * (182 - 23));
+          bVal = Math.round(42 + t * (212 - 42));
+        } else {
+          const t = (weight - 0.5) / 0.5;
+          rVal = Math.round(6 + t * (250 - 6));
+          gVal = Math.round(182 + t * (204 - 182));
+          bVal = Math.round(212 + t * (21 - 212));
+        }
+
+        heatmapCtx.fillStyle = `rgb(${rVal}, ${gVal}, ${bVal})`;
+        heatmapCtx.fillRect(cx, ry, cellSize - 1, cellSize - 1);
+
+        // Highlight hover cell
+        if (r === hoverRow && c === hoverCol) {
+          heatmapCtx.strokeStyle = '#ffffff';
+          heatmapCtx.lineWidth = 2;
+          heatmapCtx.strokeRect(cx - 0.5, ry - 0.5, cellSize, cellSize);
+        }
+      }
+
+      // Highlight active query row with cyan border
+      if (isQueryRow) {
+        heatmapCtx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+        heatmapCtx.lineWidth = 1.5;
+        heatmapCtx.strokeRect(padL - 1, ry - 1, N * cellSize + 1, cellSize + 1);
+      }
+    }
+  }
+
+  function recomputeAndDraw() {
+    computeAttention();
+    updateHUDMetrics();
+    renderTokenRibbon();
+    renderVectorSliders();
+    drawArcs();
+    drawHeatmap();
+  }
+
+  // --- Canvas Interaction: Mouse Hover on Heatmap ---
+  heatmapCanvas.addEventListener('mousemove', (e) => {
+    const rect = heatmapCanvas.getBoundingClientRect();
+    const scaleX = heatmapCanvas.width / rect.width;
+    const scaleY = heatmapCanvas.height / rect.height;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    const N = currentTokens.length;
+    const padL = 70;
+    const padT = 35;
+    const gridMaxW = heatmapCanvas.width - padL - 25;
+    const gridMaxH = heatmapCanvas.height - padT - 25;
+    const cellSize = Math.min(24, Math.floor(Math.min(gridMaxW, gridMaxH) / N));
+
+    const col = Math.floor((mouseX - padL) / cellSize);
+    const row = Math.floor((mouseY - padT) / cellSize);
+
+    if (row >= 0 && row < N && col >= 0 && col < N) {
+      drawHeatmap(row, col);
+      const raw = rawScoresMatrix[row] ? rawScoresMatrix[row][col] : 0;
+      const scaled = scaledScoresMatrix[row] ? scaledScoresMatrix[row][col] : 0;
+      const prob = attentionMatrix[row] ? attentionMatrix[row][col] : 0;
+      heatmapHoverInfo.innerHTML = `
+        Cell <strong>[Q: "${currentTokens[row]}" ➔ K: "${currentTokens[col]}"]</strong>:
+        Raw Dot = <span style="color: #38bdf8;">${raw.toFixed(2)}</span> |
+        Scaled = <span style="color: #c4b5fd;">${scaled.toFixed(2)}</span> |
+        Softmax Weight = <strong style="color: #facc15;">${(prob * 100).toFixed(1)}%</strong>
+      `;
+    } else {
+      drawHeatmap(-1, -1);
+      heatmapHoverInfo.textContent = 'Hover over any cell (i, j) to inspect the exact dot product and softmax calculation.';
+    }
+  });
+
+  heatmapCanvas.addEventListener('mouseleave', () => {
+    drawHeatmap(-1, -1);
+    heatmapHoverInfo.textContent = 'Hover over any cell (i, j) to inspect the exact dot product and softmax calculation.';
+  });
+
+  // --- Canvas Click: Click Arc Canvas token pin to switch Query ---
+  arcsCanvas.addEventListener('click', (e) => {
+    const rect = arcsCanvas.getBoundingClientRect();
+    const scaleX = arcsCanvas.width / rect.width;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+
+    const N = currentTokens.length;
+    const padL = 36;
+    const padR = 36;
+    const stepX = (arcsCanvas.width - padL - padR) / Math.max(1, N - 1);
+
+    for (let i = 0; i < N; i++) {
+      const px = padL + i * stepX;
+      if (Math.abs(mouseX - px) < stepX / 2) {
+        focusedIdx = i;
+        state.attnFocusedToken = i;
+        state.attnQueryVectorOverride = null;
+        recomputeAndDraw();
+        break;
+      }
+    }
+  });
+
+  // --- Sentence Selector Listener ---
+  sentenceSelect.addEventListener('change', (e) => {
+    currentSentenceIdx = parseInt(e.target.value, 10);
+    state.attnSentenceIdx = currentSentenceIdx;
+    const selected = sentences[currentSentenceIdx];
+    currentTokens = selected?.tokens || ["Attention", "is", "all", "you", "need"];
+    focusedIdx = selected?.targetTokenIdx ?? 0;
+    state.attnFocusedToken = focusedIdx;
+    state.attnQueryVectorOverride = null;
+    recomputeAndDraw();
+  });
+
+  // --- Custom Sentence Tokenize Button ---
+  btnApplyCustom.addEventListener('click', () => {
+    const text = customInput.value.trim();
+    if (!text) return;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length < 2) return;
+
+    currentTokens = words.slice(0, 16); // limit to 16 tokens for clean display
+    focusedIdx = 0;
+    state.attnFocusedToken = 0;
+    state.attnQueryVectorOverride = null;
+    recomputeAndDraw();
+  });
+
+  // --- Multi-Head Selector Buttons ---
+  container.querySelectorAll('#attn-head-group .param-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('#attn-head-group .param-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.attnHead = btn.dataset.head;
+      const headLabels = {
+        'head-1': 'Head 1: Syntax & Dependency',
+        'head-2': 'Head 2: Coreference & Entities',
+        'head-3': 'Head 3: Positional Locality',
+        'all': 'Average Multi-Head Ensemble'
+      };
+      labelActiveHead.textContent = headLabels[state.attnHead] || state.attnHead;
+      recomputeAndDraw();
+    });
+  });
+
+  // --- Scale Factor Toggle Button ---
+  btnToggleScale.addEventListener('click', () => {
+    state.attnScaleEnabled = !state.attnScaleEnabled;
+    badgeScaleStatus.className = `scale-badge ${state.attnScaleEnabled ? 'enabled' : 'disabled'}`;
+    badgeScaleStatus.textContent = state.attnScaleEnabled ? 'Active (÷ 2.0)' : 'Disabled (Raw)';
+    btnToggleScale.className = `btn-toggle-scale ${state.attnScaleEnabled ? 'active' : ''}`;
+    btnToggleScale.querySelector('span').textContent = state.attnScaleEnabled
+      ? '✓ Guardrail Enabled (÷ √d_k)'
+      : '⚠️ Guardrail Bypassed (Saturate Softmax)';
+    recomputeAndDraw();
+  });
+
+  // --- Reset Vector Button ---
+  btnResetVector.addEventListener('click', () => {
+    state.attnQueryVectorOverride = null;
+    recomputeAndDraw();
+  });
+
+  // Initial draw
+  recomputeAndDraw();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -3116,6 +3948,12 @@ const questPrompts = {
     { label: '🐉 Why do train and val loss diverge?', prompt: 'Walk through why training loss keeps dropping while validation loss explodes upward when a neural network overfits.' },
     { label: '⚖️ How does L2 Weight Decay smooth boundaries?', prompt: 'Explain the mathematics of L2 weight decay (loss + 0.5 * lambda * ||w||^2) and why smaller weights produce smoother curves.' },
     { label: '🎯 Quiz me on Regularization', prompt: 'Give me a challenging question about bias-variance tradeoff, early stopping, and dropout in PyTorch!' }
+  ],
+  'quest-7': [
+    { label: '⚡ Why divide QKT by sqrt(dk)?', prompt: 'Walk through why the scaling factor sqrt(d_k) prevents softmax from saturating into an argmax spike with vanishing gradients.' },
+    { label: '📚 Explain Q, K, and V with an analogy', prompt: 'Explain Query, Key, and Value vectors using an intuitive everyday analogy like a research library or YouTube search engine.' },
+    { label: '🤖 How does Multi-Head Attention see multiple angles?', prompt: 'Explain how splitting embeddings into multiple attention heads lets a model track grammar, coreference, and semantics simultaneously.' },
+    { label: '🎯 Quiz me on Transformers', prompt: 'Give me a challenging question about self-attention, masking, or transformer architecture in PyTorch!' }
   ]
 };
 
