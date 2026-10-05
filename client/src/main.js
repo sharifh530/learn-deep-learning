@@ -85,7 +85,17 @@ const state = {
   dpoActiveTab: 'dojo', // 'dojo' | 'chatml' | 'rlhf_vs_dpo'
   dpoUserVotes: {},
   dpoTrainedSteps: 0,
-  dpoLossMaskMode: 'labels' // 'input_ids' | 'labels'
+  dpoLossMaskMode: 'labels', // 'input_ids' | 'labels'
+  // Quest 12: PEFT & LoRA (Rank Factorization & QLoRA Quantization) state
+  loraRank: 8,
+  loraAlpha: 16,
+  loraQuantMode: 'nf4_4bit', // 'fp16' | 'int8' | 'nf4_4bit'
+  loraBaseModel: 'llama3_8b',
+  loraSelectedModules: ['q_proj', 'v_proj'],
+  loraActiveTab: 'matrix', // 'matrix' | 'vram_qlora' | 'hot_swap'
+  loraTrainedSteps: 0,
+  loraActiveAdapter: 'medical',
+  loraMerged: false
 };
 
 const tutorService = new AITutorService();
@@ -674,6 +684,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'alignment_dpo_lab':
       renderAlignmentDpoLabWidget(quest);
+      break;
+    case 'peft_lora_lab':
+      renderPeftLoraLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -7024,6 +7037,1040 @@ function renderAlignmentDpoLabWidget(quest) {
   updateUI();
 }
 
+// ============================================================================
+// WIDGET 12: PEFT, LoRA & QLoRA Lab (Low-Rank Adaptation & Quantization)
+// ============================================================================
+function renderPeftLoraLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'peft-lora-container';
+
+  const config = quest.interactiveConfig || {};
+  const models = config.models || [
+    { id: "llama3_8b", name: "Llama 3 (8B)", d_model: 4096, layers: 32, totalParams: 8030000000, baseVramFp16: 16.1 },
+    { id: "llama3_70b", name: "Llama 3 (70B)", d_model: 8192, layers: 80, totalParams: 70600000000, baseVramFp16: 141.2 },
+    { id: "mistral_7b", name: "Mistral (7B)", d_model: 4096, layers: 32, totalParams: 7240000000, baseVramFp16: 14.5 }
+  ];
+
+  let currentModelId = state.loraBaseModel || 'llama3_8b';
+  let currentRank = state.loraRank !== undefined ? state.loraRank : 8;
+  let currentAlpha = state.loraAlpha !== undefined ? state.loraAlpha : 16;
+  let currentDropout = 0.05;
+  let currentQuantMode = state.loraQuantMode || 'nf4_4bit';
+  let activeTab = state.loraActiveTab || 'matrix';
+  let selectedModules = new Set(state.loraSelectedModules || ['q_proj', 'v_proj']);
+  let trainedSteps = state.loraTrainedSteps || 0;
+  let activeAdapterKey = state.loraActiveAdapter || 'medical';
+  let isMerged = state.loraMerged || false;
+
+  // Domain adapters database
+  const adapters = {
+    medical: {
+      key: 'medical',
+      name: "🩺 Clinical Diagnostician",
+      category: "Healthcare",
+      rank: 16,
+      alpha: 32,
+      fileSize: "33.5 MB",
+      prompt: "Patient presents with sudden onset unilateral throbbing headache, photophobia, and nausea after sleep deprivation.",
+      baseOutput: "Headaches can be caused by many conditions like stress, dehydration, or migraine. Rest in a quiet room, drink plenty of water, and consult a doctor if symptoms persist.",
+      loraOutput: "Differential Diagnosis: Classical Acute Migraine with Aura.\nRecommended First-Line: Oral Triptan (e.g., Sumatriptan 50mg) combined with NSAID (Naproxen 500mg) and dark-room rest.\nRed Flags to Rule Out: SNOOP criteria (Systemic symptoms, Neurologic deficits, Sudden 'thunderclap' onset indicating subarachnoid hemorrhage)."
+    },
+    coding: {
+      key: 'coding',
+      name: "💻 Python Async Copilot",
+      category: "Software Engineering",
+      rank: 32,
+      alpha: 64,
+      fileSize: "67.1 MB",
+      prompt: "How do I build an asynchronous rate-limited batch consumer using asyncio and a Semaphore in Python?",
+      baseOutput: "Asyncio has tasks. You can use asyncio.gather to run multiple functions at the same time in Python to make web requests.",
+      loraOutput: "```python\nimport asyncio\n\nasync def worker(item_id: int, sem: asyncio.Semaphore):\n    async with sem:\n        await asyncio.sleep(0.05)  # Simulated rate-limited I/O\n        return f'processed_{item_id}'\n\nasync def main():\n    sem = asyncio.Semaphore(10)  # Max 10 concurrent requests\n    tasks = [worker(i, sem) for i in range(100)]\n    results = await asyncio.gather(*tasks)\n    print(f'Done {len(results)} items')\n```"
+    },
+    legal: {
+      key: 'legal',
+      name: "⚖️ Contract & NDA Auditor",
+      category: "Legal & Compliance",
+      rank: 8,
+      alpha: 16,
+      fileSize: "16.8 MB",
+      prompt: "Audit Clause 9.2: 'Recipient shall keep all Disclosing Party technical and commercial data confidential in perpetuity without exception.'",
+      baseOutput: "This clause says you must keep all information confidential forever and cannot share it with anyone else.",
+      loraOutput: "⚠️ High Risk Finding: 'In perpetuity' confidentiality covenants are frequently held unenforceable as undue trade restraint in common law jurisdictions.\nRecommended Counter-Draft: Limit survival term to 3 to 5 years post-termination, with standard carved-out exceptions for independently developed data, public domain disclosures, and compelled legal court orders."
+    },
+    story: {
+      key: 'story',
+      name: "🎨 Cyberpunk Worldbuilder",
+      category: "Creative Writing",
+      rank: 4,
+      alpha: 8,
+      fileSize: "8.4 MB",
+      prompt: "Describe the neon marketplace in Neo-Kyoto under perpetual synthetic rain.",
+      baseOutput: "The marketplace is busy with neon lights and people walking under the rain selling electronics and street food in a futuristic city.",
+      loraOutput: "Chromium smog hangs thick over the sub-level alleys of Neo-Kyoto, reflecting shattered magenta neon across slick puddles of synthetic coolant. Street hawkers in patched carbon-fiber cloaks peddle neural stim-cartridges beneath the low hum of atmospheric scrubbers and surveillance drones."
+    }
+  };
+
+  // Math helper
+  function computeLoraMath() {
+    const model = models.find(m => m.id === currentModelId) || models[0];
+    const d = model.d_model;
+    const d_ff = Math.round(d * 8 / 3); // Llama SwiGLU hidden dim (approx 11008 for 4096)
+    const L = model.layers;
+    const r = currentRank;
+    const alpha = currentAlpha;
+    const scaling = alpha / r;
+
+    // Calculate parameter count per layer for selected modules
+    let loraParamsPerLayer = 0;
+    selectedModules.forEach(mod => {
+      if (['q_proj', 'k_proj', 'v_proj', 'o_proj'].includes(mod)) {
+        // d_model x d_model: A is r x d, B is d x r -> 2 * r * d
+        loraParamsPerLayer += 2 * r * d;
+      } else {
+        // MLP proj (gate_proj, up_proj, down_proj): A is r x d, B is d_ff x r -> r * (d + d_ff)
+        loraParamsPerLayer += r * (d + d_ff);
+      }
+    });
+
+    const totalLoraParams = loraParamsPerLayer * L;
+    const pctTrainable = (totalLoraParams / model.totalParams) * 100;
+    const reductionFactor = (model.totalParams / Math.max(totalLoraParams, 1)).toFixed(0);
+
+    // VRAM Footprint calculation (GB)
+    let baseModelGb = 0;
+    if (currentQuantMode === 'fp16') {
+      baseModelGb = (model.totalParams * 2) / (1024 ** 3); // 2 bytes
+    } else if (currentQuantMode === 'int8') {
+      baseModelGb = (model.totalParams * 1) / (1024 ** 3); // 1 byte
+    } else {
+      // QLoRA NF4 (0.5 bytes + 0.04 bytes Double Quantization overhead)
+      baseModelGb = (model.totalParams * 0.54) / (1024 ** 3);
+    }
+
+    // Gradients & Optimizer:
+    // Full Fine-Tuning: 2 bytes gradients + 8 bytes AdamW (fp32 moments m and v) = 10 bytes / param
+    const fullGradsGb = (model.totalParams * 2) / (1024 ** 3);
+    const fullAdamGb = (model.totalParams * 8) / (1024 ** 3);
+    const activationsGb = model.id === 'llama3_70b' ? 14.0 : 2.8;
+    const fullVramTotal = baseModelGb + fullGradsGb + fullAdamGb + activationsGb;
+
+    // LoRA: Gradients and AdamW ONLY on LoRA trainable parameters!
+    const loraGradsGb = (totalLoraParams * 2) / (1024 ** 3);
+    const loraAdamGb = (totalLoraParams * 8) / (1024 ** 3);
+    const loraActivationsGb = activationsGb * 0.85; // slightly reduced backward graph
+    const loraVramTotal = baseModelGb + loraGradsGb + loraAdamGb + loraActivationsGb;
+
+    // Adapter file size (FP16 weights of A and B)
+    const adapterFileMb = ((totalLoraParams * 2) / (1024 * 1024)).toFixed(1);
+
+    // Simulated loss and norms
+    const currentLoss = Math.max(0.65, 3.75 - Math.log(1 + trainedSteps * 0.45) * 0.72).toFixed(3);
+    const normB = Math.min(1.42, trainedSteps * 0.028).toFixed(3);
+    const normA = (0.35 + Math.min(0.85, trainedSteps * 0.015)).toFixed(3);
+
+    return {
+      model,
+      r,
+      alpha,
+      scaling,
+      totalLoraParams,
+      pctTrainable,
+      reductionFactor,
+      baseModelGb,
+      loraGradsGb,
+      loraAdamGb,
+      loraVramTotal,
+      fullVramTotal,
+      adapterFileMb,
+      currentLoss,
+      normA,
+      normB
+    };
+  }
+
+  const initialMath = computeLoraMath();
+
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="peft-diagnostic-hud">
+      <div class="peft-hud-col">
+        <div class="peft-hud-badge">
+          <span>🎛️</span>
+          <span>PEFT & LOW-RANK ADAPTATION ENGINE</span>
+        </div>
+        <div class="peft-hud-desc">
+          Surgically adapt billion-parameter foundation LLMs by decomposing weight updates into low-rank bottleneck matrices (ΔW = B × A) with zero-cost production weight merging.
+        </div>
+      </div>
+      <div class="peft-metrics-grid">
+        <div class="peft-metric-card">
+          <span class="peft-metric-lbl">TRAINABLE PARAMS</span>
+          <span class="peft-metric-val green" id="peft-stat-trainable-pct">${initialMath.pctTrainable.toFixed(3)}%</span>
+          <span class="peft-metric-sub" id="peft-stat-trainable-count">${(initialMath.totalLoraParams / 1e6).toFixed(2)}M / ${(initialMath.model.totalParams / 1e9).toFixed(1)}B</span>
+        </div>
+        <div class="peft-metric-card">
+          <span class="peft-metric-lbl">SCALING FACTOR (α / r)</span>
+          <span class="peft-metric-val cyan" id="peft-stat-scaling">${initialMath.scaling.toFixed(2)}×</span>
+          <span class="peft-metric-sub" id="peft-stat-alpha-sub">α=${currentAlpha} • r=${currentRank}</span>
+        </div>
+        <div class="peft-metric-card">
+          <span class="peft-metric-lbl">ESTIMATED VRAM</span>
+          <span class="peft-metric-val ${initialMath.loraVramTotal < 16 ? 'green' : 'amber'}" id="peft-stat-vram">${initialMath.loraVramTotal.toFixed(1)} GB</span>
+          <span class="peft-metric-sub" id="peft-stat-vram-sub">${currentQuantMode === 'nf4_4bit' ? '4-Bit QLoRA NF4' : currentQuantMode.toUpperCase()}</span>
+        </div>
+        <div class="peft-metric-card">
+          <span class="peft-metric-lbl">INFERENCE OVERHEAD</span>
+          <span class="peft-metric-val ${isMerged ? 'green' : 'cyan'}" id="peft-stat-latency">${isMerged ? '0.00 ms (Merged)' : '+1.85 ms (LoRA)'}</span>
+          <span class="peft-metric-sub" id="peft-stat-latency-sub">${isMerged ? '⚡ Zero-Latency Merged' : 'Hot-Swappable Adapter'}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Sub-Tabs -->
+    <div class="peft-subtabs-bar">
+      <button class="peft-subtab-btn ${activeTab === 'matrix' ? 'active' : ''}" data-tab="matrix">
+        <span>🎛️</span> Matrix Factorization & Rank Explorer
+      </button>
+      <button class="peft-subtab-btn ${activeTab === 'vram_qlora' ? 'active' : ''}" data-tab="vram_qlora">
+        <span>💾</span> VRAM & QLoRA Quantization Studio
+      </button>
+      <button class="peft-subtab-btn ${activeTab === 'hot_swap' ? 'active' : ''}" data-tab="hot_swap">
+        <span>⚡</span> Multi-Tenant Hot-Swapping & Merging
+      </button>
+    </div>
+
+    <!-- SUB-TAB 1: MATRIX FACTORIZATION & RANK EXPLORER -->
+    <div class="peft-subtab-content ${activeTab === 'matrix' ? 'active' : ''}" id="peft-content-matrix">
+      <!-- Model and Module Selection Bar -->
+      <div class="peft-model-config-bar">
+        <div class="peft-config-group">
+          <label for="lora-model-select">Target Base LLM:</label>
+          <select id="lora-model-select" class="peft-select-input">
+            ${models.map(m => `<option value="${m.id}" ${m.id === currentModelId ? 'selected' : ''}>${m.name} (${(m.totalParams / 1e9).toFixed(0)}B params, d=${m.d_model}, L=${m.layers})</option>`).join('')}
+          </select>
+        </div>
+        <div class="peft-config-group modules-group">
+          <span class="config-lbl">Target Modules to Adapt:</span>
+          <div class="module-chips-wrapper">
+            ${['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'].map(mod => `
+              <label class="module-check-chip ${selectedModules.has(mod) ? 'active' : ''}">
+                <input type="checkbox" value="${mod}" ${selectedModules.has(mod) ? 'checked' : ''} />
+                <span>${mod}</span>
+              </label>
+            `).join('')}
+          </div>
+          <div class="module-quick-buttons">
+            <button class="btn-quick-mod" id="btn-mod-qv">Attention Only (q, v)</button>
+            <button class="btn-quick-mod" id="btn-mod-all">All Linear (All 7)</button>
+            <button class="btn-quick-mod" id="btn-mod-mlp">MLP Only</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sliders and Diagram Grid -->
+      <div class="peft-core-grid">
+        <!-- Left: Interactive Sliders & Parameter Controls -->
+        <div class="peft-controls-card">
+          <div class="card-section-title">
+            <span>⚙️</span> LORA HYPERPARAMETER STUDIO
+          </div>
+
+          <!-- Rank Slider -->
+          <div class="peft-slider-row">
+            <div class="slider-header">
+              <label for="lora-rank-slider">Bottleneck Rank (r):</label>
+              <div class="slider-val-badge cyan" id="val-rank-badge">r = ${currentRank}</div>
+            </div>
+            <input type="range" id="lora-rank-slider" min="1" max="64" step="1" value="${currentRank}" class="peft-range-slider" />
+            <div class="slider-subtext">
+              <span id="rank-capacity-desc">Standard Rank: Optimal balance between expressiveness and efficiency.</span>
+            </div>
+          </div>
+
+          <!-- Alpha Slider -->
+          <div class="peft-slider-row">
+            <div class="slider-header">
+              <label for="lora-alpha-slider">LoRA Alpha (α):</label>
+              <div class="slider-val-badge amber" id="val-alpha-badge">α = ${currentAlpha}</div>
+            </div>
+            <input type="range" id="lora-alpha-slider" min="1" max="128" step="1" value="${currentAlpha}" class="peft-range-slider" />
+            <div class="slider-subtext">
+              <span id="alpha-scaling-desc">Scaling multiplier: ΔW update scaled by ${initialMath.scaling.toFixed(2)}× (α / r).</span>
+            </div>
+          </div>
+
+          <!-- Dropout Slider -->
+          <div class="peft-slider-row">
+            <div class="slider-header">
+              <label for="lora-dropout-slider">LoRA Dropout (p):</label>
+              <div class="slider-val-badge" id="val-dropout-badge">p = ${currentDropout.toFixed(2)}</div>
+            </div>
+            <input type="range" id="lora-dropout-slider" min="0" max="0.2" step="0.01" value="${currentDropout}" class="peft-range-slider" />
+            <div class="slider-subtext">
+              <span>Regularizes low-rank adapter to prevent memorizing small target datasets.</span>
+            </div>
+          </div>
+
+          <!-- Gradient Step Simulation Box -->
+          <div class="peft-sim-box">
+            <div class="sim-header">
+              <span>⚡ TRAINING STEP SIMULATOR</span>
+              <span class="sim-counter" id="sim-steps-counter">${trainedSteps} Steps</span>
+            </div>
+            <div class="sim-metrics">
+              <div class="sim-metric">
+                <span class="s-lbl">Task Loss:</span>
+                <span class="s-val amber" id="sim-stat-loss">${initialMath.currentLoss}</span>
+              </div>
+              <div class="sim-metric">
+                <span class="s-lbl">||A|| Norm:</span>
+                <span class="s-val cyan" id="sim-stat-norma">${initialMath.normA}</span>
+              </div>
+              <div class="sim-metric">
+                <span class="s-lbl">||B|| Norm:</span>
+                <span class="s-val green" id="sim-stat-normb">${initialMath.normB}</span>
+              </div>
+            </div>
+            <div class="sim-actions">
+              <button class="btn-lora-step" id="btn-lora-step">
+                <span>⚡</span> Step 50 LoRA Batches (+10 XP)
+              </button>
+              <button class="btn-lora-reset" id="btn-lora-reset" title="Reset steps to 0">
+                ↺ Reset
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Low-Rank Matrix Decomposition Flowchart -->
+        <div class="peft-diagram-card">
+          <div class="card-section-title">
+            <span>📐</span> LOW-RANK FORWARD PASS: h = W₀x + (α/r)·B·A·x
+          </div>
+
+          <div class="matrix-flowchart-container" id="matrix-flowchart">
+            <!-- Dynamically populated diagram -->
+          </div>
+
+          <div class="zero-init-guarantee-card">
+            <div class="guarantee-icon">🛡️</div>
+            <div class="guarantee-body">
+              <strong>The Zero-Initialization Rule (B = 0):</strong>
+              <p>
+                Matrix B is strictly initialized to <code>torch.zeros_()</code> while Matrix A uses Kaiming Gaussian noise.
+                At step 0: <code>ΔW = B × A = 0 × A = 0</code>. The model output is mathematically identical to the pre-trained base model, ensuring zero catastrophic forgetting before fine-tuning starts!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 2: VRAM & QLORA QUANTIZATION STUDIO -->
+    <div class="peft-subtab-content ${activeTab === 'vram_qlora' ? 'active' : ''}" id="peft-content-vram_qlora">
+      <!-- Precision Toggle Header -->
+      <div class="precision-toggle-bar">
+        <span class="prec-lbl">Base Model Weight Quantization:</span>
+        <div class="prec-buttons-group">
+          <button class="btn-prec-mode ${currentQuantMode === 'fp16' ? 'active' : ''}" data-mode="fp16">
+            <span>💠</span> FP16 (16-bit Half Precision)
+          </button>
+          <button class="btn-prec-mode ${currentQuantMode === 'int8' ? 'active' : ''}" data-mode="int8">
+            <span>⚙️</span> INT8 (8-bit Quantized)
+          </button>
+          <button class="btn-prec-mode ${currentQuantMode === 'nf4_4bit' ? 'active' : ''}" data-mode="nf4_4bit">
+            <span>⚡</span> QLoRA NF4 (4-bit NormalFloat)
+          </button>
+        </div>
+      </div>
+
+      <!-- Comparative VRAM Stack Bars -->
+      <div class="vram-comparison-grid">
+        <!-- Full Fine-Tuning Card -->
+        <div class="vram-arch-card full-ft">
+          <div class="arch-badge rose">FULL FINE-TUNING (UNFEASIBLE)</div>
+          <h4>All Weights & States in VRAM</h4>
+          <p class="arch-note">Requires storing 16-bit weights, 16-bit gradients, and 32-bit Adam optimizer states for every parameter.</p>
+          
+          <div class="vram-stack-visual" id="vram-stack-full">
+            <!-- Rendered in JS -->
+          </div>
+
+          <div class="vram-total-banner rose">
+            <span>Total VRAM Required:</span>
+            <strong id="vram-total-full-val">${initialMath.fullVramTotal.toFixed(1)} GB</strong>
+          </div>
+          <div class="hardware-verdict rose">
+            ❌ Out of Memory on all consumer hardware. Requires 80GB H100 / A100 datacenter cluster!
+          </div>
+        </div>
+
+        <!-- LoRA / QLoRA Card -->
+        <div class="vram-arch-card peft-ft">
+          <div class="arch-badge green">${currentQuantMode === 'nf4_4bit' ? 'QLORA (4-BIT NF4)' : 'LORA (' + currentQuantMode.toUpperCase() + ')'}</div>
+          <h4>Frozen Base + Low-Rank Adapters</h4>
+          <p class="arch-note">Base model is 100% frozen. Gradients and Adam optimizer states are computed ONLY for tiny adapter matrices A and B!</p>
+
+          <div class="vram-stack-visual" id="vram-stack-lora">
+            <!-- Rendered in JS -->
+          </div>
+
+          <div class="vram-total-banner green">
+            <span>Total VRAM Required:</span>
+            <strong id="vram-total-lora-val">${initialMath.loraVramTotal.toFixed(1)} GB</strong>
+          </div>
+          <div class="hardware-verdict green" id="hardware-verdict-text">
+            ✓ FITS ON CONSUMER GPU! Single RTX 3060 / 4060 / 4090 desktop card.
+          </div>
+        </div>
+      </div>
+
+      <!-- Hardware Compatibility Matrix -->
+      <div class="gpu-matrix-card">
+        <h4>🖥️ Consumer & Workstation GPU Feasibility Matrix</h4>
+        <div class="gpu-chips-grid" id="gpu-chips-grid">
+          <!-- Populated in JS -->
+        </div>
+      </div>
+
+      <!-- QLoRA 3 Pillars Cards -->
+      <div class="qlora-pillars-grid">
+        <div class="pillar-card">
+          <div class="pillar-icon cyan">1</div>
+          <h5>4-Bit NormalFloat (NF4)</h5>
+          <p>
+            Standard INT4 divides numbers into uniform linear buckets. But pre-trained neural network weights follow a <strong>Gaussian bell curve</strong>! 
+            NF4 positions quantization quantiles so each bin holds an equal probability mass, preserving high information density with zero quantization loss.
+          </p>
+        </div>
+        <div class="pillar-card">
+          <div class="pillar-icon amber">2</div>
+          <h5>Double Quantization (DQ)</h5>
+          <p>
+            Quantizing weights requires scaling constants (block size 64). These constants normally consume 32 bits per 64 weights (0.5 bits/param). 
+            Double Quantization quantizes the <em>constants themselves</em> into 8-bit integers, slashing memory by <strong>0.37 bits per parameter</strong>!
+          </p>
+        </div>
+        <div class="pillar-card">
+          <div class="pillar-icon green">3</div>
+          <h5>Paged Optimizers</h5>
+          <p>
+            Long sequence lengths cause temporary gradient memory surges that trigger sudden CUDA Out-of-Memory (OOM) crashes. 
+            QLoRA leverages CUDA Unified Memory to automatically page non-critical optimizer memory to CPU RAM during surges, guaranteeing 100% stable runs.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 3: MULTI-TENANT HOT-SWAPPING & MERGING -->
+    <div class="peft-subtab-content ${activeTab === 'hot_swap' ? 'active' : ''}" id="peft-content-hot_swap">
+      <!-- Top Overview Banner -->
+      <div class="adapter-overview-banner">
+        <div class="banner-text">
+          <h3>⚡ 1 Frozen Base Model + N Specialized Micro-Adapters</h3>
+          <p>Serve hundreds of enterprise clients simultaneously: instead of loading 16GB models per customer, swap lightweight 30MB adapters in milliseconds without touching base memory!</p>
+        </div>
+        <div class="merge-toggle-wrapper">
+          <button class="btn-merge-toggle ${isMerged ? 'merged' : ''}" id="btn-toggle-merge">
+            <span>${isMerged ? '⚡' : '🔗'}</span>
+            <span id="merge-btn-text">${isMerged ? 'LoRA Folded into Base (Zero Latency)' : 'Merge LoRA into Base Weights'}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Adapter Selector Grid -->
+      <div class="adapters-cards-grid">
+        ${Object.values(adapters).map(a => `
+          <div class="adapter-card ${a.key === activeAdapterKey ? 'active' : ''}" data-adapter="${a.key}">
+            <div class="adapter-card-top">
+              <span class="adapter-cat">${a.category}</span>
+              <span class="adapter-size">${a.fileSize}</span>
+            </div>
+            <h4>${a.name}</h4>
+            <div class="adapter-specs">
+              <span>r = ${a.rank}</span> • <span>α = ${a.alpha}</span>
+            </div>
+            <div class="adapter-status-pill">
+              ${a.key === activeAdapterKey ? (isMerged ? '✓ MERGED IN PRODUCTION' : '● ACTIVE AT RUNTIME') : '○ Click to Mount (<2ms)'}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- Live Token Stream Playground -->
+      <div class="adapter-playground-grid">
+        <!-- Input Prompt -->
+        <div class="play-input-col">
+          <div class="panel-section-title">
+            <span>💬</span> TEST PROMPT (ROUTED TO ADAPTER)
+          </div>
+          <div class="sample-prompt-box" id="active-prompt-display">
+            ${escapeHtml(adapters[activeAdapterKey].prompt)}
+          </div>
+          <div class="serving-metrics-box">
+            <div class="serving-metric">
+              <span class="m-lbl">Active Adapter Size:</span>
+              <span class="m-val cyan" id="active-adapter-size">${adapters[activeAdapterKey].fileSize}</span>
+            </div>
+            <div class="serving-metric">
+              <span class="m-lbl">Mount / Swap Latency:</span>
+              <span class="m-val green">&lt; 1.8 ms</span>
+            </div>
+            <div class="serving-metric">
+              <span class="m-lbl">Inference Compute:</span>
+              <span class="m-val ${isMerged ? 'green' : 'amber'}" id="active-compute-mode">
+                ${isMerged ? '1 Matrix Mult (Merged)' : '2 Matrix Mults (Dual Branch)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comparative Output -->
+        <div class="play-output-col">
+          <div class="panel-section-title">
+            <span>🤖</span> OUTPUT COMPARISON: BASE VS LORA
+          </div>
+
+          <div class="output-compare-block">
+            <div class="output-label base">🔒 Frozen Base LLM Response (Unspecialized):</div>
+            <div class="output-text base" id="out-base-text">
+              ${escapeHtml(adapters[activeAdapterKey].baseOutput)}
+            </div>
+          </div>
+
+          <div class="output-compare-block">
+            <div class="output-label lora">🎛️ Active LoRA Specialist Response:</div>
+            <div class="output-text lora" id="out-lora-text">
+              ${escapeHtml(adapters[activeAdapterKey].loraOutput)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Production Merging Code Box -->
+      <div class="merge-code-card">
+        <div class="merge-code-header">
+          <span>🚀 PRODUCTION DEPLOYMENT CODE (ZERO LATENCY MERGING)</span>
+          <button class="btn-copy-code" id="btn-copy-merge-code">📋 Copy PyTorch Code</button>
+        </div>
+        <pre class="merge-code-pre"><code><span class="kw">from</span> peft <span class="kw">import</span> PeftModel
+<span class="kw">from</span> transformers <span class="kw">import</span> AutoModelForCausalLM
+
+<span class="comment"># 1. Load base model in full precision (or FP16/BF16)</span>
+base_model = AutoModelForCausalLM.from_pretrained(<span class="str">"meta-llama/Meta-Llama-3-8B"</span>)
+
+<span class="comment"># 2. Attach specialized adapter weights</span>
+model = PeftModel.from_pretrained(base_model, <span class="str">"./lora_adapter_${activeAdapterKey}"</span>)
+
+<span class="comment"># 3. Permanently fold: W_merged = W0 + (alpha/r) * B * A</span>
+model = model.merge_and_unload()
+
+<span class="comment"># 4. Save merged model: Zero extra latency, ready for vLLM, TensorRT-LLM, or llama.cpp!</span>
+model.save_pretrained(<span class="str">"./llama3_8b_${activeAdapterKey}_merged"</span>)</code></pre>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- Dynamic Flowchart Renderer ---
+  function renderFlowchart() {
+    const fcEl = container.querySelector('#matrix-flowchart');
+    if (!fcEl) return;
+    const math = computeLoraMath();
+    const d = math.model.d_model;
+    const r = math.r;
+    const alpha = math.alpha;
+    const scaling = math.scaling.toFixed(2);
+    const modCount = selectedModules.size;
+
+    fcEl.innerHTML = `
+      <div class="fc-stage input-stage">
+        <div class="fc-node token-node">
+          <span class="n-title">Input Token x</span>
+          <span class="n-dim">dim = ${d}</span>
+        </div>
+      </div>
+
+      <div class="fc-fork">
+        <div class="fc-branch top-branch">
+          <div class="branch-wire top-wire"></div>
+          <div class="fc-node base-node">
+            <div class="node-badge">🔒 FROZEN BASE LAYER</div>
+            <span class="n-title">Base Weight Matrix W₀</span>
+            <span class="n-dim">${d} × ${d}</span>
+            <span class="n-status">Requires Grad = False</span>
+          </div>
+        </div>
+
+        <div class="fc-branch bottom-branch">
+          <div class="branch-wire btm-wire"></div>
+          <div class="lora-bypass-box">
+            <div class="node-badge lora">🎛️ LOW-RANK ADAPTER BYPASS (${modCount} Modules)</div>
+            <div class="lora-matrices-flow">
+              <div class="fc-node mat-a">
+                <span class="n-title">Matrix A</span>
+                <span class="n-dim">${r} × ${d}</span>
+                <span class="n-init">Kaiming Uniform Init</span>
+              </div>
+              <div class="fc-arrow">➔</div>
+              <div class="bottleneck-pill">
+                <span>Rank r = ${r}</span>
+                <small>${((r / d) * 100).toFixed(2)}% of dim</small>
+              </div>
+              <div class="fc-arrow">➔</div>
+              <div class="fc-node mat-b">
+                <span class="n-title">Matrix B</span>
+                <span class="n-dim">${d} × ${r}</span>
+                <span class="n-init green">Zero Init (zeros_)</span>
+              </div>
+              <div class="fc-arrow">➔</div>
+              <div class="fc-node scale-node">
+                <span class="n-title">Scale</span>
+                <span class="n-dim">× (${alpha} / ${r})</span>
+                <span class="n-factor">${scaling}×</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc-stage sum-stage">
+        <div class="fc-sum-node">
+          <span>⊕</span>
+          <small>Add</small>
+        </div>
+        <div class="fc-arrow">➔</div>
+        <div class="fc-node output-node">
+          <span class="n-title">Output Vector h</span>
+          <span class="n-dim">dim = ${d}</span>
+          <span class="n-math">h = W₀x + (α/r)·BAx</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- Dynamic VRAM Bars Renderer ---
+  function renderVramBars() {
+    const math = computeLoraMath();
+    const fullStack = container.querySelector('#vram-stack-full');
+    const loraStack = container.querySelector('#vram-stack-lora');
+    if (!fullStack || !loraStack) return;
+
+    // Full FT Bars
+    fullStack.innerHTML = `
+      <div class="vram-bar-row">
+        <span class="v-lbl">Model Weights (FP16):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill blue" style="width: 25%;"></div>
+        </div>
+        <span class="v-val">${math.baseModelGb.toFixed(1)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">Gradients (FP16):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill amber" style="width: 25%;"></div>
+        </div>
+        <span class="v-val">${math.baseModelGb.toFixed(1)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">AdamW States (FP32 moments):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill rose" style="width: 50%;"></div>
+        </div>
+        <span class="v-val">${(math.baseModelGb * 4).toFixed(1)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">Activations & KV Buffers:</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill violet" style="width: 15%;"></div>
+        </div>
+        <span class="v-val">~4.0 GB</span>
+      </div>
+    `;
+
+    // LoRA Bars
+    const loraBasePct = Math.min(100, Math.max(10, (math.baseModelGb / math.loraVramTotal) * 100));
+    loraStack.innerHTML = `
+      <div class="vram-bar-row">
+        <span class="v-lbl">Frozen Weights (${currentQuantMode === 'nf4_4bit' ? '4-Bit NF4' : currentQuantMode.toUpperCase()}):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill cyan" style="width: ${loraBasePct}%;"></div>
+        </div>
+        <span class="v-val">${math.baseModelGb.toFixed(1)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">LoRA Gradients (Trainable Only):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill green" style="width: 4%;"></div>
+        </div>
+        <span class="v-val">&lt; ${Math.max(0.01, math.loraGradsGb).toFixed(2)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">LoRA AdamW States:</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill green" style="width: 6%;"></div>
+        </div>
+        <span class="v-val">&lt; ${Math.max(0.02, math.loraAdamGb).toFixed(2)} GB</span>
+      </div>
+      <div class="vram-bar-row">
+        <span class="v-lbl">Activations (Reduced Graph):</span>
+        <div class="v-bar-track">
+          <div class="v-bar-fill violet" style="width: 25%;"></div>
+        </div>
+        <span class="v-val">~2.4 GB</span>
+      </div>
+    `;
+
+    // Update totals
+    const elFullVal = container.querySelector('#vram-total-full-val');
+    const elLoraVal = container.querySelector('#vram-total-lora-val');
+    const elVerdict = container.querySelector('#hardware-verdict-text');
+    if (elFullVal) elFullVal.textContent = `${math.fullVramTotal.toFixed(1)} GB`;
+    if (elLoraVal) elLoraVal.textContent = `${math.loraVramTotal.toFixed(1)} GB`;
+    if (elVerdict) {
+      if (math.loraVramTotal <= 12) {
+        elVerdict.className = 'hardware-verdict green';
+        elVerdict.innerHTML = '✓ FITS ON ENTRY GPU: RTX 3060 (12GB) / RTX 4060 (16GB) / Mac 16GB';
+      } else if (math.loraVramTotal <= 24) {
+        elVerdict.className = 'hardware-verdict green';
+        elVerdict.innerHTML = '✓ FITS ON HIGH-END CONSUMER GPU: RTX 3090 / 4090 (24GB VRAM)';
+      } else if (math.loraVramTotal <= 48) {
+        elVerdict.className = 'hardware-verdict amber';
+        elVerdict.innerHTML = '⚠️ WORKSTATION GPU REQUIRED: RTX 6000 Ada / A6000 (48GB VRAM)';
+      } else {
+        elVerdict.className = 'hardware-verdict rose';
+        elVerdict.innerHTML = '❌ MULTI-GPU REQUIRED: 80GB H100 / A100 Datacenter Cluster';
+      }
+    }
+  }
+
+  // --- Dynamic GPU Matrix Renderer ---
+  function renderGpuMatrix() {
+    const grid = container.querySelector('#gpu-chips-grid');
+    if (!grid) return;
+    const math = computeLoraMath();
+    const vram = math.loraVramTotal;
+
+    const gpus = [
+      { name: "RTX 3060 Desktop", vram: 12, cost: "$299" },
+      { name: "RTX 4070 Desktop", vram: 12, cost: "$549" },
+      { name: "RTX 4080 Desktop", vram: 16, cost: "$999" },
+      { name: "RTX 3090 / 4090", vram: 24, cost: "$1,599" },
+      { name: "Apple M3 Max (36GB+)", vram: 36, cost: "$3,199" },
+      { name: "RTX 6000 Ada", vram: 48, cost: "$6,800" },
+      { name: "NVIDIA H100 SXM5", vram: 80, cost: "$32,000" }
+    ];
+
+    grid.innerHTML = gpus.map(g => {
+      const fits = g.vram >= vram;
+      return `
+        <div class="gpu-chip ${fits ? 'pass' : 'fail'}">
+          <div class="gpu-top">
+            <span class="gpu-name">${g.name}</span>
+            <span class="gpu-status">${fits ? '✅ PASS' : '❌ OOM'}</span>
+          </div>
+          <div class="gpu-bar">
+            <div class="gpu-fill ${fits ? 'green' : 'rose'}" style="width: ${Math.min(100, (vram / g.vram) * 100)}%;"></div>
+          </div>
+          <div class="gpu-specs">
+            <span>${vram.toFixed(1)} / ${g.vram} GB VRAM</span>
+            <span class="cost">${g.cost}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // --- Main UI Sync Routine ---
+  function updateUI() {
+    const math = computeLoraMath();
+
+    // 1. Diagnostic HUD
+    const elTrainablePct = container.querySelector('#peft-stat-trainable-pct');
+    const elTrainableCount = container.querySelector('#peft-stat-trainable-count');
+    const elScaling = container.querySelector('#peft-stat-scaling');
+    const elAlphaSub = container.querySelector('#peft-stat-alpha-sub');
+    const elVram = container.querySelector('#peft-stat-vram');
+    const elVramSub = container.querySelector('#peft-stat-vram-sub');
+    const elLatency = container.querySelector('#peft-stat-latency');
+    const elLatencySub = container.querySelector('#peft-stat-latency-sub');
+
+    if (elTrainablePct) elTrainablePct.textContent = `${math.pctTrainable.toFixed(3)}%`;
+    if (elTrainableCount) elTrainableCount.textContent = `${(math.totalLoraParams / 1e6).toFixed(2)}M / ${(math.model.totalParams / 1e9).toFixed(1)}B`;
+    if (elScaling) elScaling.textContent = `${math.scaling.toFixed(2)}×`;
+    if (elAlphaSub) elAlphaSub.textContent = `α=${currentAlpha} • r=${currentRank}`;
+    if (elVram) {
+      elVram.textContent = `${math.loraVramTotal.toFixed(1)} GB`;
+      elVram.className = `peft-metric-val ${math.loraVramTotal <= 16 ? 'green' : 'amber'}`;
+    }
+    if (elVramSub) elVramSub.textContent = currentQuantMode === 'nf4_4bit' ? '4-Bit QLoRA NF4' : currentQuantMode.toUpperCase();
+    if (elLatency) {
+      elLatency.textContent = isMerged ? '0.00 ms (Merged)' : '+1.85 ms (LoRA)';
+      elLatency.className = `peft-metric-val ${isMerged ? 'green' : 'cyan'}`;
+    }
+    if (elLatencySub) elLatencySub.textContent = isMerged ? '⚡ Zero-Latency Merged' : 'Hot-Swappable Adapter';
+
+    // 2. Sliders badges and descriptions
+    const elRankBadge = container.querySelector('#val-rank-badge');
+    const elAlphaBadge = container.querySelector('#val-alpha-badge');
+    const elDropoutBadge = container.querySelector('#val-dropout-badge');
+    const elRankDesc = container.querySelector('#rank-capacity-desc');
+    const elAlphaDesc = container.querySelector('#alpha-scaling-desc');
+
+    if (elRankBadge) elRankBadge.textContent = `r = ${currentRank}`;
+    if (elAlphaBadge) elAlphaBadge.textContent = `α = ${currentAlpha}`;
+    if (elDropoutBadge) elDropoutBadge.textContent = `p = ${currentDropout.toFixed(2)}`;
+
+    if (elRankDesc) {
+      if (currentRank <= 2) elRankDesc.textContent = "Ultra-Low Rank: Minimal expressiveness, best for slight tone adjustments.";
+      else if (currentRank <= 8) elRankDesc.textContent = "Standard LoRA: Optimal sweet spot for classification and conversational alignment.";
+      else if (currentRank <= 16) elRankDesc.textContent = "High Capacity: Ideal for coding, mathematics, and intricate specialized reasoning.";
+      else elRankDesc.textContent = "Heavy Adapter: Maximum expressive representation, approaching full fine-tuning performance.";
+    }
+
+    if (elAlphaDesc) {
+      elAlphaDesc.textContent = `Scaling multiplier: ΔW update scaled by ${math.scaling.toFixed(2)}× (α / r). Recommended: α ≈ 2r.`;
+    }
+
+    // 3. Step simulator
+    const elSteps = container.querySelector('#sim-steps-counter');
+    const elLoss = container.querySelector('#sim-stat-loss');
+    const elNormA = container.querySelector('#sim-stat-norma');
+    const elNormB = container.querySelector('#sim-stat-normb');
+    if (elSteps) elSteps.textContent = `${trainedSteps} Steps`;
+    if (elLoss) elLoss.textContent = math.currentLoss;
+    if (elNormA) elNormA.textContent = math.normA;
+    if (elNormB) elNormB.textContent = math.normB;
+
+    // 4. Serving & Merging section
+    const elMergeBtn = container.querySelector('#btn-toggle-merge');
+    const elMergeText = container.querySelector('#merge-btn-text');
+    const elComputeMode = container.querySelector('#active-compute-mode');
+    if (elMergeBtn) {
+      if (isMerged) elMergeBtn.classList.add('merged');
+      else elMergeBtn.classList.remove('merged');
+    }
+    if (elMergeText) {
+      elMergeText.textContent = isMerged ? 'LoRA Folded into Base (Zero Latency)' : 'Merge LoRA into Base Weights';
+    }
+    if (elComputeMode) {
+      elComputeMode.textContent = isMerged ? '1 Matrix Mult (Merged)' : '2 Matrix Mults (Dual Branch)';
+      elComputeMode.className = `m-val ${isMerged ? 'green' : 'amber'}`;
+    }
+
+    // Re-render visual components
+    renderFlowchart();
+    renderVramBars();
+    renderGpuMatrix();
+  }
+
+  // --- Sub-Tab Switching Event Listeners ---
+  container.querySelectorAll('.peft-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.peft-subtab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.peft-subtab-content').forEach(c => c.classList.remove('active'));
+
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      state.loraActiveTab = activeTab;
+
+      const target = container.querySelector(`#peft-content-${activeTab}`);
+      if (target) target.classList.add('active');
+      soundFx.playBlip(580, 0.05);
+      updateUI();
+    });
+  });
+
+  // --- Base Model Selection Listener ---
+  const selModel = container.querySelector('#lora-model-select');
+  if (selModel) {
+    selModel.addEventListener('change', (e) => {
+      currentModelId = e.target.value;
+      state.loraBaseModel = currentModelId;
+      soundFx.playBlip(620, 0.05);
+      updateUI();
+    });
+  }
+
+  // --- Module Checkboxes Listeners ---
+  container.querySelectorAll('.module-check-chip input').forEach(chk => {
+    chk.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (e.target.checked) {
+        selectedModules.add(val);
+        e.target.closest('.module-check-chip').classList.add('active');
+      } else {
+        if (selectedModules.size > 1) {
+          selectedModules.delete(val);
+          e.target.closest('.module-check-chip').classList.remove('active');
+        } else {
+          e.target.checked = true; // At least one module must remain
+        }
+      }
+      state.loraSelectedModules = Array.from(selectedModules);
+      soundFx.playBlip(700, 0.04);
+      updateUI();
+    });
+  });
+
+  // Quick module buttons
+  const btnModQv = container.querySelector('#btn-mod-qv');
+  const btnModAll = container.querySelector('#btn-mod-all');
+  const btnModMlp = container.querySelector('#btn-mod-mlp');
+
+  const syncCheckboxes = () => {
+    container.querySelectorAll('.module-check-chip input').forEach(input => {
+      const isSel = selectedModules.has(input.value);
+      input.checked = isSel;
+      if (isSel) input.closest('.module-check-chip').classList.add('active');
+      else input.closest('.module-check-chip').classList.remove('active');
+    });
+    state.loraSelectedModules = Array.from(selectedModules);
+    updateUI();
+  };
+
+  if (btnModQv) {
+    btnModQv.addEventListener('click', () => {
+      selectedModules = new Set(['q_proj', 'v_proj']);
+      soundFx.playBlip(650, 0.05);
+      syncCheckboxes();
+    });
+  }
+  if (btnModAll) {
+    btnModAll.addEventListener('click', () => {
+      selectedModules = new Set(['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']);
+      soundFx.playBlip(750, 0.05);
+      syncCheckboxes();
+    });
+  }
+  if (btnModMlp) {
+    btnModMlp.addEventListener('click', () => {
+      selectedModules = new Set(['gate_proj', 'up_proj', 'down_proj']);
+      soundFx.playBlip(680, 0.05);
+      syncCheckboxes();
+    });
+  }
+
+  // --- Sliders Listeners ---
+  const sliderRank = container.querySelector('#lora-rank-slider');
+  const sliderAlpha = container.querySelector('#lora-alpha-slider');
+  const sliderDropout = container.querySelector('#lora-dropout-slider');
+
+  if (sliderRank) {
+    sliderRank.addEventListener('input', (e) => {
+      currentRank = parseInt(e.target.value, 10);
+      state.loraRank = currentRank;
+      updateUI();
+    });
+  }
+  if (sliderAlpha) {
+    sliderAlpha.addEventListener('input', (e) => {
+      currentAlpha = parseInt(e.target.value, 10);
+      state.loraAlpha = currentAlpha;
+      updateUI();
+    });
+  }
+  if (sliderDropout) {
+    sliderDropout.addEventListener('input', (e) => {
+      currentDropout = parseFloat(e.target.value);
+      updateUI();
+    });
+  }
+
+  // --- Gradient Step Simulator Buttons ---
+  const btnStep = container.querySelector('#btn-lora-step');
+  const btnReset = container.querySelector('#btn-lora-reset');
+
+  if (btnStep) {
+    btnStep.addEventListener('click', () => {
+      trainedSteps += 50;
+      state.loraTrainedSteps = trainedSteps;
+      soundFx.playBlip(880, 0.08);
+      awardXp(10);
+      updateUI();
+    });
+  }
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      trainedSteps = 0;
+      state.loraTrainedSteps = 0;
+      soundFx.playBlip(420, 0.08);
+      updateUI();
+    });
+  }
+
+  // --- Precision Mode Buttons ---
+  container.querySelectorAll('.btn-prec-mode').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.btn-prec-mode').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentQuantMode = btn.dataset.mode;
+      state.loraQuantMode = currentQuantMode;
+      soundFx.playBlip(720, 0.05);
+      updateUI();
+    });
+  });
+
+  // --- Adapter Selection Listener ---
+  container.querySelectorAll('.adapter-card').forEach(card => {
+    card.addEventListener('click', () => {
+      container.querySelectorAll('.adapter-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+
+      activeAdapterKey = card.dataset.adapter;
+      state.loraActiveAdapter = activeAdapterKey;
+      const ad = adapters[activeAdapterKey];
+
+      // Update prompt & outputs
+      const elPrompt = container.querySelector('#active-prompt-display');
+      const elBase = container.querySelector('#out-base-text');
+      const elLora = container.querySelector('#out-lora-text');
+      const elSize = container.querySelector('#active-adapter-size');
+
+      if (elPrompt) elPrompt.textContent = ad.prompt;
+      if (elBase) elBase.textContent = ad.baseOutput;
+      if (elLora) elLora.textContent = ad.loraOutput;
+      if (elSize) elSize.textContent = ad.fileSize;
+
+      soundFx.playBlip(640, 0.06);
+      updateUI();
+    });
+  });
+
+  // --- Merge Toggle Listener ---
+  const btnToggleMerge = container.querySelector('#btn-toggle-merge');
+  if (btnToggleMerge) {
+    btnToggleMerge.addEventListener('click', () => {
+      isMerged = !isMerged;
+      state.loraMerged = isMerged;
+      if (isMerged) {
+        soundFx.playLevelUp();
+        awardXp(25);
+      } else {
+        soundFx.playBlip(480, 0.06);
+      }
+      updateUI();
+    });
+  }
+
+  // --- Copy Merge Code Button ---
+  const btnCopyCode = container.querySelector('#btn-copy-merge-code');
+  if (btnCopyCode) {
+    btnCopyCode.addEventListener('click', () => {
+      const codeSnippet = `from peft import PeftModel\nfrom transformers import AutoModelForCausalLM\n\nbase_model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B")\nmodel = PeftModel.from_pretrained(base_model, "./lora_adapter_${activeAdapterKey}")\nmodel = model.merge_and_unload()\nmodel.save_pretrained("./llama3_8b_${activeAdapterKey}_merged")`;
+      navigator.clipboard.writeText(codeSnippet).then(() => {
+        btnCopyCode.textContent = '✓ Copied!';
+        setTimeout(() => { btnCopyCode.textContent = '📋 Copy PyTorch Code'; }, 1800);
+      });
+      soundFx.playBlip(920, 0.05);
+    });
+  }
+
+  // Initial draw
+  updateUI();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -7210,6 +8257,14 @@ const questPrompts = {
     { label: '⚡ How does DPO eliminate the Reward Model?', prompt: 'Explain the mathematical breakthrough of Direct Preference Optimization (DPO): how Rafailov et al. expressed ground-truth rewards directly via policy log-likelihood ratios.' },
     { label: '⚖️ What is the role of the beta parameter in DPO?', prompt: 'Explain how the beta parameter acts as an implicit KL divergence anchor in DPO to prevent the policy from collapsing away from the reference model.' },
     { label: '🎯 Quiz me on LLM Alignment & DPO', prompt: 'Give me a challenging question about SFT, ChatML, RLHF, and DPO loss in PyTorch!' }
+  ],
+  'quest-12': [
+    { label: '🎛️ Why does Full Fine-Tuning blow up VRAM?', prompt: 'Explain why full fine-tuning an 8B model requires >72GB VRAM due to Adam optimizer states and gradients, and how LoRA solves this.' },
+    { label: '🧩 Why is LoRA Matrix B initialized to zero?', prompt: 'Explain the mathematical reason why LoRA adapter matrix B is initialized to strictly zero while matrix A is initialized with random Gaussian noise.' },
+    { label: '⚡ How does Rank r and Alpha scaling work?', prompt: 'Walk through how the rank parameter r and scaling factor alpha / r modulate the learning capacity and gradient magnitude of LoRA adapters.' },
+    { label: '🏎️ How does Weight Merging eliminate latency?', prompt: 'Explain how folding the low-rank delta directly into the base weights (W_merged = W0 + (alpha/r)*BA) enables zero inference latency in production.' },
+    { label: '💾 How does QLoRA achieve 4-bit fine-tuning?', prompt: 'Explain the 3 pillars of QLoRA: 4-bit NormalFloat (NF4), Double Quantization (DQ), and Paged Optimizers.' },
+    { label: '🎯 Quiz me on PEFT & LoRA', prompt: 'Give me a challenging question about LoRA low-rank factorization, rank selection, weight merging, and QLoRA quantization!' }
   ]
 };
 

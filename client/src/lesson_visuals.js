@@ -2047,6 +2047,247 @@ function q11SafetyTaxTradeoff() {
   };
 }
 
+function q12VramExplosion() {
+  let g = T(320, 20, 'The VRAM Wall: Full Fine-Tuning vs. LoRA Memory Footprint', { size: 14, weight: 800, fill: '#fff' });
+
+  // Full Fine-Tuning Block (72+ GB)
+  g += rect(30, 42, 275, 150, { fill: 'rgba(244, 63, 94, 0.08)', stroke: C.rose, rx: 8, sw: 1.5 });
+  g += T(167, 60, 'Full Fine-Tuning (8B Model)', { size: 12, weight: 800, fill: C.rose });
+  g += T(167, 76, 'Total VRAM: ~72+ GB (Requires A100 80GB)', { size: 9, fill: C.muted, weight: 700 });
+
+  // VRAM breakdown bars - Full
+  const fullBars = [
+    { label: 'Model Weights (FP16)', size: '16 GB', color: C.blue, w: 235 },
+    { label: 'Gradients (FP16)', size: '16 GB', color: C.amber, w: 235 },
+    { label: 'Adam States (FP32)', size: '32 GB', color: C.rose, w: 235 },
+    { label: 'Activations & Buffers', size: '8+ GB', color: C.violet, w: 235 }
+  ];
+  fullBars.forEach((b, i) => {
+    const y = 92 + i * 22;
+    g += rect(50, y, b.w, 18, { fill: tint(b.color, 0.2), stroke: b.color, rx: 4, sw: 1 });
+    g += T(60, y + 9, b.label, { size: 8, fill: '#fff', anchor: 'start', weight: 600 });
+    g += T(275, y + 9, b.size, { size: 8, fill: b.color, anchor: 'end', weight: 800, mono: true });
+  });
+
+  // LoRA Block (18-20 GB)
+  g += rect(335, 42, 275, 150, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 60, 'LoRA Fine-Tuning (r=16)', { size: 12, weight: 800, fill: C.emerald });
+  g += T(472, 76, 'Total VRAM: ~20 GB (Fits on RTX 3090/4090 24GB)', { size: 9, fill: '#86efac', weight: 700 });
+
+  // VRAM breakdown bars - LoRA
+  const loraBars = [
+    { label: 'Frozen Weights (FP16)', size: '16 GB', color: C.blue, w: 235 },
+    { label: 'LoRA Adapter Weights', size: '< 0.08 GB', color: C.cyan, w: 20 },
+    { label: 'LoRA Adam States', size: '< 0.16 GB', color: C.emerald, w: 25 },
+    { label: 'Activations (LoRA)', size: '~3.8 GB', color: C.violet, w: 60 }
+  ];
+  loraBars.forEach((b, i) => {
+    const y = 92 + i * 22;
+    g += rect(355, y, 235, 18, { fill: 'rgba(15, 23, 42, 0.6)', stroke: 'rgba(148,163,184,0.15)', rx: 4, sw: 1 });
+    g += rect(355, y, Math.max(b.w, 8), 18, { fill: tint(b.color, 0.35), stroke: b.color, rx: 4, sw: 1 });
+    g += T(365, y + 9, b.label, { size: 8, fill: '#fff', anchor: 'start', weight: 600 });
+    g += T(580, y + 9, b.size, { size: 8, fill: b.color, anchor: 'end', weight: 800, mono: true });
+  });
+
+  // Bottom Savings Badge
+  g += rect(140, 200, 360, 24, { fill: 'rgba(6, 182, 212, 0.15)', stroke: C.cyan, rx: 6 });
+  g += T(320, 212, '⚡ 99.8% fewer trainable weights • 75% VRAM saved • Identical task accuracy', { size: 8.5, weight: 800, fill: C.cyan });
+
+  return {
+    html: svg(640, 232, g),
+    caption: 'Full fine-tuning requires over 72GB VRAM due to Adam optimizer states and gradients. LoRA freezes base weights and trains lightweight adapters, fitting on consumer GPUs.'
+  };
+}
+
+function q12MatrixDecomposition() {
+  let g = T(320, 20, 'The Low-Rank Bypass Architecture: h = W₀x + (α/r)·B·A·x', { size: 14, weight: 800, fill: '#fff' });
+
+  // Input Token Vector x
+  g += rect(20, 85, 60, 50, { fill: tint(C.text, 0.1), stroke: C.muted, rx: 6 });
+  g += T(50, 105, 'x', { size: 16, weight: 800, fill: '#fff', mono: true });
+  g += T(50, 122, 'dim = d_in', { size: 8, fill: C.muted, mono: true });
+
+  // Split Arrow
+  g += arrow(80, 110, 120, 110, 'muted');
+  g += line(120, 70, 120, 150, C.dim, 1.5);
+  g += arrow(120, 70, 160, 70, 'blue');
+  g += arrow(120, 150, 160, 150, 'cyan');
+
+  // Upper Branch: Frozen W0
+  g += rect(160, 45, 170, 50, { fill: 'rgba(30, 41, 59, 0.8)', stroke: C.blue, rx: 6, sw: 1.5 });
+  g += T(245, 62, '🔒 Frozen W₀ (d_out × d_in)', { size: 10, weight: 800, fill: C.blue });
+  g += T(245, 80, '4096 × 4096 = 16.7M params (No Gradients)', { size: 7.5, fill: C.muted, mono: true });
+
+  // Lower Branch: Matrix A and Matrix B
+  // Matrix A: Down-projection to rank r
+  g += rect(160, 125, 110, 50, { fill: 'rgba(6, 182, 212, 0.15)', stroke: C.cyan, rx: 6, sw: 1.5 });
+  g += T(215, 142, 'Matrix A (r × d_in)', { size: 9.5, weight: 800, fill: C.cyan });
+  g += T(215, 160, 'Kaiming Normal Init', { size: 7.5, fill: '#a5f3fc', mono: true });
+
+  g += arrow(270, 150, 300, 150, 'cyan');
+  g += T(285, 138, 'rank r', { size: 7.5, fill: C.amber, mono: true });
+
+  // Matrix B: Up-projection back to d_out
+  g += rect(300, 125, 110, 50, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6, sw: 1.5 });
+  g += T(355, 142, 'Matrix B (d_out × r)', { size: 9.5, weight: 800, fill: C.emerald });
+  g += T(355, 160, 'Zero Init (zeros_)', { size: 7.5, fill: '#86efac', mono: true });
+
+  // Scaling Factor alpha / r
+  g += arrow(410, 150, 445, 150, 'emerald');
+  g += rect(445, 135, 55, 30, { fill: 'rgba(251, 191, 36, 0.2)', stroke: C.amber, rx: 4 });
+  g += T(472, 150, '× (α / r)', { size: 9, weight: 800, fill: C.amber, mono: true });
+
+  // Paths join into Add circle (+)
+  g += arrow(330, 70, 530, 95, 'blue');
+  g += arrow(500, 150, 530, 115, 'amber');
+
+  // Sum Circle
+  g += circ(545, 105, 18, { fill: 'rgba(15, 23, 42, 0.9)', stroke: '#fff', sw: 2 });
+  g += T(545, 105, '⊕', { size: 16, fill: '#fff', weight: 800 });
+
+  // Output vector h
+  g += arrow(563, 105, 595, 105, 'cyan');
+  g += rect(595, 85, 35, 40, { fill: tint(C.cyan, 0.15), stroke: C.cyan, rx: 4 });
+  g += T(612, 105, 'h', { size: 14, weight: 800, fill: C.cyan, mono: true });
+
+  // Zero-init explanation footnote
+  g += rect(30, 190, 580, 26, { fill: 'rgba(2, 6, 23, 0.65)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(320, 203, 'Why B is initialized to 0: ΔW = B · A = 0 · A = 0 at step 0. Base performance is perfectly preserved!', { size: 8.5, weight: 600, fill: '#e2e8f0' });
+
+  return {
+    html: svg(640, 226, g),
+    caption: 'LoRA freezes W₀ and adds a parallel low-rank bottleneck path (A then B). Zero-initializing B ensures the adapter starts as an exact identity operation.'
+  };
+}
+
+function q12AdapterSwitching() {
+  let g = T(320, 20, 'Multi-Tenant Serving: 1 Base LLM + Hot-Swappable Adapters', { size: 14, weight: 800, fill: '#fff' });
+
+  // Central Base LLM (16GB Frozen)
+  g += rect(40, 50, 180, 130, { fill: 'rgba(30, 41, 59, 0.7)', stroke: C.blue, rx: 8, sw: 2 });
+  g += T(130, 80, 'Base LLaMA 3', { size: 14, weight: 800, fill: '#fff' });
+  g += T(130, 100, '8 Billion Parameters', { size: 9.5, fill: C.muted });
+  g += T(130, 120, 'VRAM: 16.0 GB (Frozen 🔒)', { size: 9, fill: C.blue, mono: true, weight: 700 });
+  g += T(130, 145, 'Single GPU in Memory', { size: 8.5, fill: C.dim });
+
+  // Switching Routing Hub
+  g += arrow(220, 115, 270, 115, 'blue');
+  g += circ(290, 115, 18, { fill: 'rgba(2, 6, 23, 0.9)', stroke: C.cyan, sw: 1.5 });
+  g += T(290, 115, '⇄', { size: 14, fill: C.cyan, weight: 800 });
+
+  // 3 Swappable Domain Adapters on Right
+  const adapters = [
+    { title: 'Medical Diagnosis LoRA', tag: 'r=16 • 32 MB', color: C.rose, y: 48, icon: '🩺' },
+    { title: 'Code Copilot Python LoRA', tag: 'r=32 • 64 MB', color: C.emerald, y: 98, icon: '💻' },
+    { title: 'Legal Contract Review LoRA', tag: 'r=8 • 16 MB', color: C.amber, y: 148, icon: '⚖️' }
+  ];
+
+  adapters.forEach(a => {
+    g += arrow(308, 115, 340, a.y + 18, 'muted');
+    g += rect(340, a.y, 260, 36, { fill: tint(a.color, 0.12), stroke: a.color, rx: 6, sw: 1.2 });
+    g += T(355, a.y + 18, a.icon, { size: 14 });
+    g += T(430, a.y + 12, a.title, { size: 9.5, weight: 800, fill: '#fff' });
+    g += T(430, a.y + 26, a.tag, { size: 8, fill: a.color, mono: true, weight: 700 });
+  });
+
+  // Callout banner
+  g += rect(40, 195, 560, 24, { fill: 'rgba(6, 182, 212, 0.1)', stroke: C.cyan, rx: 4 });
+  g += T(320, 207, '💡 Serve hundreds of enterprise clients by swapping tiny ~32MB adapter files in milliseconds!', { size: 8.5, weight: 700, fill: C.cyan });
+
+  return {
+    html: svg(640, 230, g),
+    caption: 'Instead of hosting separate 16GB models for each task, one frozen base model can dynamically serve hundreds of specialized 32MB LoRA adapters.'
+  };
+}
+
+function q12WeightMerging() {
+  let g = T(320, 20, 'Production Zero-Latency Deployment: W_merged = W₀ + (α/r)·B·A', { size: 14, weight: 800, fill: '#fff' });
+
+  // Two columns: Left = Inference with Separate Adapter, Right = Inference Merged
+  // Left Box
+  g += rect(30, 45, 275, 140, { fill: 'rgba(30, 41, 59, 0.4)', stroke: 'rgba(148,163,184,0.3)', rx: 8 });
+  g += T(167, 65, 'During Development (LoRA Active)', { size: 11, weight: 700, fill: C.muted });
+  g += rect(50, 80, 100, 30, { fill: 'rgba(59, 130, 246, 0.15)', stroke: C.blue, rx: 4 });
+  g += T(100, 95, 'W₀ (Frozen)', { size: 8.5, fill: C.blue, weight: 700 });
+  g += T(165, 95, '+', { size: 12, fill: C.muted, weight: 800 });
+  g += rect(180, 80, 105, 30, { fill: 'rgba(6, 182, 212, 0.15)', stroke: C.cyan, rx: 4 });
+  g += T(232, 95, '(α/r)·B·A (LoRA)', { size: 8, fill: C.cyan, weight: 700, mono: true });
+
+  g += T(167, 130, '⚠️ 2 Matrix Multiplications per Layer', { size: 8.5, fill: C.amber, weight: 600 });
+  g += T(167, 146, 'Slightly higher compute & memory latency', { size: 7.5, fill: C.dim });
+  g += T(167, 168, 'Great for prototyping & multi-tenancy', { size: 8, fill: C.muted, italic: true });
+
+  // Center Merge Arrow
+  g += arrow(305, 115, 335, 115, 'emerald', 2.5);
+
+  // Right Box
+  g += rect(335, 45, 275, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 65, 'Production Deployed (Merged)', { size: 11, weight: 800, fill: C.emerald });
+  g += rect(365, 80, 215, 32, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald, rx: 4, sw: 1.2 });
+  g += T(472, 96, 'W_merged = W₀ + (α/r)·BA', { size: 9.5, fill: '#86efac', weight: 800, mono: true });
+
+  g += T(472, 130, '⚡ Exact Same Architecture & Shapes', { size: 8.5, fill: C.emerald, weight: 800 });
+  g += T(472, 146, 'ZERO added compute • ZERO latency penalty', { size: 8, fill: '#fff', weight: 700 });
+  g += T(472, 168, 'Works with vLLM, TensorRT-LLM, llama.cpp', { size: 8, fill: C.muted, italic: true });
+
+  // Merge code snippet preview
+  g += rect(80, 196, 480, 22, { fill: 'rgba(2, 6, 23, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(320, 207, 'Python: model = model.merge_and_unload() # Folds adapters into base weights permanently', { size: 8, fill: '#a5f3fc', mono: true });
+
+  return {
+    html: svg(640, 228, g),
+    caption: 'By adding (α/r)·B·A directly to W₀ prior to deployment, LoRA introduces zero latency penalty in production serving.'
+  };
+}
+
+function q12QloraQuantization() {
+  let g = T(320, 20, 'QLoRA: 4-Bit NormalFloat (NF4), Double Quantization & Paged Optimizers', { size: 14, weight: 800, fill: '#fff' });
+
+  // 3 Pillar Columns
+  const pillars = [
+    {
+      title: '1. NF4 Data Type',
+      subtitle: 'Information-Theoretic Optimal',
+      desc: 'Weights follow a normal distribution. NF4 bins have equal probability area under the Gaussian bell curve.',
+      color: C.cyan,
+      x: 30
+    },
+    {
+      title: '2. Double Quantization',
+      subtitle: 'Quantizing Quant Constants',
+      desc: 'Quantizes 32-bit block scales to 8-bit, saving 0.37 bits per parameter (~3GB VRAM savings on 65B model).',
+      color: C.amber,
+      x: 230
+    },
+    {
+      title: '3. Paged Optimizers',
+      subtitle: 'Zero CUDA OOM Spikes',
+      desc: 'Uses CUDA Unified Memory to automatically page memory spikes to CPU RAM during long sequence training.',
+      color: C.emerald,
+      x: 430
+    }
+  ];
+
+  pillars.forEach(p => {
+    g += rect(p.x, 44, 180, 120, { fill: tint(p.color, 0.08), stroke: p.color, rx: 6, sw: 1.2 });
+    g += T(p.x + 90, 64, p.title, { size: 10.5, weight: 800, fill: p.color });
+    g += T(p.x + 90, 80, p.subtitle, { size: 7.5, fill: '#fff', weight: 600 });
+    g += T(p.x + 90, 102, p.desc.slice(0, 30), { size: 7.5, fill: C.muted });
+    g += T(p.x + 90, 116, p.desc.slice(30, 62), { size: 7.5, fill: C.muted });
+    g += T(p.x + 90, 130, p.desc.slice(62), { size: 7.5, fill: C.muted });
+  });
+
+  // Bottom impact box
+  g += rect(30, 175, 580, 42, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(320, 190, '🏆 The Result: Fine-tune a 70B parameter LLM on a single 48GB GPU (or 8B on a 12GB laptop!)', { size: 9.5, weight: 800, fill: C.emerald });
+  g += T(320, 205, 'Maintains 99.3%+ full 16-bit fine-tuning task performance with zero accuracy compromise.', { size: 8, fill: '#86efac' });
+
+  return {
+    html: svg(640, 226, g),
+    caption: 'QLoRA compresses the base model into 4-bit NormalFloat while training full 16-bit LoRA adapters, enabling LLM fine-tuning on consumer hardware.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -2059,7 +2300,8 @@ const VISUALS = {
   'quest-8': [q8Subwords, q8EmbeddingMatrix, q8Permutation, q8RoPE],
   'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache],
   'quest-10': [q10Unembedding, q10Temperature, q10TopKvsTopP, q10AutoregressiveLoop, q10RepetitionPenalty],
-  'quest-11': [q11PretrainVsSFT, q11ChatMLTemplate, q11RlhfPipeline, q11DpoLossDynamics, q11SafetyTaxTradeoff]
+  'quest-11': [q11PretrainVsSFT, q11ChatMLTemplate, q11RlhfPipeline, q11DpoLossDynamics, q11SafetyTaxTradeoff],
+  'quest-12': [q12VramExplosion, q12MatrixDecomposition, q12AdapterSwitching, q12WeightMerging, q12QloraQuantization]
 };
 
 let activeCleanups = [];

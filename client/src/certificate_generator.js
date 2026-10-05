@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 11,
+    totalQuests = 12,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -211,14 +211,15 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'VIII', icon: '🔤', title: 'Tokenization', tag: 'BPE & RoPE Embeddings' },
     { num: 'IX', icon: '🧱', title: 'GPT Decoder', tag: 'Causal Mask & SwiGLU' },
     { num: 'X', icon: '🎲', title: 'Generation Engine', tag: 'Sampling & Top-P Nucleus' },
-    { num: 'XI', icon: '🛡️', title: 'Alignment & DPO', tag: 'ChatML & Preference Tuning' }
+    { num: 'XI', icon: '🛡️', title: 'Alignment & DPO', tag: 'ChatML & Preference Tuning' },
+    { num: 'XII', icon: '🎛️', title: 'PEFT & LoRA', tag: 'Low-Rank & QLoRA' }
   ];
 
   ctx.save();
 
-  // Split into Row 1 (6 quests) and Row 2 (5 quests)
+  // Symmetrical 6x2 grid (6 in row 1, 6 in row 2)
   const row1 = quests.slice(0, 6);
-  const row2 = quests.slice(6, 11);
+  const row2 = quests.slice(6, 12);
 
   const cardWidth = 205;
   const cardHeight = 98;

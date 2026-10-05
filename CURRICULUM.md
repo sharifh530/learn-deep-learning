@@ -294,9 +294,64 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🎛️ Quest 12: Parameter-Efficient Fine-Tuning (PEFT, LoRA & QLoRA)
+- **The Concept**:
+  How to fine-tune 8B-to-70B parameter foundational models on consumer hardware without blowing up GPU VRAM:
+  - **The VRAM Wall:** Full Fine-Tuning requires storing 16-bit weights, 16-bit gradients, and 32-bit Adam optimizer states ($m_t, v_t$). An 8B model requires **>72GB of VRAM**, demanding $30,000+ datacenter clusters!
+  - **The Intrinsic Rank Hypothesis:** Weight updates $\Delta W$ reside in a low-dimensional subspace. Instead of modifying all $d_{\text{out}} \times d_{\text{in}}$ weights, decompose into two bottleneck matrices:
+    $$\Delta W = B \times A \quad \text{where } A \in \mathbb{R}^{r \times d_{\text{in}}}, \; B \in \mathbb{R}^{d_{\text{out}} \times r}, \; r \ll d$$
+  - **Forward Pass & Scaling:**
+    $$h = W_0 x + \frac{\alpha}{r} (B \times A) x$$
+  - **The Zero-Initialization Invariance Rule ($B = \mathbf{0}$):** Matrix $A$ is initialized with random Gaussian noise (Kaiming), and Matrix $B$ is strictly initialized to **zeros** ($\mathbf{0}$). Thus, $\Delta W = 0 \times A = 0$ at step 0, ensuring zero catastrophic forgetting before training commences!
+  - **Zero-Latency Production Merging:** In production, weights are permanently folded:
+    $$W_{\text{merged}} = W_0 + \frac{\alpha}{r} (B \times A)$$
+    Eliminating all extra runtime matrix multiplications with 0.00ms latency overhead!
+  - **QLoRA (4-Bit NormalFloat Quantization):** Compresses the frozen base model to 4-bit NF4 (Gaussian quantile bins), Double Quantization (saving 0.37 bits/param), and Paged Optimizers, allowing a 70B model to be trained on a single 48GB GPU!
+- **The Interactive Sandbox**:
+  - **Matrix Factorization & Rank Explorer:** Interactive bottleneck rank ($r \in [1, 64]$) and scaling ($\alpha$) sliders with live parameter count comparison and animated forward pass flowchart.
+  - **Gradient Step Simulator:** Simulates 50 LoRA batches, tracking task loss drop and $\|B\|_F$ Frobenius norm expansion from zero.
+  - **VRAM & QLoRA Quantization Studio:** Compares FP16 vs INT8 vs QLoRA NF4 memory footprints alongside a real-time GPU hardware feasibility matrix.
+  - **Multi-Tenant Hot-Swapping & Zero-Latency Merging:** Hot-swap between Medical, Coding, Legal, and Creative adapters in <2ms, or trigger production weight merging with copyable PyTorch code.
+- **Hands-On Python (PyTorch)**:
+  ```python
+  import torch
+  import torch.nn as nn
+  import math
+
+  class LoRALinear(nn.Module):
+      def __init__(self, in_features, out_features, rank=8, alpha=16, dropout=0.05):
+          super().__init__()
+          # 1. Frozen base linear projection (W0)
+          self.base = nn.Linear(in_features, out_features, bias=False)
+          self.base.weight.requires_grad = False
+
+          # 2. Low-rank trainable adapters: A (down) and B (up)
+          self.lora_A = nn.Parameter(torch.empty(rank, in_features))
+          self.lora_B = nn.Parameter(torch.zeros(out_features, rank))  # Zero init!
+          nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+
+          self.scaling = alpha / rank
+          self.dropout = nn.Dropout(p=dropout)
+
+      def forward(self, x):
+          # Dual-branch forward: W0(x) + (alpha/r) * B(A(dropout(x)))
+          base_out = self.base(x)
+          lora_delta = (self.dropout(x) @ self.lora_A.T) @ self.lora_B.T
+          return base_out + lora_delta * self.scaling
+
+      def merge_weights(self):
+          # Production zero-latency weight fold: W_merged = W0 + (alpha/r) * B * A
+          delta_w = (self.lora_B @ self.lora_A) * self.scaling
+          self.base.weight.data += delta_w
+          self.lora_A.requires_grad = False
+          self.lora_B.requires_grad = False
+  ```
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 12: Parameter-Efficient Fine-Tuning (PEFT & LoRA):** Low-Rank decomposition ($W_0 + B \times A$) and 4-bit quantization (QLoRA).
-- **Quest 13: Reasoning Models & Test-Time Compute:** DeepSeek-R1, Chain-of-Thought `<think>` scratchpads, and Test-Time Scaling.
+- **Quest 13: Reasoning Models & Test-Time Compute:** DeepSeek-R1, Chain-of-Thought `<think>` scratchpads, Process Reward Models (PRMs), and Test-Time Scaling.
+- **Quest 14: Agentic Tool Use & Function Calling:** JSON schemas, function dispatching, ReAct loops, and multi-agent coordination.
 
 
 ---

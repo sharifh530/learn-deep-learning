@@ -474,6 +474,55 @@ print(f"DPO Loss: {loss.item():.4f}, Margin: {r_win - r_lose:+.3f}")
         answer: "A",
         explanation: "Osu! Rafailov et al. (2023) showed that under the Bradley-Terry preference model, the ground-truth optimal reward can be extracted directly from policy and reference log-probabilities, eliminating the unstable reward model and PPO loop!"
       }
+    },
+
+    'quest-12': {
+      title: 'Parameter-Efficient Fine-Tuning: LoRA & QLoRA',
+      eli10: `🎛️ **The Masterpiece Canvas & The Transparent Acetate Overlay (LoRA & QLoRA):**\n\nHow do we teach a 70-billion-parameter LLM new skills on a consumer desktop GPU without blowing up our VRAM?\n\n1. **The VRAM Wall:** When you train all weights (Full Fine-Tuning), you must store 16-bit weights, 16-bit gradients, and 32-bit Adam optimizer states ($m_t$ and $v_t$). An 8B model requires **>72GB of VRAM**, demanding $30,000 datacenter clusters!\n2. **The Intrinsic Rank Hypothesis:** During task adaptation, weight updates ($\\Delta W$) have very low \"intrinsic dimension\". Instead of modifying $d_{\\text{out}} \\times d_{\\text{in}}$ matrix elements directly, we decompose it into two tiny bottleneck matrices:\n   $$\\Delta W = B \\times A \\quad \\text{where } A \\in \\mathbb{R}^{r \\times d_{\\text{in}}}, \\; B \\in \\mathbb{R}^{d_{\\text{out}} \\times r}, \\; r \\ll d$$\n3. **Forward Pass & Scaling:**\n   $$h = W_0 x + \\frac{\\alpha}{r} (B \\times A) x$$\n   - Base weights $W_0$ remain **100% frozen** (zero optimizer states!).\n   - Matrix $A$ is initialized with Gaussian noise (Kaiming).\n   - Matrix $B$ is initialized to **strictly ZERO** ($\\mathbf{0}$), ensuring $\\Delta W = 0$ at step 0 so the model behaves identically to the base LLM until training begins!\n4. **QLoRA Quantization:** Compresses the frozen base model to **4-bit NormalFloat (NF4)**, adds Double Quantization (saving 0.37 bits/param), and Paged Optimizers (paging memory spikes to CPU RAM), enabling a 70B LLM to be fine-tuned on a single 48GB GPU!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+import math
+
+class LoRALinear(nn.Module):
+    def __init__(self, in_features, out_features, rank=8, alpha=16, dropout=0.05):
+        super().__init__()
+        # 1. Frozen base linear projection (W0)
+        self.base = nn.Linear(in_features, out_features, bias=False)
+        self.base.weight.requires_grad = False
+        
+        # 2. Low-rank trainable adapters: A (down) and B (up)
+        self.lora_A = nn.Parameter(torch.empty(rank, in_features))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))  # Zero init!
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        
+        self.scaling = alpha / rank
+        self.dropout = nn.Dropout(p=dropout)
+        
+    def forward(self, x):
+        # Dual-branch forward: W0(x) + (alpha/r) * B(A(dropout(x)))
+        base_out = self.base(x)
+        lora_delta = (self.dropout(x) @ self.lora_A.T) @ self.lora_B.T
+        return base_out + lora_delta * self.scaling
+
+layer = LoRALinear(4096, 4096, rank=8, alpha=16)
+frozen_p = sum(p.numel() for p in layer.parameters() if not p.requires_grad)
+trainable_p = sum(p.numel() for p in layer.parameters() if p.requires_grad)
+print(f"Frozen Base: {frozen_p:,} | Trainable LoRA: {trainable_p:,} ({trainable_p/frozen_p*100:.2f}%)")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: LoRA Matrix Initialization**\n\nWhy is LoRA adapter matrix B initialized to all zeros (zeros_), while matrix A is initialized with random Gaussian noise?",
+        options: [
+          "A) Because Python sets variables to 0 by default",
+          "B) So that ΔW = B × A = 0 at step 0, preserving the base model's exact initial capabilities before fine-tuning starts",
+          "C) To prevent division by zero in Softmax",
+          "D) To save VRAM on the GPU"
+        ],
+        answer: "B",
+        explanation: "Osu! If B was initialized randomly, B × A would add random noise to the model's pre-trained weights at step 0, immediately destroying its reasoning capabilities. Zero-initializing B guarantees that ΔW starts at exactly zero!"
+      }
     }
   },
 
@@ -610,6 +659,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('alignment') || hasPhrase('sft') || hasPhrase('dpo') || hasPhrase('rlhf') || hasPhrase('chatml') || hasPhrase('preference') || hasPhrase('reward') || hasPhrase('jailbreak') || hasPhrase('refusal') || hasPhrase('quest 11')) {
     return DOJO_KNOWLEDGE.quests['quest-11'].eli10;
+  }
+  if (hasPhrase('peft') || hasPhrase('lora') || hasPhrase('qlora') || hasPhrase('quantiz') || hasPhrase('low-rank') || hasPhrase('rank') || hasPhrase('adapter') || hasPhrase('nf4') || hasPhrase('quest 12')) {
+    return DOJO_KNOWLEDGE.quests['quest-12'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

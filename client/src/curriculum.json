@@ -1773,6 +1773,159 @@
           "Over-refusal alignment: Training on naive negative examples makes the model refuse benign queries like 'Kill this background terminal process'."
         ]
       }
+    },
+    {
+      "id": "quest-12",
+      "number": 12,
+      "title": "Parameter-Efficient Fine-Tuning: LoRA & QLoRA",
+      "subtitle": "Low-Rank Adaptation, Weight Freezing & 4-Bit NormalFloat Quantization",
+      "tag": "LLM FINE-TUNING",
+      "icon": "🎛️",
+      "xp": 550,
+      "story": "Why does fine-tuning a 70-billion-parameter LLM traditionally require a multi-million-dollar data center cluster? In full fine-tuning, every single weight matrix W in R^{d x k} requires storing optimizer states (Adam first and second moments), which balloons VRAM consumption from 140 GB to over 1.2 Terabytes! Enter Parameter-Efficient Fine-Tuning (PEFT) and Low-Rank Adaptation (LoRA): Hu et al. (2021) discovered that the weight updates Delta W have an extremely low intrinsic rank. Instead of updating the massive d x k matrix directly, we freeze the original pre-trained foundation W_0 and factorize Delta W into two featherweight matrices B x A (where rank r << d). Combined with 4-bit NormalFloat (NF4) quantization (QLoRA), you can adapt a massive 70B parameter model on a single consumer GPU!",
+      "mentalModel": "The Stained Glass Window & The Transparent Acetate Overlay: Imagine an ancient, priceless stained-glass cathedral window (W_0). If a patron requests custom changes, you would never smash and re-melt the glass! Instead, you leave the cathedral glass completely frozen, lay a thin transparent plastic film over it (Delta W), and paint only a few brushstrokes (B x A). At inference time, sunlight passes through both simultaneously (h = W_0 x + (alpha/r) B A x). If you need to switch tasks from a Python coder to a Medical assistant, you simply swap the featherweight plastic sheet in milliseconds without touching the foundation!",
+      "interactiveType": "peft_lora_lab",
+      "interactiveConfig": {
+        "models": [
+          {
+            "id": "llama3_8b",
+            "name": "Llama 3 (8B)",
+            "d_model": 4096,
+            "layers": 32,
+            "totalParams": 8030000000,
+            "baseVramFp16": 16.1
+          },
+          {
+            "id": "llama3_70b",
+            "name": "Llama 3 (70B)",
+            "d_model": 8192,
+            "layers": 80,
+            "totalParams": 70600000000,
+            "baseVramFp16": 141.2
+          },
+          {
+            "id": "mistral_7b",
+            "name": "Mistral (7B)",
+            "d_model": 4096,
+            "layers": 32,
+            "totalParams": 7240000000,
+            "baseVramFp16": 14.5
+          }
+        ],
+        "defaultRank": 8,
+        "defaultAlpha": 16,
+        "availableModules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        "defaultModules": ["q_proj", "v_proj"]
+      },
+      "codeSnippet": "import torch\nimport torch.nn as nn\nimport math\n\nclass LoRALinear(nn.Module):\n    \"\"\"Low-Rank Adaptation (LoRA) Linear Layer (Hu et al., 2021).\"\"\"\n    def __init__(self, in_features, out_features, rank=8, lora_alpha=16, dropout=0.05):\n        super().__init__()\n        self.rank = rank\n        self.lora_alpha = lora_alpha\n        self.scaling = lora_alpha / rank\n        \n        # 1. Frozen pre-trained base weight (W_0)\n        self.base_layer = nn.Linear(in_features, out_features, bias=False)\n        self.base_layer.weight.requires_grad = False  # FROZEN FOUNDATION!\n        \n        # 2. Trainable low-rank adapter matrices: A (r x in) and B (out x r)\n        self.lora_A = nn.Parameter(torch.empty(rank, in_features))\n        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))  # Zero initialized\n        self.dropout = nn.Dropout(p=dropout)\n        \n        # Initialize A with Kaiming uniform (B is zeros, so Delta W starts at 0!)\n        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))\n        \n    def forward(self, x):\n        # Standard forward pass through frozen base weight\n        base_out = self.base_layer(x)\n        # Low-rank delta forward: (x @ A.T) @ B.T * scaling\n        lora_out = (self.dropout(x) @ self.lora_A.T) @ self.lora_B.T * self.scaling\n        return base_out + lora_out\n\n# Test with dimension 4096 -> 4096 (standard Llama 3 hidden layer)\nlayer = LoRALinear(4096, 4096, rank=8, lora_alpha=16)\nx = torch.randn(2, 5, 4096)\noutput = layer(x)\n\nbase_params = 4096 * 4096\nlora_params = (4096 * 8) + (8 * 4096)\nprint(f\"Frozen Base Parameters: {base_params:,}\")\nprint(f\"Trainable LoRA Parameters: {lora_params:,} ({lora_params / base_params * 100:.2f}% of base!)\")\nprint(f\"Output Shape: {list(output.shape)}\")",
+      "quiz": [
+        {
+          "question": "Why is matrix B initialized to all zeros (zeros) while matrix A is initialized with random Kaiming/Gaussian values in LoRA?",
+          "options": [
+            "Because PyTorch cannot allocate memory for matrix B if it contains non-zero numbers",
+            "So that ΔW = B × A equals exactly zero at the start of fine-tuning, preserving the model's pre-trained performance perfectly before training begins",
+            "Because matrix B represents the bias vector, and all neural network biases must be zero",
+            "To prevent the GPU from overheating during matrix multiplication"
+          ],
+          "answer": 1,
+          "explanation": "If ΔW were initialized with random values, it would inject immediate noise into the pre-trained model and destroy its zero-shot capability on step 0. Initializing B to all zeros ensures ΔW = 0 initially, so training starts smoothly from the exact base model baseline."
+        },
+        {
+          "question": "What is the primary advantage of weight merging (W_merged = W_0 + (α/r) * B × A) before deploying a LoRA-fine-tuned model to production?",
+          "options": [
+            "It eliminates all runtime latency overhead, allowing the merged model to serve inference at the exact same speed as the original base model without extra matrix operations",
+            "It automatically translates the model's vocabulary into 100 languages",
+            "It compresses the model's weights into a single integer",
+            "It makes the model run without electricity"
+          ],
+          "answer": 0,
+          "explanation": "Because matrix multiplication is distributive (W_0 x + BAx = (W_0 + BA)x), we can pre-compute the merged weight matrix W_merged before serving. At inference time, the model executes a single linear projection with zero extra latency overhead!"
+        },
+        {
+          "question": "How does QLoRA (Dettmers et al., 2023) achieve 4-bit quantization without causing significant accuracy degradation compared to standard 16-bit fine-tuning?",
+          "options": [
+            "It deletes 75% of the Transformer decoder layers",
+            "It uses 4-bit NormalFloat (NF4), which spaces quantization bins to match the empirical Gaussian bell-curve distribution of neural network weights, paired with Double Quantization to compress quantization constants",
+            "It converts all weights into ASCII text characters",
+            "It restricts the model to generating only 4-letter words"
+          ],
+          "answer": 1,
+          "explanation": "Pre-trained neural weights follow a normal (Gaussian) distribution. Standard integer quantization wastes bins on empty tails. NF4 allocates equal probability mass to each of the 16 quant bins, preserving information density and matching 16-bit performance."
+        }
+      ],
+      "lessonContent": {
+        "title": "Parameter-Efficient Fine-Tuning: LoRA, Matrix Decomposition & QLoRA",
+        "sections": [
+          {
+            "id": "sec-1",
+            "title": "1. The VRAM Wall: Why Full Fine-Tuning is Mathematically Prohibitive",
+            "content": "When fine-tuning a Large Language Model with standard backpropagation, the GPU memory (VRAM) required is vastly higher than the model weights alone. Consider a 70-billion-parameter model in 16-bit precision (FP16): the weights occupy 140 GB. However, during training, the optimizer must store: 1) Model weights (2 bytes/param), 2) Gradients (2 bytes/param), 3) Adam first moment momentum (4 bytes/param), and 4) Adam second moment variance (4 bytes/param), plus activations. This totals 16 to 20 bytes per parameter—exploding to over 1.2 Terabytes of VRAM! Full fine-tuning of frontier models requires multi-node clusters costing hundreds of thousands of dollars. We need a way to adapt models without modifying all 70 billion parameters.",
+            "visualKey": "q12VramExplosion"
+          },
+          {
+            "id": "sec-2",
+            "title": "2. The Intrinsic Rank Hypothesis: Decomposing ΔW = B × A",
+            "content": "In 2021, Edward Hu and researchers at Microsoft made a startling discovery: when an LLM adapts to a specific downstream task (like coding, legal analysis, or medical dialogue), the weight update matrix ΔW does not explore all d dimensions. Instead, it has a very low 'intrinsic rank' (often r = 4, 8, or 16). Low-Rank Adaptation (LoRA) freezes the original pre-trained weight matrix W_0 in R^{d x k} and factorizes the update into two tiny low-rank matrices: ΔW = B x A, where B in R^{d x r} and A in R^{r x k}. For a 4096 x 4096 attention projection, full tuning requires 16,777,216 parameters; with rank r = 8, LoRA requires only (4096 x 8) + (8 x 4096) = 65,536 parameters—a 99.6% parameter reduction!",
+            "visualKey": "q12MatrixDecomposition"
+          },
+          {
+            "id": "sec-3",
+            "title": "3. LoRA Hyperparameters: Rank (r), Alpha (α), and Dropout",
+            "content": "Configuring LoRA involves three key hyperparameters: 1) Rank (r): The bottleneck dimension. For standard tasks, r = 8 to 16 captures 95%+ of full fine-tuning performance; for complex reasoning, r = 32 or 64 is used. 2) Alpha (α): The scaling constant in h = W_0 x + (α/r) BAx. Alpha acts like an effective learning rate multiplier. When tuning r, keeping the ratio α/r constant ensures you do not need to re-tune learning rates. 3) Target Modules: In early LoRA, only attention Query and Value matrices (q_proj, v_proj) were adapted. Modern research shows that applying LoRA to all linear layers (including MLP up/down projections) yields superior accuracy.",
+            "visualKey": "q12AdapterSwitching"
+          },
+          {
+            "id": "sec-4",
+            "title": "4. Zero-Inference Latency: Production Weight Merging",
+            "content": "A major operational benefit of LoRA is that it introduces zero additional inference latency. Because matrix multiplication is distributive: h = W_0 x + (α/r) BAx = (W_0 + (α/r) BA) x. When fine-tuning finishes, we can compute W_merged = W_0 + (α/r) BA once and overwrite the base weights in memory. The deployed model has the exact same architecture, tensor shapes, and inference latency as the base model! Furthermore, for multi-tenant SaaS serving, a single frozen base model can sit in GPU VRAM while switching between hundreds of lightweight 20 MB adapter files on the fly for different customers.",
+            "visualKey": "q12WeightMerging"
+          },
+          {
+            "id": "sec-5",
+            "title": "5. QLoRA: 4-Bit NormalFloat (NF4), Double Quantization & Paged Optimizers",
+            "content": "In 2023, Tim Dettmers et al. introduced QLoRA, pushing parameter efficiency to the extreme. QLoRA compresses the frozen base model from 16-bit down to 4-bit precision using NormalFloat4 (NF4)—an information-theoretically optimal quantizer for normally distributed weights. During the forward pass, 4-bit weights are de-quantized to 16-bit on the fly for computation with the 16-bit LoRA adapter. Paired with Double Quantization (which quantizes the quantization constants) and Paged Optimizers (which page optimizer memory to CPU RAM during memory spikes), QLoRA reduced the VRAM requirement to fine-tune a 70B model from 780 GB down to just 48 GB—fitting onto two consumer RTX 3090/4090 GPUs!",
+            "visualKey": "q12QloraQuantization"
+          }
+        ],
+        "formulaCard": {
+          "title": "The LoRA Forward Pass & Low-Rank Factorization",
+          "equation": "h = W_0 x + \\Delta W x = W_0 x + \\frac{\\alpha}{r} (B A) x, \\quad W_0 \\in \\mathbb{R}^{d \\times k}, \\quad B \\in \\mathbb{R}^{d \\times r}, \\quad A \\in \\mathbb{R}^{r \\times k} \\quad (r \\ll d, k)",
+          "breakdown": [
+            {
+              "symbol": "W_0",
+              "meaning": "Frozen pre-trained weight matrix (requires_grad = False)"
+            },
+            {
+              "symbol": "B, A",
+              "meaning": "Trainable low-rank adapter matrices (B initialized to zeros, A to Kaiming uniform)"
+            },
+            {
+              "symbol": "r",
+              "meaning": "Adapter rank bottleneck dimension (typically 4, 8, 16, or 32)"
+            },
+            {
+              "symbol": "\\alpha",
+              "meaning": "Constant scaling factor modulating adapter influence relative to rank"
+            },
+            {
+              "symbol": "x",
+              "meaning": "Input activation tensor from previous layer"
+            }
+          ]
+        },
+        "takeaways": [
+          "Full fine-tuning requires 16-20 bytes per parameter for optimizer states, creating a massive VRAM barrier.",
+          "LoRA freezes base weights W_0 and updates low-rank factorized matrices B x A with rank r << d.",
+          "LoRA reduces trainable parameters by over 99% while matching full fine-tuning performance.",
+          "Pre-computed weight merging (W_0 + (α/r) BA) ensures zero added inference latency in production.",
+          "QLoRA quantizes frozen base weights to 4-bit NormalFloat (NF4), enabling 70B fine-tuning on consumer GPUs."
+        ],
+        "commonPitfalls": [
+          "Initializing matrix B randomly instead of with zeros: Injects high-variance noise on step 0, destroying pre-trained performance.",
+          "Omitting the scaling factor alpha/r: Changing rank r will inadvertently change the effective learning rate.",
+          "Fine-tuning only Q and V projections on complex reasoning tasks: Applying LoRA across all linear layers (including MLP projections) yields significantly higher benchmark scores."
+        ]
+      }
     }
   ]
 }
