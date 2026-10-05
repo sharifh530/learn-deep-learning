@@ -8,6 +8,7 @@ import 'katex/dist/katex.min.css';
 import { getSectionVisual, mountVisual, disposeVisuals } from './lesson_visuals.js';
 import { generateDiplomaCanvas, downloadDiplomaPng, generateVerificationCode } from './certificate_generator.js';
 import { exportProgress, importProgress, resetProgress } from './progress_manager.js';
+import { soundFx } from './sound_effects.js';
 
 // --- State Management ---
 const state = {
@@ -79,6 +80,11 @@ const dom = {
   diplomaNavPill: document.getElementById('diploma-nav-pill'),
   sidebarDiplomaTrigger: document.getElementById('sidebar-diploma-trigger'),
   sidebarDiplomaStatus: document.getElementById('sidebar-diploma-status'),
+  btnToggleSound: document.getElementById('btn-toggle-sound'),
+  audioIcon: document.getElementById('audio-icon'),
+  audioText: document.getElementById('audio-text'),
+  settingsAudioToggle: document.getElementById('settings-audio-toggle'),
+  settingsAudioStatus: document.getElementById('settings-audio-status'),
   // Sidebar
   questListContainer: document.getElementById('quest-list-container'),
   questCompletionCount: document.getElementById('quest-completion-count'),
@@ -177,6 +183,7 @@ function updateXpDisplay() {
 function awardXp(amount, reason = '') {
   state.userXp += amount;
   updateXpDisplay();
+  soundFx.playXpGain();
   confetti({
     particleCount: 60,
     spread: 60,
@@ -239,6 +246,9 @@ function renderQuestList() {
     `;
 
     card.addEventListener('click', () => {
+      if (state.activeQuestId !== quest.id) {
+        soundFx.playDojoGong();
+      }
       state.activeQuestId = quest.id;
       renderQuestList();
       renderActiveQuest();
@@ -1325,6 +1335,7 @@ function renderDoodleArenaWidget(quest) {
     ctx.moveTo(x, y);
   };
 
+  let strokeTick = 0;
   const draw = (e) => {
     if (!drawing) return;
     const rect = canvas.getBoundingClientRect();
@@ -1332,6 +1343,11 @@ function renderDoodleArenaWidget(quest) {
     const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
     ctx.lineTo(x, y);
     ctx.stroke();
+
+    strokeTick++;
+    if (strokeTick % 6 === 0) {
+      soundFx.playDoodleStroke();
+    }
 
     triggerPredictionDebounced();
   };
@@ -1617,6 +1633,7 @@ function renderDoodleArenaWidget(quest) {
     const btn1 = container.querySelector('#btn-train-1-epoch');
     const btn5 = container.querySelector('#btn-train-5-epochs');
     btn1.disabled = true; btn5.disabled = true;
+    soundFx.playTrainingStep();
 
     try {
       if (state.backendOnline) {
@@ -1627,6 +1644,7 @@ function renderDoodleArenaWidget(quest) {
         });
         const data = await res.json();
         if (data.success) {
+          soundFx.playEpochBell();
           container.querySelector('#train-stat-epoch').textContent = data.current_epoch;
           container.querySelector('#train-stat-loss').textContent = data.loss.toFixed(4);
           container.querySelector('#train-stat-acc').textContent = `${data.accuracy}%`;
@@ -4023,6 +4041,7 @@ function renderQuiz(quest) {
         optsContainer.querySelectorAll('.quiz-opt-btn').forEach(b => b.disabled = true);
 
         if (optIdx === q.answer) {
+          soundFx.playQuizCorrect();
           btn.classList.add('correct');
           feedbackEl.style.display = 'block';
           feedbackEl.style.background = 'rgba(16, 185, 129, 0.2)';
@@ -4037,11 +4056,15 @@ function renderQuiz(quest) {
 
           if (!wasAllCompleteBefore && state.completedQuests.size === state.curriculum.quests.length) {
             setTimeout(() => {
+              soundFx.playDiplomaFanfare();
               confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 } });
               alert('🎉 CONGRATULATIONS!\nYou have conquered all 7 Deep Learning Quests!\nSensei Tensor has conferred your Master Diploma! Click "Diploma" in the navbar to claim and download your credential.');
             }, 600);
+          } else {
+            soundFx.playQuestComplete();
           }
         } else {
+          soundFx.playQuizWrong();
           btn.classList.add('wrong');
           feedbackEl.style.display = 'block';
           feedbackEl.style.background = 'rgba(244, 63, 94, 0.2)';
@@ -4601,6 +4624,7 @@ function setupTabs() {
       btn.classList.add('active');
       const targetContent = document.getElementById(`content-${tabName}`);
       if (targetContent) targetContent.classList.add('active');
+      soundFx.playBlip(620);
     });
   });
 }
@@ -4676,11 +4700,14 @@ function setupDiplomaModal() {
     renderDiplomaPreview();
     if (dom.diplomaModal) dom.diplomaModal.style.display = 'flex';
     if (state.completedQuests.size >= state.curriculum.quests.length) {
+      soundFx.playDiplomaFanfare();
       confetti({
         particleCount: 100,
         spread: 80,
         origin: { y: 0.6 }
       });
+    } else {
+      soundFx.playDojoGong();
     }
   };
 
@@ -4739,6 +4766,45 @@ function setupDiplomaModal() {
   }
 }
 
+// --- AUDIO CONTROLS ---
+function updateAudioUI() {
+  const isMuted = soundFx.isMuted;
+  if (dom.audioIcon) dom.audioIcon.textContent = isMuted ? '🔇' : '🔊';
+  if (dom.audioText) dom.audioText.textContent = isMuted ? 'Muted' : 'Audio';
+  if (dom.btnToggleSound) {
+    dom.btnToggleSound.classList.toggle('muted', isMuted);
+    dom.btnToggleSound.title = isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects';
+  }
+  if (dom.settingsAudioStatus) {
+    dom.settingsAudioStatus.textContent = isMuted ? '🔇 Muted' : '🔊 Enabled';
+  }
+}
+
+function setupAudioControls() {
+  updateAudioUI();
+
+  const handleToggle = () => {
+    soundFx.toggleMute();
+    updateAudioUI();
+  };
+
+  if (dom.btnToggleSound) {
+    dom.btnToggleSound.addEventListener('click', handleToggle);
+  }
+  if (dom.settingsAudioToggle) {
+    dom.settingsAudioToggle.addEventListener('click', handleToggle);
+  }
+
+  // Resume Web Audio context on first user click anywhere
+  const resumeAudio = () => {
+    soundFx.init();
+    window.removeEventListener('click', resumeAudio);
+    window.removeEventListener('keydown', resumeAudio);
+  };
+  window.addEventListener('click', resumeAudio, { once: true });
+  window.addEventListener('keydown', resumeAudio, { once: true });
+}
+
 // --- APP BOOTSTRAP ---
 function initApp() {
   updateXpDisplay();
@@ -4749,6 +4815,7 @@ function initApp() {
   setupCodeLab();
   setupAiTutor();
   setupSettings();
+  setupAudioControls();
   setupDiplomaModal();
   updateDiplomaStatus();
   updateTutorBadge();

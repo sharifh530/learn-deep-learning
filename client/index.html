@@ -45,6 +45,10 @@
         </div>
 
         <div class="nav-actions">
+          <button class="nav-btn btn-audio" id="btn-toggle-sound" title="Toggle Sound FX (Mute/Unmute)">
+            <span id="audio-icon">🔊</span>
+            <span class="btn-text" id="audio-text">Audio</span>
+          </button>
           <button class="nav-btn btn-diploma" id="btn-open-diploma" title="View Sensei Tensor Master Diploma">
             <span>🎓</span>
             <span class="btn-text">Diploma</span>
@@ -301,6 +305,13 @@
             <div class="form-group" style="margin-top: 0.5rem;">
               <label for="backend-url-input">Python Engine Endpoint:</label>
               <input type="text" id="backend-url-input" value="http://localhost:8000" class="form-control" />
+            </div>
+
+            <div class="form-group" style="margin-top: 0.8rem; display: flex; align-items: center; justify-content: space-between;">
+              <label for="settings-audio-toggle" style="margin-bottom: 0;">Retro Dojo Sound Effects (Web Audio):</label>
+              <button type="button" class="btn-secondary" id="settings-audio-toggle" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; cursor: pointer;">
+                <span id="settings-audio-status">🔊 Enabled</span>
+              </button>
             </div>
 
             <div class="settings-save-section" style="margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
