@@ -209,14 +209,15 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'VI', icon: '🐉', title: 'Regularization', tag: 'Dropout & Weight Decay' },
     { num: 'VII', icon: '⚡', title: 'Transformers', tag: 'QKV Self-Attention' },
     { num: 'VIII', icon: '🔤', title: 'Tokenization', tag: 'BPE & RoPE Embeddings' },
-    { num: 'IX', icon: '🧱', title: 'GPT Decoder', tag: 'Causal Mask & SwiGLU' }
+    { num: 'IX', icon: '🧱', title: 'GPT Decoder', tag: 'Causal Mask & SwiGLU' },
+    { num: 'X', icon: '🎲', title: 'Generation Engine', tag: 'Sampling & Top-P Nucleus' }
   ];
 
   ctx.save();
 
-  // Split into two balanced rows: Row 1 = 5 cards, Row 2 = 4 cards
+  // Split into two balanced rows of 5 cards each
   const row1 = quests.slice(0, 5);
-  const row2 = quests.slice(5);
+  const row2 = quests.slice(5, 10);
 
   const cardWidth = 240;
   const cardHeight = 98;

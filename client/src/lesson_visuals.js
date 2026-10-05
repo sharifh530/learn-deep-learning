@@ -1636,6 +1636,237 @@ function q9KVCache() {
   };
 }
 
+// ==========================================
+// QUEST 10: THE GENERATION ENGINE (SAMPLING)
+// ==========================================
+
+function q10Unembedding() {
+  let g = '';
+  g += T(320, 20, 'The Un-Embedding Projection: Hidden States to Vocabulary Logits', { size: 13, weight: 700, fill: C.text });
+
+  // 1. Hidden State Vector h
+  g += rect(30, 65, 110, 80, { fill: 'rgba(56, 189, 248, 0.12)', stroke: C.cyan, rx: 8 });
+  g += T(85, 88, 'Final Hidden State h', { size: 10, weight: 700, fill: C.cyan });
+  g += T(85, 106, 'Vector [1, 4096]', { size: 9, mono: true, fill: C.muted });
+  g += T(85, 126, 'Contextualized Token', { size: 8.5, fill: C.text });
+
+  // Arrow x W_U
+  g += arrow(145, 105, 195, 105, 'cyan', 2);
+  g += T(170, 92, '× W_U', { size: 10, mono: true, weight: 700, fill: C.cyan });
+
+  // 2. Un-Embedding Matrix W_U (4096 x 128k)
+  g += rect(200, 50, 140, 110, { fill: 'rgba(167, 139, 250, 0.12)', stroke: C.violet, rx: 8 });
+  g += T(270, 72, 'Un-Embedding Matrix', { size: 10.5, weight: 700, fill: C.violet });
+  g += T(270, 88, 'W_U ∈ ℝ^{d × V}', { size: 9.5, mono: true, fill: '#fff' });
+  g += T(270, 108, '4,096 × 128,000 Vocab', { size: 8.5, mono: true, fill: C.muted });
+  g += T(270, 128, '(Tied to Embedding Table)', { size: 8, fill: C.muted, italic: true });
+
+  // Arrow -> Logits
+  g += arrow(345, 105, 390, 105, 'emerald', 2);
+
+  // 3. Raw Logits Vector
+  g += rect(395, 45, 215, 120, { fill: 'rgba(15, 23, 42, 0.85)', stroke: C.emerald, rx: 8 });
+  g += T(502, 64, 'Raw Vocabulary Logits (z)', { size: 11, weight: 700, fill: C.emerald });
+  
+  const sampleLogits = [
+    { tok: '"alien"', val: '+4.2', bar: 75, col: C.cyan },
+    { tok: '"glowing"', val: '+3.7', bar: 62, col: C.cyan },
+    { tok: '"city"', val: '+3.3', bar: 54, col: C.cyan },
+    { tok: '"sandwich"', val: '+0.4', bar: 15, col: C.amber },
+    { tok: '"banana"', val: '−0.8', bar: 5, col: C.rose }
+  ];
+
+  sampleLogits.forEach((l, idx) => {
+    const y = 86 + idx * 14;
+    g += T(430, y, l.tok, { size: 8.5, mono: true, anchor: 'end', fill: C.text });
+    g += rect(436, y - 5, l.bar, 8, { fill: tint(l.col, 0.7), rx: 2 });
+    g += T(442 + l.bar, y, l.val, { size: 7.5, mono: true, anchor: 'start', fill: l.col });
+  });
+
+  g += T(320, 196, 'Logits are unconstrained real scores (−∞ to +∞). Softmax normalizes them into probabilities.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'The final token representation is multiplied by the transposed embedding matrix, producing 128,000 raw logit scores.'
+  };
+}
+
+function q10Temperature() {
+  let g = '';
+  g += T(320, 20, 'The Temperature Dial: Modulating Probability Entropy', { size: 13, weight: 700, fill: C.text });
+
+  const modes = [
+    {
+      title: 'Cold: T = 0.2',
+      sub: 'Rigid / Factual / Greedy',
+      col: C.cyan,
+      x: 30,
+      bars: [{ t: 'alien', p: 0.94 }, { t: 'glow', p: 0.04 }, { t: 'city', p: 0.02 }, { t: 'human', p: 0.00 }]
+    },
+    {
+      title: 'Balanced: T = 0.7',
+      sub: 'Natural / Human Variety',
+      col: C.emerald,
+      x: 230,
+      bars: [{ t: 'alien', p: 0.48 }, { t: 'glow', p: 0.28 }, { t: 'city', p: 0.16 }, { t: 'human', p: 0.08 }]
+    },
+    {
+      title: 'Hot: T = 1.8',
+      sub: 'Erratic / Hallucinatory',
+      col: C.rose,
+      x: 430,
+      bars: [{ t: 'alien', p: 0.28 }, { t: 'glow', p: 0.26 }, { t: 'city', p: 0.24 }, { t: 'human', p: 0.22 }]
+    }
+  ];
+
+  modes.forEach(m => {
+    g += rect(m.x, 45, 180, 135, { fill: 'rgba(15, 23, 42, 0.7)', stroke: m.col, rx: 8 });
+    g += T(m.x + 90, 64, m.title, { size: 11, weight: 700, fill: m.col });
+    g += T(m.x + 90, 78, m.sub, { size: 8.5, fill: C.muted, italic: true });
+
+    m.bars.forEach((b, idx) => {
+      const by = 100 + idx * 16;
+      g += T(m.x + 45, by, b.t, { size: 8.5, mono: true, anchor: 'end', fill: C.text });
+      const barW = Math.round(b.p * 90);
+      g += rect(m.x + 50, by - 6, barW, 9, { fill: tint(m.col, 0.75), rx: 2 });
+      g += T(m.x + 54 + barW, by, `${Math.round(b.p * 100)}%`, { size: 8, mono: true, anchor: 'start', fill: m.col, weight: 600 });
+    });
+  });
+
+  g += T(320, 198, 'Low T magnifies logit gaps (Argmax spike); High T flattens distribution toward equal random chance.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 215, g),
+    caption: 'Temperature divides logits before Softmax. T=0.2 is best for code and math; T=0.7 for conversation; T>1.5 produces hallucinations.'
+  };
+}
+
+function q10TopKvsTopP() {
+  let g = '';
+  g += T(320, 20, 'Top-K vs. Top-P (Nucleus) Sampling Comparison', { size: 13, weight: 700, fill: C.text });
+
+  // Left: Top-K (Static count)
+  g += rect(40, 45, 260, 135, { fill: 'rgba(15, 23, 42, 0.7)', stroke: C.amber, rx: 8 });
+  g += T(170, 65, 'Static Top-K (e.g. K = 4)', { size: 11, weight: 700, fill: C.amber });
+  g += T(170, 80, 'Always keeps fixed K candidates', { size: 8.5, fill: C.muted });
+  
+  const tkBars = [
+    { t: 'Paris', p: 0.94, keep: true },
+    { t: 'Rome', p: 0.03, keep: true },
+    { t: 'Lyon', p: 0.02, keep: true },
+    { t: 'Pizza', p: 0.01, keep: true },
+    { t: 'Banana', p: 0.00, keep: false }
+  ];
+  tkBars.forEach((b, idx) => {
+    const by = 100 + idx * 14;
+    g += T(95, by, b.t, { size: 8, mono: true, anchor: 'end', fill: b.keep ? C.text : C.dim });
+    g += rect(100, by - 5, b.p * 110, 8, { fill: b.keep ? C.amber : C.dim, rx: 2 });
+    g += T(235, by, b.keep ? '✓ Kept' : '✗ Cut', { size: 8, mono: true, fill: b.keep ? C.amber : C.rose });
+  });
+
+  // Right: Top-P (Dynamic Cumulative Mass)
+  g += rect(340, 45, 260, 135, { fill: 'rgba(34, 197, 94, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(470, 65, 'Dynamic Top-P Nucleus (p = 0.90)', { size: 11, weight: 700, fill: C.emerald });
+  g += T(470, 80, 'Slices cumulative probability mass', { size: 8.5, fill: C.muted });
+
+  const tpBars = [
+    { t: 'Paris', p: 0.94, cum: '94% >= 90%', keep: true },
+    { t: 'Rome', p: 0.03, cum: 'cut off', keep: false },
+    { t: 'Lyon', p: 0.02, cum: 'cut off', keep: false },
+    { t: 'Pizza', p: 0.01, cum: 'cut off', keep: false },
+    { t: 'Banana', p: 0.00, cum: 'cut off', keep: false }
+  ];
+  tpBars.forEach((b, idx) => {
+    const by = 100 + idx * 14;
+    g += T(395, by, b.t, { size: 8, mono: true, anchor: 'end', fill: b.keep ? C.text : C.dim });
+    g += rect(400, by - 5, b.p * 110, 8, { fill: b.keep ? C.emerald : C.dim, rx: 2 });
+    g += T(535, by, b.keep ? '✓ 1 Token!' : '✗ Cut off', { size: 8, mono: true, fill: b.keep ? C.emerald : C.dim });
+  });
+
+  g += T(320, 196, 'Top-P adapts dynamically: when confident, candidate set shrinks to 1; when creative, it widens smoothly.', { size: 10, fill: C.emerald, weight: 600 });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'Top-K rigidly keeps K items regardless of confidence. Top-P dynamically preserves the smallest set of words summing to 90% probability.'
+  };
+}
+
+function q10AutoregressiveLoop() {
+  let g = '';
+  g += T(320, 20, 'The Autoregressive Feedback Loop', { size: 13, weight: 700, fill: C.text });
+
+  // Box 1: Prompt Tokens
+  g += rect(30, 65, 120, 75, { fill: 'rgba(56, 189, 248, 0.1)', stroke: C.cyan, rx: 8 });
+  g += T(90, 85, 'Context Tokens', { size: 10.5, weight: 700, fill: C.cyan });
+  g += T(90, 102, '["The", "future", "is"]', { size: 8.5, mono: true, fill: '#fff' });
+  g += T(90, 122, 'Length = t', { size: 8.5, mono: true, fill: C.muted });
+
+  // Arrow to Decoder
+  g += arrow(150, 102, 195, 102, 'cyan', 2);
+
+  // Box 2: Transformer Blocks
+  g += rect(200, 55, 130, 95, { fill: 'rgba(167, 139, 250, 0.12)', stroke: C.violet, rx: 8 });
+  g += T(265, 78, 'Transformer', { size: 11, weight: 700, fill: C.violet });
+  g += T(265, 94, 'Decoder Stack', { size: 10, weight: 700, fill: C.violet });
+  g += T(265, 114, 'Causal Attention', { size: 8.5, fill: C.muted });
+  g += T(265, 130, '+ SwiGLU FFN', { size: 8.5, fill: C.muted });
+
+  // Arrow to Sampling
+  g += arrow(330, 102, 375, 102, 'amber', 2);
+
+  // Box 3: Temperature & Top-P Sampler
+  g += rect(380, 60, 110, 85, { fill: 'rgba(251, 191, 36, 0.12)', stroke: C.amber, rx: 8 });
+  g += T(435, 82, 'Sampler (T, Top-P)', { size: 9.5, weight: 700, fill: C.amber });
+  g += T(435, 100, 'Multinomial', { size: 9, mono: true, fill: '#fff' });
+  g += T(435, 122, '🎲 Pick Token', { size: 9.5, fill: C.amber });
+
+  // Arrow to New Token
+  g += arrow(490, 102, 530, 102, 'emerald', 2);
+
+  // Box 4: Sampled Token
+  g += rect(535, 75, 80, 55, { fill: 'rgba(34, 197, 94, 0.2)', stroke: C.emerald, rx: 6 });
+  g += T(575, 94, 'Token t+1', { size: 9, mono: true, fill: C.muted });
+  g += T(575, 112, '“bright”', { size: 11, weight: 700, fill: '#fff' });
+
+  // Big Feedback Loop Arrow back to Prompt
+  g += path('M 575,130 L 575,175 L 90,175 L 90,140', { stroke: C.emerald, sw: 2 });
+  g += arrow(90, 145, 90, 140, 'emerald', 2);
+  g += T(330, 168, 'Append Token t+1 to Context and Repeat Loop ↺', { size: 9.5, mono: true, fill: C.emerald, weight: 600 });
+
+  return {
+    html: svg(640, 205, g),
+    caption: 'Each generation cycle produces exactly one new token, which is appended to the prompt to condition the next prediction.'
+  };
+}
+
+function q10RepetitionPenalty() {
+  let g = '';
+  g += T(320, 20, 'Breaking Echo-Chambers with Repetition Penalty', { size: 13, weight: 700, fill: C.text });
+
+  // Left: Stuck in Loop
+  g += rect(40, 45, 260, 135, { fill: 'rgba(239, 68, 68, 0.08)', stroke: C.rose, rx: 8 });
+  g += T(170, 65, 'Without Penalty (α = 1.0)', { size: 11, weight: 700, fill: C.rose });
+  g += T(170, 85, '“and then and then and then...”', { size: 9.5, mono: true, fill: '#fff' });
+  g += T(170, 105, 'Past tokens self-reinforce logits!', { size: 8.5, fill: C.text });
+  g += T(170, 125, 'Attention latches onto recent words.', { size: 8.5, fill: C.muted });
+  g += T(170, 150, '🔁 Degenerate Infinite Loop', { size: 9.5, fill: C.rose, weight: 700 });
+
+  // Right: With Repetition Penalty
+  g += rect(340, 45, 260, 135, { fill: 'rgba(34, 197, 94, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(470, 65, 'With Repetition Penalty (α = 1.15)', { size: 11, weight: 700, fill: C.emerald });
+  g += T(470, 85, '“and then suddenly, the door...”', { size: 9.5, mono: true, fill: '#fff' });
+  g += T(470, 105, 'z_i ➔ z_i / 1.15 for recently used words', { size: 8.5, mono: true, fill: C.emerald });
+  g += T(470, 125, 'Pushes down duplicate token logits.', { size: 8.5, fill: C.text });
+  g += T(470, 150, '✓ Diverse, Engaging Vocabulary', { size: 9.5, fill: C.emerald, weight: 700 });
+
+  g += T(320, 196, 'Repetition penalty gently depresses recently used logits, forcing the model to explore new words.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'By dividing previously generated logits by α > 1.0, the generation engine prevents runaway self-reinforcing phrase loops.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -1646,7 +1877,8 @@ const VISUALS = {
   'quest-6': [q6BiasVariance, q6LossCurves, q6Dropout, q6WeightDecay, q6Augment],
   'quest-7': [q7Sequential, q7QKV, q7Scale, q7Bank, q7MultiHead],
   'quest-8': [q8Subwords, q8EmbeddingMatrix, q8Permutation, q8RoPE],
-  'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache]
+  'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache],
+  'quest-10': [q10Unembedding, q10Temperature, q10TopKvsTopP, q10AutoregressiveLoop, q10RepetitionPenalty]
 };
 
 let activeCleanups = [];

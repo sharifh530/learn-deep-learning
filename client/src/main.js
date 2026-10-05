@@ -69,7 +69,16 @@ const state = {
   gptActiveTab: 'flow', // 'flow' | 'mask' | 'kvcache'
   gptCausalMaskActive: true,
   gptFocusedLayerIdx: 2, // Causal MHA
-  gptKvSeqLen: 128
+  gptKvSeqLen: 128,
+  // Quest 10: Generation Engine & Sampling Dynamics state
+  genPromptIdx: 0,
+  genTemperature: 0.7,
+  genTopP: 0.90,
+  genTopK: 5,
+  genRepetitionPenalty: 1.15,
+  genTokensHistory: [],
+  genActiveTab: 'roulette', // 'roulette' | 'autoreg' | 'compare'
+  genStreamingActive: false
 };
 
 const tutorService = new AITutorService();
@@ -652,6 +661,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'transformer_block_inspector':
       renderTransformerBlockInspectorWidget(quest);
+      break;
+    case 'generation_sampler_lab':
+      renderGenerationSamplerLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -5046,6 +5058,1194 @@ function renderTransformerBlockInspectorWidget(quest) {
   updateKvCacheMetrics();
 }
 
+// ============================================================================
+// WIDGET 10: The Generation Engine & Sampling Dynamics Lab
+// ============================================================================
+function renderGenerationSamplerLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'generation-sampler-container';
+
+  const config = quest.interactiveConfig || {};
+  const prompts = config.prompts || [
+    {
+      id: "robot",
+      text: "The mysterious robot stepped out of the spaceship and saw a",
+      candidates: [
+        { token: " alien", logit: 4.2, category: "sci-fi" },
+        { token: " glowing", logit: 3.7, category: "desc" },
+        { token: " city", logit: 3.3, category: "place" },
+        { token: " human", logit: 2.8, category: "entity" },
+        { token: " flower", logit: 2.1, category: "nature" },
+        { token: " glitch", logit: 1.4, category: "tech" },
+        { token: " sandwich", logit: 0.4, category: "absurd" },
+        { token: " banana", logit: -0.8, category: "absurd" },
+        { token: " unicorn", logit: -1.9, category: "fantasy" },
+        { token: " syntax", logit: -3.5, category: "code" }
+      ]
+    },
+    {
+      id: "code",
+      text: "def train_neural_network(model, optimizer, data_loader):",
+      candidates: [
+        { token: "\n    ", logit: 4.8, category: "indent" },
+        { token: " model", logit: 3.9, category: "code" },
+        { token: " for", logit: 3.4, category: "loop" },
+        { token: " total", logit: 2.2, category: "var" },
+        { token: " print", logit: 1.5, category: "debug" },
+        { token: " return", logit: 0.6, category: "control" },
+        { token: " pizza", logit: -2.4, category: "absurd" },
+        { token: " spaceship", logit: -3.8, category: "absurd" }
+      ]
+    },
+    {
+      id: "philosophy",
+      text: "In the heart of the quantum computer, artificial consciousness began to",
+      candidates: [
+        { token: " awaken", logit: 4.1, category: "thought" },
+        { token: " question", logit: 3.6, category: "thought" },
+        { token: " evolve", logit: 3.2, category: "action" },
+        { token: " calculate", logit: 2.5, category: "tech" },
+        { token: " dream", logit: 2.0, category: "creative" },
+        { token: " crash", logit: 0.8, category: "bug" },
+        { token: " dance", logit: -0.5, category: "whimsical" },
+        { token: " potato", logit: -3.6, category: "absurd" }
+      ]
+    }
+  ];
+
+  // Contextual continuations vocabulary dictionary for realistic multi-step autoregressive demo
+  const followUpVocab = {
+    " alien": [
+      { token: " staring", logit: 4.4, category: "action" },
+      { token: " holding", logit: 3.8, category: "action" },
+      { token: " waving", logit: 3.3, category: "social" },
+      { token: " with", logit: 2.9, category: "grammar" },
+      { token: " silently", logit: 2.2, category: "desc" },
+      { token: " spaceship", logit: 1.1, category: "entity" },
+      { token: " pizza", logit: -1.8, category: "absurd" }
+    ],
+    " glowing": [
+      { token: " crystal", logit: 4.6, category: "object" },
+      { token: " orb", logit: 4.1, category: "object" },
+      { token: " horizon", logit: 3.5, category: "place" },
+      { token: " portal", logit: 3.1, category: "sci-fi" },
+      { token: " mushroom", logit: 2.1, category: "nature" },
+      { token: " bug", logit: 0.9, category: "tech" }
+    ],
+    " city": [
+      { token: " built", logit: 4.3, category: "action" },
+      { token: " floating", logit: 4.0, category: "desc" },
+      { token: " of", logit: 3.5, category: "grammar" },
+      { token: " covered", logit: 2.9, category: "desc" },
+      { token: " buzzing", logit: 2.2, category: "desc" },
+      { token: " underwater", logit: 1.1, category: "place" }
+    ],
+    " human": [
+      { token: " scientist", logit: 4.5, category: "entity" },
+      { token: " watching", logit: 3.9, category: "action" },
+      { token: " terrified", logit: 3.4, category: "emotion" },
+      { token: " sleeping", logit: 2.8, category: "action" },
+      { token: " smiling", logit: 2.3, category: "social" },
+      { token: " potato", logit: -2.5, category: "absurd" }
+    ],
+    " flower": [
+      { token: " blooming", logit: 4.5, category: "action" },
+      { token: " emitting", logit: 3.8, category: "action" },
+      { token: " made", logit: 3.2, category: "grammar" },
+      { token: " of", logit: 2.7, category: "grammar" },
+      { token: " neon", logit: 2.1, category: "desc" }
+    ],
+    " glitch": [
+      { token: " in", logit: 4.7, category: "grammar" },
+      { token: " tearing", logit: 3.8, category: "action" },
+      { token: " through", logit: 3.2, category: "grammar" },
+      { token: " the", logit: 2.6, category: "grammar" }
+    ],
+    " model": [
+      { token: " .train()", logit: 4.8, category: "code" },
+      { token: " .to(device)", logit: 4.2, category: "code" },
+      { token: " = model", logit: 2.5, category: "code" },
+      { token: " .eval()", logit: 2.1, category: "code" }
+    ],
+    " for": [
+      { token: " epoch", logit: 4.8, category: "loop" },
+      { token: " batch", logit: 4.3, category: "loop" },
+      { token: " step", logit: 3.5, category: "loop" },
+      { token: " x,", logit: 2.8, category: "code" }
+    ],
+    " awaken": [
+      { token: " within", logit: 4.5, category: "grammar" },
+      { token: " and", logit: 3.9, category: "grammar" },
+      { token: " its", logit: 3.3, category: "grammar" },
+      { token: " silently", logit: 2.8, category: "desc" },
+      { token: " across", logit: 2.2, category: "grammar" }
+    ],
+    " question": [
+      { token: " its", logit: 4.7, category: "grammar" },
+      { token: " whether", logit: 4.0, category: "thought" },
+      { token: " reality", logit: 3.4, category: "concept" },
+      { token: " human", logit: 2.6, category: "entity" }
+    ],
+    " default": [
+      { token: " into", logit: 4.1, category: "grammar" },
+      { token: " the", logit: 3.7, category: "grammar" },
+      { token: " endless", logit: 3.2, category: "desc" },
+      { token: " void", logit: 2.6, category: "concept" },
+      { token: " forever", logit: 2.1, category: "concept" },
+      { token: " banana", logit: -1.9, category: "absurd" }
+    ]
+  };
+
+  let currentPromptIdx = state.genPromptIdx !== undefined ? state.genPromptIdx : 0;
+  if (currentPromptIdx >= prompts.length) currentPromptIdx = 0;
+  let currentTemperature = state.genTemperature !== undefined ? state.genTemperature : 0.7;
+  let currentTopP = state.genTopP !== undefined ? state.genTopP : 0.90;
+  let currentTopK = state.genTopK !== undefined ? state.genTopK : 5;
+  let currentRepetitionPenalty = state.genRepetitionPenalty !== undefined ? state.genRepetitionPenalty : 1.15;
+  let activeTab = state.genActiveTab || 'roulette';
+  let isStreaming = false;
+  let streamTimer = null;
+  let sampledCandidateToken = null;
+
+  // Build Layout Frame
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="gen-diagnostic-hud">
+      <div class="gen-hud-col">
+        <div class="gen-hud-badge">
+          <span>🎲</span>
+          <span>AUTOREGRESSIVE SAMPLING ENGINE</span>
+        </div>
+        <div class="gen-hud-desc">
+          Transform raw unembedding logits into probability distributions with Temperature scaling, Top-K pruning, and Top-P (Nucleus) boundary cuts.
+        </div>
+      </div>
+      <div class="gen-metrics-grid">
+        <div class="gen-metric-card">
+          <span class="gen-metric-lbl">SAMPLING REGIME</span>
+          <span class="gen-metric-val" id="gen-stat-regime">✨ Optimal Nucleus</span>
+          <span class="gen-metric-sub" id="gen-stat-entropy">Entropy: 1.84 bits</span>
+        </div>
+        <div class="gen-metric-card">
+          <span class="gen-metric-lbl">TEMPERATURE (T)</span>
+          <span class="gen-metric-val cyan" id="gen-stat-temp">${currentTemperature.toFixed(2)}</span>
+          <span class="gen-metric-sub" id="gen-stat-temp-desc">Balanced Creativity</span>
+        </div>
+        <div class="gen-metric-card">
+          <span class="gen-metric-lbl">NUCLEUS (TOP-P)</span>
+          <span class="gen-metric-val violet" id="gen-stat-topp">${(currentTopP * 100).toFixed(0)}%</span>
+          <span class="gen-metric-sub" id="gen-stat-topk">Top-K: ${currentTopK}</span>
+        </div>
+        <div class="gen-metric-card">
+          <span class="gen-metric-lbl">SURVIVING POOL</span>
+          <span class="gen-metric-val green" id="gen-stat-survivors">5 / 10 Tokens</span>
+          <span class="gen-metric-sub" id="gen-stat-pruned">5 Pruned (0% Mass)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Sub-Tabs -->
+    <div class="gen-subtabs-bar">
+      <button class="gen-subtab-btn ${activeTab === 'roulette' ? 'active' : ''}" data-tab="roulette">
+        <span>🎲</span> Token Roulette & Filter Lab
+      </button>
+      <button class="gen-subtab-btn ${activeTab === 'autoreg' ? 'active' : ''}" data-tab="autoreg">
+        <span>🔁</span> Autoregressive Generation Loop
+      </button>
+      <button class="gen-subtab-btn ${activeTab === 'compare' ? 'active' : ''}" data-tab="compare">
+        <span>⚔️</span> Decoding Regimes Face-Off
+      </button>
+    </div>
+
+    <!-- SUB-TAB 1: TOKEN ROULETTE & FILTER LAB -->
+    <div class="gen-subtab-content ${activeTab === 'roulette' ? 'active' : ''}" id="gen-content-roulette">
+      <!-- Live Generation Context & Streaming Terminal -->
+      <div class="gen-terminal-card">
+        <div class="gen-terminal-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <span class="terminal-title">AUTOREGRESSIVE GENERATION TERMINAL</span>
+          <div class="terminal-actions">
+            <span class="token-count-pill" id="gen-token-count-pill">Tokens: 0</span>
+            <button class="btn-terminal-action" id="btn-copy-generation" title="Copy text to clipboard">📋 Copy</button>
+            <button class="btn-terminal-action" id="btn-reset-generation" title="Reset sequence">↺ Reset</button>
+          </div>
+        </div>
+        <div class="gen-terminal-body" id="gen-story-display">
+          <!-- Rendered in JS -->
+        </div>
+        <div class="gen-terminal-controls-row">
+          <div class="prompt-select-group">
+            <label for="gen-prompt-select">Scenario Prompt:</label>
+            <select id="gen-prompt-select" class="gen-select-input">
+              ${prompts.map((p, idx) => `<option value="${idx}" ${idx === currentPromptIdx ? 'selected' : ''}>${p.id.toUpperCase()}: "${p.text.slice(0, 45)}..."</option>`).join('')}
+            </select>
+          </div>
+          <div class="terminal-action-buttons">
+            <button class="btn-gen-sample" id="btn-gen-spin-step">
+              <span>🎲</span> Sample Next Token
+            </button>
+            <button class="btn-gen-stream" id="btn-gen-stream-auto">
+              <span>⚡</span> Auto-Stream 5 Tokens
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two Column Lab: Sliders on Left, Candidate Probabilities on Right -->
+      <div class="gen-interactive-grid">
+        <!-- Left: Hyperparameters Control Panel -->
+        <div class="gen-controls-panel">
+          <div class="panel-section-title">
+            <span>⚙️</span> SAMPLING HYPERPARAMETERS
+          </div>
+
+          <!-- Temperature Slider -->
+          <div class="gen-slider-block">
+            <div class="gen-slider-header">
+              <div class="gen-slider-info">
+                <span class="gen-slider-name">Temperature (T)</span>
+                <span class="gen-slider-math">z' = z / T</span>
+              </div>
+              <span class="gen-slider-val-badge cyan" id="val-badge-temp">${currentTemperature.toFixed(2)}</span>
+            </div>
+            <input type="range" class="gen-range-slider" id="slider-temp" min="0.05" max="2.00" step="0.05" value="${currentTemperature}">
+            <div class="gen-slider-scale">
+              <span>0.05 (Frozen/Greedy)</span>
+              <span>1.0 (Standard)</span>
+              <span>2.0 (High Chaos)</span>
+            </div>
+            <div class="gen-preset-pills">
+              <button class="preset-pill" data-type="temp" data-val="0.05">❄️ Greedy (0.05)</button>
+              <button class="preset-pill" data-type="temp" data-val="0.20">📐 Code/Math (0.20)</button>
+              <button class="preset-pill" data-type="temp" data-val="0.70">✍️ Balanced (0.70)</button>
+              <button class="preset-pill" data-type="temp" data-val="1.50">🔥 Hallucination (1.50)</button>
+            </div>
+          </div>
+
+          <!-- Top-P (Nucleus) Slider -->
+          <div class="gen-slider-block">
+            <div class="gen-slider-header">
+              <div class="gen-slider-info">
+                <span class="gen-slider-name">Top-P Nucleus (p)</span>
+                <span class="gen-slider-math">∑ P(w_i) ≤ p</span>
+              </div>
+              <span class="gen-slider-val-badge violet" id="val-badge-topp">${currentTopP.toFixed(2)}</span>
+            </div>
+            <input type="range" class="gen-range-slider" id="slider-topp" min="0.10" max="1.00" step="0.05" value="${currentTopP}">
+            <div class="gen-slider-scale">
+              <span>0.10 (Hyper-Strict)</span>
+              <span>0.90 (Standard)</span>
+              <span>1.00 (Unbounded)</span>
+            </div>
+            <div class="gen-preset-pills">
+              <button class="preset-pill" data-type="topp" data-val="0.50">🎯 Strict (0.50)</button>
+              <button class="preset-pill" data-type="topp" data-val="0.90">✨ Standard (0.90)</button>
+              <button class="preset-pill" data-type="topp" data-val="1.00">🌐 Unfiltered (1.00)</button>
+            </div>
+          </div>
+
+          <!-- Top-K Slider -->
+          <div class="gen-slider-block">
+            <div class="gen-slider-header">
+              <div class="gen-slider-info">
+                <span class="gen-slider-name">Top-K Cutoff</span>
+                <span class="gen-slider-math">k ≤ K</span>
+              </div>
+              <span class="gen-slider-val-badge amber" id="val-badge-topk">${currentTopK}</span>
+            </div>
+            <input type="range" class="gen-range-slider" id="slider-topk" min="1" max="10" step="1" value="${currentTopK}">
+            <div class="gen-slider-scale">
+              <span>K=1 (Argmax)</span>
+              <span>K=5 (Standard)</span>
+              <span>K=10 (All Tokens)</span>
+            </div>
+            <div class="gen-preset-pills">
+              <button class="preset-pill" data-type="topk" data-val="1">K=1</button>
+              <button class="preset-pill" data-type="topk" data-val="3">K=3</button>
+              <button class="preset-pill" data-type="topk" data-val="5">K=5</button>
+              <button class="preset-pill" data-type="topk" data-val="10">All (10)</button>
+            </div>
+          </div>
+
+          <!-- Repetition Penalty Slider -->
+          <div class="gen-slider-block">
+            <div class="gen-slider-header">
+              <div class="gen-slider-info">
+                <span class="gen-slider-name">Repetition Penalty (θ)</span>
+                <span class="gen-slider-math">z / θ for seen tokens</span>
+              </div>
+              <span class="gen-slider-val-badge rose" id="val-badge-rep">${currentRepetitionPenalty.toFixed(2)}</span>
+            </div>
+            <input type="range" class="gen-range-slider" id="slider-rep" min="1.00" max="2.00" step="0.05" value="${currentRepetitionPenalty}">
+            <div class="gen-slider-scale">
+              <span>1.00 (Off)</span>
+              <span>1.15 (Optimal)</span>
+              <span>2.00 (Strong Anti-Loop)</span>
+            </div>
+            <div class="gen-preset-pills">
+              <button class="preset-pill" data-type="rep" data-val="1.00">Off (1.00)</button>
+              <button class="preset-pill" data-type="rep" data-val="1.15">Standard (1.15)</button>
+              <button class="preset-pill" data-type="rep" data-val="1.50">Aggressive (1.50)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Candidates Probability Bars & Roulette Deck -->
+        <div class="gen-candidates-panel">
+          <div class="candidates-panel-header">
+            <div class="panel-section-title">
+              <span>📊</span> CANDIDATE TOKENS PROBABILITY ROULETTE
+            </div>
+            <div class="candidates-legend">
+              <span class="legend-item"><span class="legend-swatch active"></span> Active Nucleus</span>
+              <span class="legend-item"><span class="legend-swatch pruned"></span> Pruned (0%)</span>
+              <span class="legend-item"><span class="legend-swatch sampled"></span> Sampled</span>
+            </div>
+          </div>
+
+          <!-- Candidates List Container -->
+          <div class="candidates-deck" id="gen-candidates-deck">
+            <!-- Rendered in JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 2: AUTOREGRESSIVE GENERATION LOOP & REPETITION PENALTY -->
+    <div class="gen-subtab-content ${activeTab === 'autoreg' ? 'active' : ''}" id="gen-content-autoreg">
+      <div class="gen-card-banner">
+        <div class="banner-icon">🔁</div>
+        <div class="banner-text">
+          <h3>The Autoregressive Loop: How Language Models Breathe</h3>
+          <p>
+            Large Language Models generate text one token at a time in an autoregressive feedback loop: 
+            <strong>P(x_t | x_{<t})</strong>. The newly sampled token is appended to the context window, 
+            becoming input context for the next forward pass.
+          </p>
+        </div>
+      </div>
+
+      <!-- Interactive 6-Stage Loop Visualizer -->
+      <div class="autoreg-flow-visualizer">
+        <div class="autoreg-step-node" id="node-step-1">
+          <div class="node-badge">STAGE 1</div>
+          <div class="node-icon">📜</div>
+          <div class="node-title">Context Window</div>
+          <div class="node-desc">Current prompt + all previously generated tokens</div>
+          <div class="node-state-pill">[ x_1, x_2, ..., x_t ]</div>
+        </div>
+        <div class="flow-arrow">➔</div>
+
+        <div class="autoreg-step-node" id="node-step-2">
+          <div class="node-badge">STAGE 2</div>
+          <div class="node-icon">🧠</div>
+          <div class="node-title">Decoder Blocks</div>
+          <div class="node-desc">Causal Attention & SwiGLU FFN compute context vectors</div>
+          <div class="node-state-pill">h_t ∈ ℝ^4096</div>
+        </div>
+        <div class="flow-arrow">➔</div>
+
+        <div class="autoreg-step-node" id="node-step-3">
+          <div class="node-badge">STAGE 3</div>
+          <div class="node-icon">⚡</div>
+          <div class="node-title">Unembedding Head</div>
+          <div class="node-desc">Linear projection maps hidden state to vocabulary logits</div>
+          <div class="node-state-pill">z = h_t · W_u^T ∈ ℝ^V</div>
+        </div>
+        <div class="flow-arrow">➔</div>
+
+        <div class="autoreg-step-node" id="node-step-4">
+          <div class="node-badge">STAGE 4</div>
+          <div class="node-icon">🔥</div>
+          <div class="node-title">Temperature & Top-P</div>
+          <div class="node-desc">Scale logits by 1/T, mask tail with Top-K and Top-P</div>
+          <div class="node-state-pill">P_i = Softmax(z_i / T)</div>
+        </div>
+        <div class="flow-arrow">➔</div>
+
+        <div class="autoreg-step-node" id="node-step-5">
+          <div class="node-badge">STAGE 5</div>
+          <div class="node-icon">🎲</div>
+          <div class="node-title">Multinomial Sample</div>
+          <div class="node-desc">Stochastic roll draws next token x_{t+1} from active pool</div>
+          <div class="node-state-pill">x_{t+1} ~ P(w)</div>
+        </div>
+        <div class="flow-arrow feedback">↻</div>
+      </div>
+
+      <div class="autoreg-pulse-control">
+        <button class="btn-pulse-loop" id="btn-pulse-autoreg-loop">
+          <span>⚡</span> Pulse Autoregressive Cycle Once
+        </button>
+        <span class="pulse-status-msg" id="autoreg-pulse-msg">Click to trace data through all 5 stages of generation</span>
+      </div>
+
+      <!-- Repetition Penalty Interactive Sandbox -->
+      <div class="rep-penalty-lab-box">
+        <h4>🛡️ Repetition Penalty Deep Dive: Breaking The Degeneration Trap</h4>
+        <p>
+          Without repetition penalty, greedy or low-temperature decoding often falls into repetitive loops: 
+          <em>"The model is a model that is a model..."</em>. 
+          When a token has already appeared in the output, Keskar et al. (2019) penalize its logit:
+        </p>
+        <div class="rep-formula-box">
+          <code>z_i' = (z_i > 0) ? (z_i / θ) : (z_i · θ)  where θ ≥ 1.0</code>
+        </div>
+        <div class="rep-live-demo-grid">
+          <div class="rep-demo-col">
+            <span class="demo-col-label">Simulated Candidate: " alien" (Initial Logit: 4.20)</span>
+            <div class="rep-count-selector">
+              <span>Token Occurrences in Context:</span>
+              <button class="rep-count-btn active" data-count="0">0x (Fresh)</button>
+              <button class="rep-count-btn" data-count="1">1x (Seen Once)</button>
+              <button class="rep-count-btn" data-count="2">2x (Seen Twice)</button>
+              <button class="rep-count-btn" data-count="3">3x (Loop Trap!)</button>
+            </div>
+          </div>
+          <div class="rep-demo-col result-box">
+            <div class="rep-calc-row">
+              <span>Effective Logit:</span>
+              <strong class="cyan" id="rep-demo-logit">4.20</strong>
+            </div>
+            <div class="rep-calc-row">
+              <span>Selection Probability:</span>
+              <strong class="green" id="rep-demo-prob">56.4%</strong>
+            </div>
+            <div class="rep-calc-row">
+              <span>Loop Risk Status:</span>
+              <span class="loop-status-pill safe" id="rep-demo-status">Safe (High Diversity)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 3: DECODING REGIMES FACE-OFF -->
+    <div class="gen-subtab-content ${activeTab === 'compare' ? 'active' : ''}" id="gen-content-compare">
+      <div class="faceoff-header">
+        <h3>⚔️ The 3 Classic LLM Decoding Regimes</h3>
+        <p>Compare how the exact same prompt completes under Greedy Decoding, Optimal Nucleus Sampling, and High-Entropy Chaos.</p>
+        <button class="btn-run-faceoff" id="btn-run-parallel-faceoff">
+          <span>▶</span> Run Multi-Regime Generation
+        </button>
+      </div>
+
+      <div class="faceoff-grid">
+        <!-- Regime 1: Greedy Decoding -->
+        <div class="faceoff-card greedy">
+          <div class="card-top-tag">❄️ DETERMINISTIC</div>
+          <h4>Greedy Decoding</h4>
+          <div class="card-hyperparams">T = 0.05 • Top-P = 1.0 • K = 1</div>
+          <p class="regime-desc">Always picks token with highest logit (Argmax). Perfect for unit tests and math, but vulnerable to repetitive loops.</p>
+          <div class="faceoff-output-box" id="faceoff-out-greedy">
+            "The mysterious robot stepped out of the spaceship and saw a human. The human saw a human. The human saw a human..."
+          </div>
+          <div class="faceoff-stats-row">
+            <span>Repetition: <strong class="red">88% (High)</strong></span>
+            <span>Entropy: <strong class="cyan">0.05 bits</strong></span>
+          </div>
+        </div>
+
+        <!-- Regime 2: Nucleus Sampling -->
+        <div class="faceoff-card nucleus">
+          <div class="card-top-tag recommended">✨ OPTIMAL NUCLEUS</div>
+          <h4>Nucleus Sampling (Top-P)</h4>
+          <div class="card-hyperparams">T = 0.70 • Top-P = 0.90 • K = 5</div>
+          <p class="regime-desc">Standard ChatGPT & Claude setting. Balances fluency with surprise by sampling only inside the top 90% cumulative mass.</p>
+          <div class="faceoff-output-box" id="faceoff-out-nucleus">
+            "The mysterious robot stepped out of the spaceship and saw a glowing crystal emitting neon light across the horizon."
+          </div>
+          <div class="faceoff-stats-row">
+            <span>Repetition: <strong class="green">0% (None)</strong></span>
+            <span>Entropy: <strong class="green">1.82 bits</strong></span>
+          </div>
+        </div>
+
+        <!-- Regime 3: High Temperature Chaos -->
+        <div class="faceoff-card chaos">
+          <div class="card-top-tag warning">🔥 UNBOUNDED CHAOS</div>
+          <h4>High Temperature (Hallucination)</h4>
+          <div class="card-hyperparams">T = 1.80 • Top-P = 1.0 • K = 10</div>
+          <p class="regime-desc">Flattens the logit landscape. Ridiculous tail tokens receive almost equal probability as sensible words.</p>
+          <div class="faceoff-output-box" id="faceoff-out-chaos">
+            "The mysterious robot stepped out of the spaceship and saw a banana unicorn syntax pizza glitch underwater dancing."
+          </div>
+          <div class="faceoff-stats-row">
+            <span>Repetition: <strong class="green">0% (None)</strong></span>
+            <span>Entropy: <strong class="rose">3.32 bits (Max)</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Strategy Comparison Matrix -->
+      <div class="strategy-matrix-card">
+        <h4>📋 Decoding Strategy Cheat-Sheet for AI Engineers</h4>
+        <table class="strategy-table">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Typical Parameters</th>
+              <th>Pros</th>
+              <th>Cons</th>
+              <th>Ideal Production Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Greedy Search</strong></td>
+              <td><code>T ≈ 0.0, K = 1</code></td>
+              <td>100% reproducible, precise, low latency</td>
+              <td>Loops, dull, lacks human cadence</td>
+              <td>SQL queries, Code Syntax, JSON parsing, Math arithmetic</td>
+            </tr>
+            <tr>
+              <td><strong>Top-K Sampling</strong></td>
+              <td><code>T = 0.7, K = 40, P = 1.0</code></td>
+              <td>Cuts impossible tail tokens</td>
+              <td>Fixed K fails when confidence is flat or sharp</td>
+              <td>Fast mobile models, game NPC dialogue</td>
+            </tr>
+            <tr>
+              <td><strong>Top-P (Nucleus)</strong></td>
+              <td><code>T = 0.7, P = 0.90, K = 50</code></td>
+              <td>Dynamically adapts pool size to confidence</td>
+              <td>Slightly more sorting compute on GPU</td>
+              <td>General ChatGPT chat, storytelling, essays, creative coding</td>
+            </tr>
+            <tr>
+              <td><strong>Beam Search</strong></td>
+              <td><code>Beams = 4–8</code></td>
+              <td>Explores multiple parallel future hypotheses</td>
+              <td>Very slow (multiplies KV cache VRAM by beam count)</td>
+              <td>Language Translation, Text Summarization, Speech ASR</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- Core Sampling Calculation Function ---
+  function computeDistribution() {
+    const promptObj = prompts[currentPromptIdx];
+    let candidatePool = promptObj.candidates;
+
+    // If we have generated tokens, adapt candidate pool to simulate natural autoregressive transitions!
+    if (state.genTokensHistory && state.genTokensHistory.length > 0) {
+      const lastToken = state.genTokensHistory[state.genTokensHistory.length - 1];
+      if (followUpVocab[lastToken]) {
+        candidatePool = followUpVocab[lastToken];
+      } else {
+        candidatePool = followUpVocab[" default"];
+      }
+    }
+
+    // 1. Repetition Penalty application
+    const historyTokens = state.genTokensHistory || [];
+    const items = candidatePool.map(c => {
+      let rawLogit = c.logit;
+      const seenCount = historyTokens.filter(t => t.trim() === c.token.trim()).length;
+      let effectiveLogit = rawLogit;
+      if (seenCount > 0 && currentRepetitionPenalty > 1.0) {
+        // Apply penalty power
+        const penaltyFactor = Math.pow(currentRepetitionPenalty, seenCount);
+        effectiveLogit = rawLogit > 0 ? (rawLogit / penaltyFactor) : (rawLogit * penaltyFactor);
+      }
+      return {
+        token: c.token,
+        category: c.category || 'word',
+        rawLogit,
+        effectiveLogit,
+        seenCount
+      };
+    });
+
+    // 2. Temperature Scaling: z / T
+    const safeTemp = Math.max(currentTemperature, 0.02);
+    items.forEach(item => {
+      item.scaledLogit = item.effectiveLogit / safeTemp;
+    });
+
+    // Sort descending by scaledLogit
+    items.sort((a, b) => b.scaledLogit - a.scaledLogit);
+
+    // 3. Top-K cutoff
+    items.forEach((item, idx) => {
+      item.prunedByTopK = idx >= currentTopK;
+    });
+
+    // 4. Softmax over Top-K unpruned tokens
+    const unprunedByK = items.filter(it => !it.prunedByTopK);
+    const maxScaled = unprunedByK.length > 0 ? Math.max(...unprunedByK.map(it => it.scaledLogit)) : 0;
+    
+    let sumExp = 0;
+    unprunedByK.forEach(item => {
+      item.exp = Math.exp(item.scaledLogit - maxScaled);
+      sumExp += item.exp;
+    });
+
+    unprunedByK.forEach(item => {
+      item.rawProb = sumExp > 0 ? (item.exp / sumExp) : 0;
+    });
+
+    items.forEach(item => {
+      if (item.prunedByTopK) {
+        item.rawProb = 0;
+      }
+    });
+
+    // 5. Top-P (Nucleus) cutoff
+    let cumSum = 0;
+    items.forEach((item, idx) => {
+      if (item.prunedByTopK) {
+        item.prunedByTopP = true;
+        item.cumProb = cumSum;
+        return;
+      }
+      cumSum += item.rawProb;
+      item.cumProb = cumSum;
+      // If previous cumulative sum already crossed top_p, prune this and remaining
+      if (idx > 0 && (item.cumProb - item.rawProb) >= currentTopP) {
+        item.prunedByTopP = true;
+      } else {
+        item.prunedByTopP = false;
+      }
+    });
+
+    // 6. Re-normalize surviving candidates
+    const surviving = items.filter(it => !it.prunedByTopK && !it.prunedByTopP);
+    const survivingProbSum = surviving.reduce((sum, it) => sum + it.rawProb, 0);
+
+    items.forEach(item => {
+      if (!item.prunedByTopK && !item.prunedByTopP && survivingProbSum > 0) {
+        item.finalProb = item.rawProb / survivingProbSum;
+      } else {
+        item.finalProb = 0;
+      }
+    });
+
+    // 7. Calculate Shannon Entropy: H = - sum(p * log2(p))
+    let entropy = 0;
+    surviving.forEach(item => {
+      if (item.finalProb > 1e-6) {
+        entropy -= item.finalProb * Math.log2(item.finalProb);
+      }
+    });
+
+    return {
+      items,
+      surviving,
+      entropy
+    };
+  }
+
+  // --- Render Candidates Deck & HUD ---
+  function updateUI() {
+    const dist = computeDistribution();
+    const items = dist.items;
+    const surviving = dist.surviving;
+    const entropy = dist.entropy;
+
+    // Update HUD Stats
+    const regimeEl = container.querySelector('#gen-stat-regime');
+    const entropyEl = container.querySelector('#gen-stat-entropy');
+    const tempValEl = container.querySelector('#gen-stat-temp');
+    const tempDescEl = container.querySelector('#gen-stat-temp-desc');
+    const topPValEl = container.querySelector('#gen-stat-topp');
+    const topKSubEl = container.querySelector('#gen-stat-topk');
+    const survivorsEl = container.querySelector('#gen-stat-survivors');
+    const prunedEl = container.querySelector('#gen-stat-pruned');
+
+    if (tempValEl) tempValEl.textContent = currentTemperature.toFixed(2);
+    if (topPValEl) topPValEl.textContent = `${(currentTopP * 100).toFixed(0)}%`;
+    if (topKSubEl) topKSubEl.textContent = `Top-K: ${currentTopK}`;
+    if (survivorsEl) survivorsEl.textContent = `${surviving.length} / ${items.length} Tokens`;
+    if (prunedEl) prunedEl.textContent = `${items.length - surviving.length} Pruned (0% Mass)`;
+    if (entropyEl) entropyEl.textContent = `Entropy: ${entropy.toFixed(2)} bits`;
+
+    // Determine regime tag
+    if (regimeEl && tempDescEl) {
+      if (currentTemperature <= 0.1 || currentTopK === 1) {
+        regimeEl.textContent = '❄️ Deterministic Argmax';
+        regimeEl.className = 'gen-metric-val cyan';
+        tempDescEl.textContent = 'Rigid / Zero Entropy';
+      } else if (currentTemperature >= 1.4) {
+        regimeEl.textContent = '🔥 High-Entropy Chaos';
+        regimeEl.className = 'gen-metric-val rose';
+        tempDescEl.textContent = 'Hallucinatory Flattener';
+      } else if (currentTopP <= 0.6) {
+        regimeEl.textContent = '🎯 Strict Nucleus';
+        regimeEl.className = 'gen-metric-val amber';
+        tempDescEl.textContent = 'Tight Conservative';
+      } else {
+        regimeEl.textContent = '✨ Optimal Nucleus';
+        regimeEl.className = 'gen-metric-val green';
+        tempDescEl.textContent = 'Balanced Creativity';
+      }
+    }
+
+    // Update Slider Badges
+    const badgeTemp = container.querySelector('#val-badge-temp');
+    const badgeTopP = container.querySelector('#val-badge-topp');
+    const badgeTopK = container.querySelector('#val-badge-topk');
+    const badgeRep = container.querySelector('#val-badge-rep');
+    if (badgeTemp) badgeTemp.textContent = currentTemperature.toFixed(2);
+    if (badgeTopP) badgeTopP.textContent = currentTopP.toFixed(2);
+    if (badgeTopK) badgeTopK.textContent = currentTopK;
+    if (badgeRep) badgeRep.textContent = currentRepetitionPenalty.toFixed(2);
+
+    // Update Terminal Story Box
+    renderStoryTerminal();
+
+    // Render Candidate Cards Deck
+    const deck = container.querySelector('#gen-candidates-deck');
+    if (!deck) return;
+    deck.innerHTML = '';
+
+    items.forEach((item, idx) => {
+      const isPruned = item.prunedByTopK || item.prunedByTopP;
+      const isSampled = sampledCandidateToken === item.token;
+      const pct = (item.finalProb * 100).toFixed(1);
+
+      let pruneReason = '';
+      if (item.prunedByTopK) pruneReason = `Pruned by Top-K (Rank ${idx + 1} > ${currentTopK})`;
+      else if (item.prunedByTopP) pruneReason = `Pruned by Top-P (Cum. ${(item.cumProb * 100).toFixed(0)}% > ${(currentTopP * 100).toFixed(0)}%)`;
+
+      const card = document.createElement('div');
+      card.className = `candidate-card ${isPruned ? 'pruned' : 'active'} ${isSampled ? 'sampled-highlight' : ''}`;
+      card.innerHTML = `
+        <div class="candidate-header-row">
+          <div class="candidate-token-block">
+            <span class="candidate-rank">#${idx + 1}</span>
+            <span class="candidate-token-pill">${escapeHtml(item.token.replace(/\n/g, '↵'))}</span>
+            <span class="candidate-category-tag">${item.category}</span>
+            ${item.seenCount > 0 ? `<span class="candidate-rep-tag">Seen ${item.seenCount}x</span>` : ''}
+          </div>
+          <div class="candidate-math-block">
+            <span class="math-item" title="Raw Unembedding Logit">z: ${item.rawLogit.toFixed(1)}</span>
+            ${item.seenCount > 0 && currentRepetitionPenalty > 1.0 ? `<span class="math-item rep" title="Penalized Logit">z': ${item.effectiveLogit.toFixed(1)}</span>` : ''}
+            <span class="math-item" title="Scaled Logit (z / T)">z/T: ${item.scaledLogit.toFixed(1)}</span>
+            <span class="candidate-prob-pill ${isPruned ? 'zero' : ''}">${pct}%</span>
+          </div>
+        </div>
+
+        <!-- Animated Probability Meter Bar -->
+        <div class="candidate-bar-track">
+          <div class="candidate-bar-fill ${isPruned ? 'pruned-fill' : ''} ${isSampled ? 'sampled-bar' : ''}" style="width: ${isPruned ? '0%' : pct + '%'}"></div>
+          ${!isPruned ? `<span class="candidate-bar-cum-marker" style="left: ${Math.min((item.cumProb * 100), 98)}%"></span>` : ''}
+        </div>
+
+        <div class="candidate-footer-row">
+          <span class="candidate-status-text">
+            ${isPruned ? `🚫 ${pruneReason}` : `✓ In Nucleus (Cum. Mass: ${(item.cumProb * 100).toFixed(1)}%)`}
+          </span>
+          ${isSampled ? `<span class="sampled-badge">🏆 Winner Sampled!</span>` : ''}
+        </div>
+      `;
+
+      // Allow clicking candidate to sample it manually!
+      card.addEventListener('click', () => {
+        if (isPruned) {
+          soundFx.playBlip(320, 0.08);
+          return;
+        }
+        applySampledToken(item.token);
+      });
+
+      deck.appendChild(card);
+    });
+  }
+
+  // --- Render Generation Terminal ---
+  function renderStoryTerminal() {
+    const storyBox = container.querySelector('#gen-story-display');
+    const countPill = container.querySelector('#gen-token-count-pill');
+    if (!storyBox) return;
+
+    const basePrompt = prompts[currentPromptIdx].text;
+    const history = state.genTokensHistory || [];
+
+    if (countPill) {
+      countPill.textContent = `Generated: ${history.length} tokens`;
+    }
+
+    let html = `<span class="terminal-prompt-text">${escapeHtml(basePrompt)}</span>`;
+    history.forEach((tok, i) => {
+      const isLatest = i === history.length - 1;
+      html += `<span class="terminal-gen-token ${isLatest ? 'latest' : ''}" data-idx="${i}" title="Generated Token #${i+1}">${escapeHtml(tok.replace(/\n/g, '↵'))}</span>`;
+    });
+
+    if (isStreaming) {
+      html += `<span class="terminal-cursor">▋</span>`;
+    }
+
+    storyBox.innerHTML = html;
+    storyBox.scrollTop = storyBox.scrollHeight;
+  }
+
+  // --- Sampling Logic (Multinomial Roulette Spin) ---
+  function sampleNextToken() {
+    const dist = computeDistribution();
+    const surviving = dist.surviving;
+    if (surviving.length === 0) return null;
+
+    // Generate random uniform r in [0, 1)
+    const r = Math.random();
+    let cumulative = 0;
+    let chosen = surviving[0];
+
+    for (let i = 0; i < surviving.length; i++) {
+      cumulative += surviving[i].finalProb;
+      if (r <= cumulative) {
+        chosen = surviving[i];
+        break;
+      }
+    }
+
+    return chosen.token;
+  }
+
+  function applySampledToken(tok) {
+    if (!tok) return;
+    sampledCandidateToken = tok;
+    state.genTokensHistory = state.genTokensHistory || [];
+    state.genTokensHistory.push(tok);
+
+    soundFx.playBlip(680 + (state.genTokensHistory.length % 5) * 60, 0.09);
+    awardXp(10);
+
+    updateUI();
+
+    // Reset sampled highlight after a brief moment
+    setTimeout(() => {
+      sampledCandidateToken = null;
+      updateUI();
+    }, 900);
+  }
+
+  // --- Auto-Streaming Routine ---
+  function toggleAutoStream() {
+    const btnStream = container.querySelector('#btn-gen-stream-auto');
+    if (isStreaming) {
+      // Stop
+      clearInterval(streamTimer);
+      isStreaming = false;
+      if (btnStream) {
+        btnStream.innerHTML = `<span>⚡</span> Auto-Stream 5 Tokens`;
+        btnStream.classList.remove('streaming');
+      }
+      renderStoryTerminal();
+      return;
+    }
+
+    // Start
+    isStreaming = true;
+    if (btnStream) {
+      btnStream.innerHTML = `<span>⏹</span> Pause Stream`;
+      btnStream.classList.add('streaming');
+    }
+
+    let tokensRemaining = 5;
+    streamTimer = setInterval(() => {
+      if (tokensRemaining <= 0) {
+        clearInterval(streamTimer);
+        isStreaming = false;
+        if (btnStream) {
+          btnStream.innerHTML = `<span>⚡</span> Auto-Stream 5 Tokens`;
+          btnStream.classList.remove('streaming');
+        }
+        soundFx.playSuccess();
+        renderStoryTerminal();
+        return;
+      }
+
+      const nextTok = sampleNextToken();
+      if (nextTok) {
+        applySampledToken(nextTok);
+      }
+      tokensRemaining--;
+    }, 600);
+  }
+
+  // --- Subtab Switching ---
+  container.querySelectorAll('.gen-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.gen-subtab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.gen-subtab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const tabName = btn.dataset.tab;
+      activeTab = tabName;
+      state.genActiveTab = tabName;
+      const target = container.querySelector(`#gen-content-${tabName}`);
+      if (target) target.classList.add('active');
+      soundFx.playBlip(540, 0.05);
+    });
+  });
+
+  // --- Event Listeners for Sliders ---
+  const sliderTemp = container.querySelector('#slider-temp');
+  if (sliderTemp) {
+    sliderTemp.addEventListener('input', (e) => {
+      currentTemperature = parseFloat(e.target.value);
+      state.genTemperature = currentTemperature;
+      updateUI();
+    });
+  }
+
+  const sliderTopP = container.querySelector('#slider-topp');
+  if (sliderTopP) {
+    sliderTopP.addEventListener('input', (e) => {
+      currentTopP = parseFloat(e.target.value);
+      state.genTopP = currentTopP;
+      updateUI();
+    });
+  }
+
+  const sliderTopK = container.querySelector('#slider-topk');
+  if (sliderTopK) {
+    sliderTopK.addEventListener('input', (e) => {
+      currentTopK = parseInt(e.target.value, 10);
+      state.genTopK = currentTopK;
+      updateUI();
+    });
+  }
+
+  const sliderRep = container.querySelector('#slider-rep');
+  if (sliderRep) {
+    sliderRep.addEventListener('input', (e) => {
+      currentRepetitionPenalty = parseFloat(e.target.value);
+      state.genRepetitionPenalty = currentRepetitionPenalty;
+      updateUI();
+    });
+  }
+
+  // --- Preset Quick Buttons ---
+  container.querySelectorAll('.preset-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      const val = parseFloat(btn.dataset.val);
+      if (type === 'temp') {
+        currentTemperature = val;
+        state.genTemperature = val;
+        if (sliderTemp) sliderTemp.value = val;
+      } else if (type === 'topp') {
+        currentTopP = val;
+        state.genTopP = val;
+        if (sliderTopP) sliderTopP.value = val;
+      } else if (type === 'topk') {
+        currentTopK = parseInt(val, 10);
+        state.genTopK = currentTopK;
+        if (sliderTopK) sliderTopK.value = val;
+      } else if (type === 'rep') {
+        currentRepetitionPenalty = val;
+        state.genRepetitionPenalty = val;
+        if (sliderRep) sliderRep.value = val;
+      }
+      soundFx.playBlip(720, 0.05);
+      updateUI();
+    });
+  });
+
+  // --- Terminal Action Buttons ---
+  const btnPromptSelect = container.querySelector('#gen-prompt-select');
+  if (btnPromptSelect) {
+    btnPromptSelect.addEventListener('change', (e) => {
+      currentPromptIdx = parseInt(e.target.value, 10);
+      state.genPromptIdx = currentPromptIdx;
+      state.genTokensHistory = [];
+      sampledCandidateToken = null;
+      soundFx.playBlip(600, 0.06);
+      updateUI();
+    });
+  }
+
+  const btnSpinStep = container.querySelector('#btn-gen-spin-step');
+  if (btnSpinStep) {
+    btnSpinStep.addEventListener('click', () => {
+      const tok = sampleNextToken();
+      if (tok) applySampledToken(tok);
+    });
+  }
+
+  const btnStreamAuto = container.querySelector('#btn-gen-stream-auto');
+  if (btnStreamAuto) {
+    btnStreamAuto.addEventListener('click', toggleAutoStream);
+  }
+
+  const btnReset = container.querySelector('#btn-reset-generation');
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      if (isStreaming) toggleAutoStream();
+      state.genTokensHistory = [];
+      sampledCandidateToken = null;
+      soundFx.playBlip(440, 0.08);
+      updateUI();
+    });
+  }
+
+  const btnCopy = container.querySelector('#btn-copy-generation');
+  if (btnCopy) {
+    btnCopy.addEventListener('click', async () => {
+      const base = prompts[currentPromptIdx].text;
+      const history = state.genTokensHistory || [];
+      const fullText = base + history.join('');
+      try {
+        await navigator.clipboard.writeText(fullText);
+        const originalText = btnCopy.textContent;
+        btnCopy.textContent = '✓ Copied!';
+        soundFx.playBlip(880, 0.05);
+        setTimeout(() => { btnCopy.textContent = originalText; }, 2000);
+      } catch (err) {
+        console.error('Clipboard copy failed:', err);
+      }
+    });
+  }
+
+  // --- Autoregressive Flow Pulse Animation ---
+  const btnPulseLoop = container.querySelector('#btn-pulse-autoreg-loop');
+  const pulseMsg = container.querySelector('#autoreg-pulse-msg');
+  if (btnPulseLoop) {
+    btnPulseLoop.addEventListener('click', () => {
+      btnPulseLoop.disabled = true;
+      const nodes = [
+        container.querySelector('#node-step-1'),
+        container.querySelector('#node-step-2'),
+        container.querySelector('#node-step-3'),
+        container.querySelector('#node-step-4'),
+        container.querySelector('#node-step-5')
+      ];
+
+      const messages = [
+        "1. Reading prompt & past tokens from KV cache...",
+        "2. Propagating activations across 32 Transformer layers...",
+        "3. Unembedding hidden state into 128,000 raw logits...",
+        "4. Applying Temperature scaling & Top-P Nucleus filter...",
+        "5. Stochastic multinomial sample: New token emitted & fed back!"
+      ];
+
+      nodes.forEach(n => n && n.classList.remove('pulse-active'));
+
+      nodes.forEach((node, i) => {
+        setTimeout(() => {
+          nodes.forEach(n => n && n.classList.remove('pulse-active'));
+          if (node) node.classList.add('pulse-active');
+          if (pulseMsg) pulseMsg.textContent = messages[i];
+          soundFx.playBlip(500 + i * 90, 0.08);
+
+          if (i === nodes.length - 1) {
+            setTimeout(() => {
+              if (node) node.classList.remove('pulse-active');
+              btnPulseLoop.disabled = false;
+              if (pulseMsg) pulseMsg.textContent = "✓ Cycle Complete! Next token fed back into context.";
+              soundFx.playSuccess();
+            }, 800);
+          }
+        }, i * 650);
+      });
+    });
+  }
+
+  // --- Repetition Penalty Live Sandbox Interactive Buttons ---
+  const repButtons = container.querySelectorAll('.rep-count-btn');
+  const repLogitEl = container.querySelector('#rep-demo-logit');
+  const repProbEl = container.querySelector('#rep-demo-prob');
+  const repStatusEl = container.querySelector('#rep-demo-status');
+
+  repButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      repButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const count = parseInt(btn.dataset.count, 10);
+      const baseLogit = 4.20;
+      const theta = currentRepetitionPenalty || 1.15;
+      const factor = Math.pow(theta, count);
+      const effective = baseLogit / factor;
+
+      // Simulated relative probability against competing score of 3.8
+      const exp1 = Math.exp(effective / 0.7);
+      const exp2 = Math.exp(3.8 / 0.7);
+      const prob = (exp1 / (exp1 + exp2)) * 100;
+
+      if (repLogitEl) repLogitEl.textContent = effective.toFixed(2);
+      if (repProbEl) repProbEl.textContent = `${prob.toFixed(1)}%`;
+      if (repStatusEl) {
+        if (count === 0) {
+          repStatusEl.className = 'loop-status-pill safe';
+          repStatusEl.textContent = 'Safe (High Diversity)';
+        } else if (count === 1) {
+          repStatusEl.className = 'loop-status-pill warning';
+          repStatusEl.textContent = 'Suppressed (-15%)';
+        } else {
+          repStatusEl.className = 'loop-status-pill danger';
+          repStatusEl.textContent = 'Strongly Blocked (-60%)';
+        }
+      }
+      soundFx.playBlip(560 + count * 50, 0.06);
+    });
+  });
+
+  // --- Faceoff Multi-Regime Parallel Runner ---
+  const btnRunFaceoff = container.querySelector('#btn-run-parallel-faceoff');
+  const outGreedy = container.querySelector('#faceoff-out-greedy');
+  const outNucleus = container.querySelector('#faceoff-out-nucleus');
+  const outChaos = container.querySelector('#faceoff-out-chaos');
+
+  const faceoffScenarios = {
+    robot: {
+      greedy: '"The mysterious robot stepped out of the spaceship and saw a human. The human saw a human. The human saw a human..."',
+      nucleus: '"The mysterious robot stepped out of the spaceship and saw a glowing alien staring silently across the alien horizon."',
+      chaos: '"The mysterious robot stepped out of the spaceship and saw a banana unicorn syntax pizza glitch underwater dancing."'
+    },
+    code: {
+      greedy: '"def train_neural_network(model, optimizer, data_loader):\n    model.train()\n    model.train()\n    model.train()..."',
+      nucleus: '"def train_neural_network(model, optimizer, data_loader):\n    model.train()\n    for epoch in range(10):\n        for batch in data_loader:"',
+      chaos: '"def train_neural_network(model, optimizer, data_loader):\n    spaceship pizza print total spaceship pizza return"'
+    },
+    philosophy: {
+      greedy: '"In the heart of the quantum computer, artificial consciousness began to question. It began to question. It began to question..."',
+      nucleus: '"In the heart of the quantum computer, artificial consciousness began to awaken and question whether reality itself was a simulation."',
+      chaos: '"In the heart of the quantum computer, artificial consciousness began to potato crash dance banana evolve quantum glitch."'
+    }
+  };
+
+  if (btnRunFaceoff) {
+    btnRunFaceoff.addEventListener('click', () => {
+      btnRunFaceoff.disabled = true;
+      const scenarioKey = prompts[currentPromptIdx].id || 'robot';
+      const scenario = faceoffScenarios[scenarioKey] || faceoffScenarios.robot;
+
+      if (outGreedy) outGreedy.textContent = "⏳ Generating with Argmax (T=0.05)...";
+      if (outNucleus) outNucleus.textContent = "⏳ Generating with Nucleus (T=0.7, P=0.9)...";
+      if (outChaos) outChaos.textContent = "⏳ Generating with Chaos (T=1.8)...";
+
+      setTimeout(() => {
+        if (outGreedy) outGreedy.textContent = scenario.greedy;
+        soundFx.playBlip(600, 0.08);
+      }, 500);
+
+      setTimeout(() => {
+        if (outNucleus) outNucleus.textContent = scenario.nucleus;
+        soundFx.playBlip(750, 0.08);
+      }, 1000);
+
+      setTimeout(() => {
+        if (outChaos) outChaos.textContent = scenario.chaos;
+        soundFx.playSuccess();
+        btnRunFaceoff.disabled = false;
+      }, 1500);
+    });
+  }
+
+  // Initial draw
+  updateUI();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -5218,6 +6418,13 @@ const questPrompts = {
     { label: '🧠 What knowledge is stored in SwiGLU FFN?', prompt: 'Contrast the roles of Attention (routing tokens) and SwiGLU Feed-Forward Networks (storing factual associations) inside a Transformer block.' },
     { label: '🏎️ How does KV Caching make generation 100x faster?', prompt: 'Explain how Key-Value (KV) caching slashes generation complexity from O(N^2) quadratic recomputation to O(N) linear time.' },
     { label: '🎯 Quiz me on GPT Decoder Blocks', prompt: 'Give me a challenging question about Transformer decoder blocks, SwiGLU, residual highways, and KV caching!' }
+  ],
+  'quest-10': [
+    { label: '🎲 Why does greedy decoding cause loops?', prompt: 'Explain why greedy decoding (picking argmax logits every step) leads LLMs into dull, repetitive loops, and how stochastic sampling fixes this.' },
+    { label: '🔥 How does Temperature change probabilities?', prompt: 'Walk through the mathematics of scaled logits z_i / T and explain what happens to candidate token probabilities when T is near 0 vs T > 1.5.' },
+    { label: '🎯 Top-K vs Top-P (Nucleus) Sampling', prompt: 'Compare Top-K vs Top-P (Nucleus) sampling: why does dynamic cumulative probability cutoff adapt better across confident vs ambiguous context windows?' },
+    { label: '🔁 How do Repetition Penalties work?', prompt: 'Explain how repetition penalties discount the logits of previously generated tokens to prevent degeneration and repetitive chatter.' },
+    { label: '🎯 Quiz me on LLM Generation & Sampling', prompt: 'Give me a challenging question about logits, temperature scaling, nucleus sampling, and autoregressive generation loops in PyTorch!' }
   ]
 };
 

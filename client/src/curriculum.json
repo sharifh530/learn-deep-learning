@@ -1435,6 +1435,175 @@
           "Confusing token routing with token storage: Attention decides WHERE to move information; FFN decides WHAT knowledge to recall."
         ]
       }
+    },
+    {
+      "id": "quest-10",
+      "number": 10,
+      "title": "The Generation Engine: Sampling & Autoregression",
+      "subtitle": "Logits, Softmax, Temperature, Top-K & Top-P (Nucleus) Sampling",
+      "tag": "LLM GENERATION",
+      "icon": "🎲",
+      "xp": 450,
+      "story": "How does an artificial neural network write an engaging story, produce clean Python code, or converse like a human? After passing through dozens of Transformer decoder blocks, the final representation is projected into hundreds of thousands of raw scores called Logits—one for every token in the vocabulary. If a model simply picked the highest score every time (Greedy Decoding), it would quickly degenerate into repetitive, boring loops! Enter the Generation Engine: using Temperature to dial between rigid math and wild creativity, and Top-P (Nucleus) filtering to eliminate nonsensical hallucinations.",
+      "mentalModel": "The Fortune Wheel & The Creative Thermostat: Imagine a roulette wheel with 128,000 slots. Logits determine the width of each slot. The Temperature knob controls the friction: freeze it (T → 0) and the single widest slot expands to swallow the whole wheel. Crank up the heat (T > 1.5) and all slots become equally wide, resulting in pure chaos. Top-P draws a circle around the top 90% most likely candidates and deletes the rest before spinning!",
+      "interactiveType": "generation_sampler_lab",
+      "interactiveConfig": {
+        "prompts": [
+          {
+            "id": "robot",
+            "text": "The mysterious robot stepped out of the spaceship and saw a",
+            "candidates": [
+              { "token": " alien", "logit": 4.2, "category": "sci-fi" },
+              { "token": " glowing", "logit": 3.7, "category": "desc" },
+              { "token": " city", "logit": 3.3, "category": "place" },
+              { "token": " human", "logit": 2.8, "category": "entity" },
+              { "token": " flower", "logit": 2.1, "category": "nature" },
+              { "token": " glitch", "logit": 1.4, "category": "tech" },
+              { "token": " sandwich", "logit": 0.4, "category": "absurd" },
+              { "token": " banana", "logit": -0.8, "category": "absurd" },
+              { "token": " unicorn", "logit": -1.9, "category": "fantasy" },
+              { "token": " syntax", "logit": -3.5, "category": "code" }
+            ]
+          },
+          {
+            "id": "code",
+            "text": "def train_neural_network(model, optimizer, data_loader):",
+            "candidates": [
+              { "token": "\n   ", "logit": 4.8, "category": "indent" },
+              { "token": " model", "logit": 3.9, "category": "code" },
+              { "token": " for", "logit": 3.4, "category": "loop" },
+              { "token": " total", "logit": 2.2, "category": "var" },
+              { "token": " print", "logit": 1.5, "category": "debug" },
+              { "token": " return", "logit": 0.6, "category": "control" },
+              { "token": " pizza", "logit": -2.4, "category": "absurd" },
+              { "token": " spaceship", "logit": -3.8, "category": "absurd" }
+            ]
+          },
+          {
+            "id": "philosophy",
+            "text": "In the heart of the quantum computer, artificial consciousness began to",
+            "candidates": [
+              { "token": " awaken", "logit": 4.1, "category": "thought" },
+              { "token": " question", "logit": 3.6, "category": "thought" },
+              { "token": " evolve", "logit": 3.2, "category": "action" },
+              { "token": " calculate", "logit": 2.5, "category": "tech" },
+              { "token": " dream", "logit": 2.0, "category": "creative" },
+              { "token": " crash", "logit": 0.8, "category": "bug" },
+              { "token": " dance", "logit": -0.5, "category": "whimsical" },
+              { "token": " potato", "logit": -3.6, "category": "absurd" }
+            ]
+          }
+        ],
+        "defaultTemperature": 0.7,
+        "defaultTopP": 0.90,
+        "defaultTopK": 5
+      },
+      "codeSnippet": "import torch\nimport torch.nn.functional as F\n\ndef sample_next_token(logits, temperature=0.7, top_k=5, top_p=0.9):\n    # 1. Temperature scaling (T > 0)\n    # Lower T (<0.5) makes high logits spike; Higher T (>1.0) flattens distribution\n    scaled_logits = logits / max(temperature, 1e-4)\n    \n    # 2. Top-K filtering: keep only top K logits, mask rest to -inf\n    if top_k > 0:\n        top_k_threshold = torch.topk(scaled_logits, min(top_k, scaled_logits.size(-1)))[0][..., -1, None]\n        scaled_logits[scaled_logits < top_k_threshold] = float('-inf')\n        \n    # 3. Softmax into probabilities (sum to 1.0)\n    probs = F.softmax(scaled_logits, dim=-1)\n    \n    # 4. Top-P (Nucleus) filtering: dynamically slice cumulative probability mass\n    sorted_probs, sorted_indices = torch.sort(probs, descending=True)\n    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)\n    \n    # Remove tokens with cumulative probability above threshold\n    indices_to_remove = cumulative_probs > top_p\n    indices_to_remove[..., 1:] = indices_to_remove[..., :-1].clone()\n    indices_to_remove[..., 0] = False\n    \n    sorted_probs[indices_to_remove] = 0.0\n    probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)  # Re-normalize\n    \n    # 5. Stochastic Multinomial Sample\n    sample_idx = torch.multinomial(probs, num_samples=1)\n    chosen_token = sorted_indices.gather(dim=-1, index=sample_idx).item()\n    \n    return chosen_token, probs\n\n# Simulated vocabulary of 6 candidate tokens\ntokens = [\"alien\", \"glowing\", \"city\", \"human\", \"sandwich\", \"banana\"]\nraw_logits = torch.tensor([4.2, 3.7, 3.3, 2.8, 0.4, -0.8])\n\nchosen_idx, final_probs = sample_next_token(raw_logits, temperature=0.7, top_k=4, top_p=0.85)\nprint(\"Sampled Next Token:\", tokens[chosen_idx])\nprint(\"Top Probabilities:\", [f\"{t}: {p:.3f}\" for t, p in zip(tokens[:4], final_probs[:4])])",
+      "quiz": [
+        {
+          "question": "What happens when Temperature T approaches 0 (T → 0), known as Greedy Decoding?",
+          "options": [
+            "The model selects words at completely random probability",
+            "The highest-scoring logit receives 100% probability mass (Argmax), making text generation completely deterministic and prone to repetitive loops",
+            "The model deletes all vowels from the sentence",
+            "PyTorch runs out of memory and restarts"
+          ],
+          "answer": 1,
+          "explanation": "As T approaches 0, dividing logits by a tiny number magnifies differences to infinity. Softmax turns into an exact Argmax: the highest logit wins with 100% probability every single time."
+        },
+        {
+          "question": "Why is Top-P (Nucleus Sampling) generally superior to static Top-K in open-ended text generation?",
+          "options": [
+            "Top-P requires no GPU memory at all",
+            "Top-P dynamically adapts the candidate pool size: when the model is confident, only 1-2 tokens are kept; when uncertain, the candidate pool automatically widens",
+            "Top-P deletes all punctuation marks from the prompt",
+            "Top-K was banned by the Python Software Foundation"
+          ],
+          "answer": 1,
+          "explanation": "Static Top-K is rigid. If K=50 and the model is 99% confident (e.g. 'The Eiffel Tower is in [Paris]'), Top-K still samples from 49 terrible candidates! Top-P dynamically keeps only the top 90% cumulative mass, shrinking to 1 token when confident and widening when creative."
+        },
+        {
+          "question": "How does Repetition Penalty prevent models from repeating phrases like 'and then and then and then'?",
+          "options": [
+            "By shutting down the computer when a duplicate word appears",
+            "By dividing the logits of previously generated tokens by a penalty scalar (alpha > 1.0), actively discouraging the model from choosing recent words",
+            "By setting the learning rate to 0 during inference",
+            "By reversing the direction of self-attention"
+          ],
+          "answer": 1,
+          "explanation": "Repetition penalty tracks tokens in the recent generation window and penalizes their logits (logit = logit / alpha if logit > 0 else logit * alpha). This depresses their probabilities and forces the model to explore fresh vocabulary."
+        }
+      ],
+      "lesson": {
+        "readTime": "6 min read",
+        "difficulty": "Advanced • LLM Generation & Sampling",
+        "hook": "Why does an AI model that knows trillions of words sometimes write brilliant code, yet at other times start hallucinating or repeating itself like a broken record?",
+        "analogy": {
+          "title": "The Jazz Improviser & The Metronome Dial 🎷🎲",
+          "description": "Imagine a master jazz musician on stage. The sheet music (Prompt) gives the opening chord progression. At every beat, the musician's brain scores all 12 musical notes (Logits). If the conductor sets Temperature to 0, the musician plays only the single safest note every time—becoming robotic, predictable, and lifeless. If Temperature is set to 2.0, they hit random disharmonies. At Temperature 0.7 with Top-P=0.9, the musician plays surprising yet harmonically coherent improvisations!"
+        },
+        "sections": [
+          {
+            "heading": "1. From Hidden States to Logits: The Un-Embedding Projection",
+            "content": "After a sequence passes through all 32+ Transformer decoder blocks, the final representation for the latest token is a dense vector $\\mathbf{h} \\in \\mathbb{R}^{d_{\\text{model}}}$ (e.g., $d=4,096$).\nTo decide what word to write next, the model projects $\\mathbf{h}$ against the entire vocabulary via the **Un-Embedding Matrix** $\\mathbf{W}_U \\in \\mathbb{R}^{d_{\\text{model}} \\times V}$ (often tied to $\\mathbf{W}_E^T$):\n$$\\mathbf{z} = \\mathbf{h} \\mathbf{W}_U \\in \\mathbb{R}^V$$\nThis produces $V$ unconstrained real numbers called **Logits**. A logit of $+5.2$ indicates high affinity; a logit of $-4.1$ indicates extreme implausibility.",
+            "callout": "💡 Key Insight: Logits are raw scores from $-\\infty$ to $+\\infty$. Softmax is the bridge that converts raw scores into a valid probability distribution that sums to 1.0."
+          },
+          {
+            "heading": "2. The Temperature Thermostat: Modulating Softmax Entropy",
+            "content": "We control sampling randomness by scaling logits by **Temperature ($T > 0$)** before Softmax:\n$$P(w_i \\mid T) = \\frac{\\exp(z_i / T)}{\\sum_{j=1}^V \\exp(z_j / T)}$$\n• **Cold ($T \\to 0$, e.g. 0.1 - 0.3):** Dividing by a small fraction magnifies differences. The top logit dominates with $>99\\%$ probability. Best for math, JSON output, and factual question answering.\n• **Balanced ($T \\approx 0.7$):** Smooth distribution. Allows natural human-like variation without losing coherence.\n• **Hot ($T > 1.5$):** Dividing by large numbers compresses logits toward zero. Softmax approaches a uniform distribution ($1/V$), triggering erratic vocabulary choices and hallucinations.",
+            "callout": "🌡️ Thermostat Analogy: Low Temperature = Rigid logician following rules. High Temperature = Hallucinatory poet with wandering attention."
+          },
+          {
+            "heading": "3. Dynamic Truncation: Top-K vs. Top-P (Nucleus)",
+            "content": "Sampling from a 128k vocabulary without truncation is risky. Even at $T=0.7$, thousands of irrelevant words possess tiny non-zero probabilities ($0.0001\\%$). Across 500 tokens, a bad word is guaranteed to get picked!\n• **Top-K:** Keeps only the top $K$ highest-scoring tokens (e.g., $K=50$). Flaw: It is static. When predicting *'The capital of France is'*, there is only 1 right answer, yet Top-K still considers 49 bad alternatives.\n• **Top-P (Nucleus Sampling):** Sorts tokens by probability and keeps the smallest set whose cumulative sum reaches threshold $p$ (typically $p=0.90$):\n$$\\sum_{i \\in V^{(p)}} P(w_i) \\ge p$$\nWhen the model is confident, the nucleus shrinks to 1 or 2 tokens. When the context is open-ended, the nucleus expands to dozens of creative options!",
+            "callout": "🎯 The Nucleus Superpower: Top-P provides dynamic safety: strict and narrow when confident, wide and expressive when creative."
+          },
+          {
+            "heading": "4. The Autoregressive Loop in Action",
+            "content": "Large Language Models do not generate paragraphs at once. They run in a continuous sequential while-loop:\n```python\nprompt = [\"The\", \"future\", \"of\"]\nwhile True:\n    logits = model(prompt)       # 1. Forward pass\n    next_token = sample(logits)  # 2. Temperature + Top-P\n    prompt.append(next_token)    # 3. Append to context\n    if next_token == EOS_TOKEN:  # 4. Stop when finished\n        break\n```\nBecause each output token becomes the input for the next step, small mistakes compound exponentially if sampling parameters are tuned poorly.",
+            "callout": "🔄 Compounding Errors: A single bad hallucinated token can derail the entire subsequent generation, as future attention heads condition on the mistake."
+          },
+          {
+            "heading": "5. Repetition & Presence Penalties",
+            "content": "Why do base models sometimes get stuck in loops like *'I agree, I agree, I agree...'*?\nBecause if a phrase is already in the context, attention attends strongly to it, raising its logits even higher at the next step! A self-reinforcing positive feedback loop forms.\n**Repetition Penalty (Keskar et al.)** checks tokens already present in the prompt context and penalizes their logits:\n$$z_i \\gets \\begin{cases} z_i / \\alpha & \\text{if } z_i > 0 \\\\ z_i \\cdot \\alpha & \\text{if } z_i < 0 \\end{cases} \\quad (\\alpha > 1.0)$$\nSetting $\\alpha = 1.15$ gently breaks repetition loops and promotes diverse vocabulary without degrading coherence.",
+            "callout": "🛡️ Loop Breaker: Repetition penalties apply soft downward pressure on already-used words, preventing the model from trapping itself in echo chambers."
+          }
+        ],
+        "formulaCard": {
+          "title": "Temperature Softmax & Nucleus Sampling Equations",
+          "equation": "P(w_i \\mid T) = \\frac{\\exp(z_i / T)}{\\sum_j \\exp(z_j / T)}, \\quad \\sum_{i \\in V^{(p)}} P(w_{(i)} \\mid T) \\ge p",
+          "breakdown": [
+            {
+              "symbol": "z_i",
+              "meaning": "Raw unnormalized logit score for token i from the un-embedding projection"
+            },
+            {
+              "symbol": "T",
+              "meaning": "Temperature scaling factor modulating entropy (cold = deterministic, hot = creative)"
+            },
+            {
+              "symbol": "p",
+              "meaning": "Nucleus threshold (e.g. 0.90) dynamically filtering the cumulative probability mass"
+            },
+            {
+              "symbol": "V^{(p)}",
+              "meaning": "Truncated candidate pool passed into the multinomial sampler"
+            }
+          ]
+        },
+        "takeaways": [
+          "The un-embedding projection converts final hidden states into raw vocabulary logits.",
+          "Softmax converts logits into normalized probabilities summing to 100%.",
+          "Temperature controls entropy: T < 0.3 for rigid logic and code; T ≈ 0.7 for natural conversation; T > 1.2 risks hallucinations.",
+          "Top-P (Nucleus) sampling dynamically expands or contracts candidate pools based on cumulative confidence.",
+          "Repetition penalties prevent catastrophic echo-chamber generation loops."
+        ],
+        "commonPitfalls": [
+          "Passing T=0 directly to torch.multinomial: Causes a division-by-zero error. For greedy decoding, use torch.argmax(logits) directly.",
+          "Stacking extreme Top-K and extreme Top-P: Setting K=2 and P=0.5 can over-constrain the model into repetitive monotone answers.",
+          "Forgetting to check the End-Of-Sequence (EOS) token: The generation loop will run indefinitely until the maximum context limit is exhausted."
+        ]
+      }
     }
   ]
 }

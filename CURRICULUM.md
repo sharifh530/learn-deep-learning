@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 9)
+## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 10)
 
 ```
-[Quest 7: The Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside the GPT Block]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -209,10 +209,57 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🎲 Quest 10: The Generation Engine & Sampling Dynamics
+- **The Concept**:
+  How neural activations transform into fluid, creative human language:
+  - **Unembedding Head:** Final linear layer projecting the 4096-dimensional hidden vector onto hundreds of thousands of raw scores (**Logits** $z_i$).
+  - **The Greedy Trap:** Picking $\text{argmax}(z)$ every step leads into repetitive, robotic degeneration loops (*"the model is a model that is a model..."*).
+  - **Temperature Scaling ($T$):** Divides logits by $T$ before softmax ($z_i / T$). Freeze it ($T \to 0$) for deterministic code/math; dial it up ($T > 1.2$) for wild poetic creativity.
+  - **Top-K Filtering:** Restricts the candidate pool strictly to the top $K$ highest-probability tokens, setting all other logits to $-\infty$.
+  - **Top-P (Nucleus) Sampling:** Dynamically sums sorted probabilities until cumulative mass reaches $p$ (e.g., $90\%$). Dynamically expands when the model is uncertain, and contracts to a single token when confident.
+  - **Repetition Penalty ($\theta$):** Down-weights logits of tokens that have already appeared in the context window:
+    $$z_i' = \begin{cases} z_i / \theta & \text{if } z_i > 0 \\ z_i \times \theta & \text{if } z_i < 0 \end{cases}$$
+- **The Interactive Sandbox**:
+  - **Interactive Token Roulette:** Live candidate probability meters, dynamic Top-P cutoff line, and animated multinomial sampling spinner.
+  - **Autoregressive Flow Pulse:** 5-stage loop simulator visualizing token feedback into the context window.
+  - **Tri-Regime Face-Off:** Direct side-by-side generation comparing Greedy vs Nucleus vs High-Entropy Chaos.
+- **Hands-On Python (PyTorch)**:
+  ```python
+  import torch
+  import torch.nn.functional as F
+
+  def sample_next_token(logits, temperature=0.7, top_k=5, top_p=0.9):
+      # 1. Temperature scaling
+      scaled_logits = logits / max(temperature, 1e-4)
+
+      # 2. Top-K filtering
+      if top_k > 0:
+          thresh = torch.topk(scaled_logits, min(top_k, scaled_logits.size(-1)))[0][..., -1, None]
+          scaled_logits[scaled_logits < thresh] = float('-inf')
+
+      # 3. Softmax
+      probs = F.softmax(scaled_logits, dim=-1)
+
+      # 4. Top-P (Nucleus) filtering
+      sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+      cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+      indices_to_remove = cumulative_probs > top_p
+      indices_to_remove[..., 1:] = indices_to_remove[..., :-1].clone()
+      indices_to_remove[..., 0] = False
+      sorted_probs[indices_to_remove] = 0.0
+      probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+
+      # 5. Multinomial draw
+      sample_idx = torch.multinomial(probs, num_samples=1)
+      return sorted_indices.gather(dim=-1, index=sample_idx).item()
+  ```
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 10: The Generation Loop & Sampling Dynamics:** Logits, Softmax, Temperature ($T$), Top-K, and Top-P (Nucleus) sampling.
 - **Quest 11: Post-Training & Alignment:** Pretraining vs SFT, ChatML templates, RLHF, and Direct Preference Optimization (DPO).
 - **Quest 12: Parameter-Efficient Fine-Tuning (PEFT & LoRA):** Low-Rank decomposition ($W_0 + B \times A$) and 4-bit quantization (QLoRA).
+
 
 ---
 

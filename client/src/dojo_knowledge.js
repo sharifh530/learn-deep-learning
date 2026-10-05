@@ -382,6 +382,53 @@ print("Output context tensor shape:", out.shape)
         answer: "B",
         explanation: "Spot on! Without causal masking, token i would simply copy token i+1 from the future. The training loss would drop to zero, but the model would never learn to generate or predict!"
       }
+    },
+
+    'quest-10': {
+      title: 'The Generation Engine: Temperature & Top-P Sampling',
+      eli10: `🎲 **The Fortune Wheel & The Jazz Improviser (Generation & Sampling):**\n\nHow does an LLM turn raw numbers into engaging natural prose?\n\n1. **Logits ($z \\in \\mathbb{R}^V$):** The un-embedding projection produces an unconstrained score for all 128,000 words in the vocabulary.\n2. **The Temperature Dial ($T > 0$):** Modulates the entropy of Softmax:\n   $$P(w_i \\mid T) = \\frac{\\exp(z_i / T)}{\\sum_j \\exp(z_j / T)}$$\n   - **Cold ($T < 0.3$):** Softmax spikes into an Argmax spike. 100% deterministic, best for code and math, but prone to repetitive loops.\n   - **Balanced ($T \\approx 0.7$):** Natural human-like phrasing.\n   - **Hot ($T > 1.5$):** Flattened uniform distribution, resulting in hallucinated nonsense!\n3. **Top-P (Nucleus) Sampling:** Slices the cumulative probability mass (e.g. top 90%). When the model is confident, it shrinks to 1 token; when creative, it widens to dozens of options!\n4. **Repetition Penalty:** Divides the logits of recent words by $\\alpha > 1.0$, preventing runaway echo-chamber loops like *"and then and then and then"*!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+def sample_token(logits, temperature=0.7, top_p=0.9):
+    # 1. Scale logits by Temperature
+    scaled = logits / max(temperature, 1e-4)
+    probs = F.softmax(scaled, dim=-1)
+    
+    # 2. Top-P (Nucleus) cumulative cutoff
+    sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+    cum_probs = torch.cumsum(sorted_probs, dim=-1)
+    
+    # Mask out tokens beyond cumulative threshold p
+    mask = cum_probs > top_p
+    mask[..., 1:] = mask[..., :-1].clone()
+    mask[..., 0] = False
+    sorted_probs[mask] = 0.0
+    probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+    
+    # 3. Multinomial sample
+    sample = torch.multinomial(probs, num_samples=1)
+    return sorted_indices.gather(-1, sample).item()
+
+# Raw candidate logits for: ["alien", "glowing", "city", "sandwich"]
+raw = torch.tensor([4.2, 3.7, 3.3, 0.4])
+chosen_idx = sample_token(raw, temperature=0.7, top_p=0.85)
+print("Sampled token index:", chosen_idx)
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The Temperature Parameter**\n\nWhat happens mathematically to the Softmax distribution when Temperature approaches zero (T → 0)?",
+        options: [
+          "A) All tokens receive equal 25% probability",
+          "B) The distribution spikes into an Argmax Dirac delta where the highest logit receives 100% probability mass",
+          "C) The model deletes all nouns from the vocabulary",
+          "D) Memory consumption increases by 10x"
+        ],
+        answer: "B",
+        explanation: "Osu! When dividing logits by a near-zero number, differences magnify toward infinity. Softmax turns into an exact Argmax, making next-token prediction 100% deterministic (greedy decoding)!"
+      }
     }
   },
 
@@ -512,6 +559,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('gpt') || hasPhrase('causal') || hasPhrase('rmsnorm') || hasPhrase('swiglu') || hasPhrase('decoder') || hasPhrase('kv cache') || hasPhrase('quest 9')) {
     return DOJO_KNOWLEDGE.quests['quest-9'].eli10;
+  }
+  if (hasPhrase('sampling') || hasPhrase('temperature') || hasPhrase('top-p') || hasPhrase('nucleus') || hasPhrase('greedy') || hasPhrase('logit') || hasPhrase('repetition') || hasPhrase('quest 10')) {
+    return DOJO_KNOWLEDGE.quests['quest-10'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest
