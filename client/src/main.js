@@ -58,7 +58,18 @@ const state = {
   attnHead: 'head-2',
   attnScaleEnabled: true,
   attnCustomText: '',
-  attnQueryVectorOverride: null
+  attnQueryVectorOverride: null,
+  // Quest 8: BPE & Embeddings Lab state
+  bpeText: 'Tokenization powers modern LLMs like ChatGPT and Llama.',
+  bpeSelectedTokenIdx: 0,
+  bpeActiveTab: 'tokenizer', // 'tokenizer' | 'embeddings' | 'rope'
+  bpeRopePos: 2,
+  bpeVectorArithmeticActive: false,
+  // Quest 9: Transformer Block Inspector state
+  gptActiveTab: 'flow', // 'flow' | 'mask' | 'kvcache'
+  gptCausalMaskActive: true,
+  gptFocusedLayerIdx: 2, // Causal MHA
+  gptKvSeqLen: 128
 };
 
 const tutorService = new AITutorService();
@@ -635,6 +646,12 @@ function renderInteractiveWidget(quest) {
       break;
     case 'attention_workshop':
       renderAttentionWorkshopWidget(quest);
+      break;
+    case 'bpe_embedding_lab':
+      renderBpeEmbeddingLabWidget(quest);
+      break;
+    case 'transformer_block_inspector':
+      renderTransformerBlockInspectorWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -3981,6 +3998,1054 @@ function renderAttentionWorkshopWidget(quest) {
   recomputeAndDraw();
 }
 
+// ============================================================================
+// WIDGET 8: Words into Vectors (BPE Tokenization & Embeddings Lab)
+// ============================================================================
+function renderBpeEmbeddingLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'bpe-lab-container';
+
+  const presets = quest.interactiveConfig?.presets || [];
+  let currentText = state.bpeText || "Tokenization powers modern LLMs like ChatGPT and Llama.";
+  let selectedTokenIdx = state.bpeSelectedTokenIdx || 0;
+  let activeTab = state.bpeActiveTab || 'tokenizer';
+  let ropePos = state.bpeRopePos !== undefined ? state.bpeRopePos : 2;
+
+  // Realistic subword segmenter for demonstration
+  const SUBWORD_RULES = [
+    { match: /^(token)(ization)$/i, parts: ['Token', 'ization'] },
+    { match: /^(anti)(gravit)(y)$/i, parts: ['Anti', 'gravit', 'y'] },
+    { match: /^(un)(believ)(ably)$/i, parts: ['un', 'believ', 'ably'] },
+    { match: /^(trans)(format)(ive)$/i, parts: ['trans', 'format', 'ive'] },
+    { match: /^(chat)(gpt)$/i, parts: ['Chat', 'GPT'] },
+    { match: /^(embed)(ding)(s)?$/i, parts: ['embed', 'ding', 's'] },
+    { match: /^(rotar)(y)$/i, parts: ['rotar', 'y'] },
+    { match: /^(algorithm)(s)?$/i, parts: ['algorithm', 's'] },
+    { match: /^(posit)(ion)(al)?$/i, parts: ['posit', 'ion', 'al'] }
+  ];
+
+  function tokenizeText(text) {
+    const rawWords = text.trim().split(/(\s+|[.,!?;:()"])/).filter(Boolean);
+    const tokens = [];
+
+    rawWords.forEach((word) => {
+      if (/^\s+$/.test(word)) return; // skip pure whitespace
+      let matched = false;
+      for (const rule of SUBWORD_RULES) {
+        const m = word.match(rule.match);
+        if (m) {
+          rule.parts.filter(Boolean).forEach((p, pIdx) => {
+            tokens.push({
+              text: p,
+              isPrefix: pIdx === 0,
+              id: hashToken(p)
+            });
+          });
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        if (word.length > 7 && !/^[.,!?;:]$/.test(word)) {
+          // split long words into root + suffix
+          const mid = Math.min(5, Math.floor(word.length * 0.6));
+          const p1 = word.slice(0, mid);
+          const p2 = word.slice(mid);
+          tokens.push({ text: p1, isPrefix: true, id: hashToken(p1) });
+          tokens.push({ text: p2, isPrefix: false, id: hashToken(p2) });
+        } else {
+          tokens.push({ text: word, isPrefix: true, id: hashToken(word) });
+        }
+      }
+    });
+
+    return tokens.length > 0 ? tokens : [{ text: 'AI', isPrefix: true, id: 2045 }];
+  }
+
+  function hashToken(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h % 31000) + 1024;
+  }
+
+  let currentTokens = tokenizeText(currentText);
+  if (selectedTokenIdx >= currentTokens.length) selectedTokenIdx = 0;
+
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="bpe-diagnostic-hud">
+      <div class="bpe-hud-col">
+        <span class="bpe-hud-badge">🔤 BPE Subword Tokenizer & Embeddings Lab</span>
+        <div class="bpe-hud-desc">
+          Decomposing human language into atomic subword IDs, projecting into dense vectors, and applying Rotary Position Embeddings (RoPE).
+        </div>
+      </div>
+      <div class="bpe-metrics-grid">
+        <div class="bpe-metric-card">
+          <span class="metric-label">Token Count</span>
+          <strong class="metric-val" id="metric-bpe-tokens">${currentTokens.length} Tokens</strong>
+        </div>
+        <div class="bpe-metric-card">
+          <span class="metric-label">Raw Characters</span>
+          <strong class="metric-val" id="metric-bpe-chars">${currentText.length} Chars</strong>
+        </div>
+        <div class="bpe-metric-card">
+          <span class="metric-label">Compression Ratio</span>
+          <strong class="metric-val" id="metric-bpe-ratio">${(currentText.length / Math.max(1, currentTokens.length)).toFixed(2)} chars/tok</strong>
+        </div>
+        <div class="bpe-metric-card">
+          <span class="metric-label">Vocab Standard</span>
+          <strong class="metric-val" style="color: var(--accent-emerald);">BPE 128k Vocab</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sentence Preset & Custom Input Bar -->
+    <div class="bpe-input-card">
+      <div class="bpe-input-row">
+        <div class="bpe-preset-select-wrap">
+          <label for="bpe-preset-select">📚 Benchmark Preset:</label>
+          <select id="bpe-preset-select" class="cyber-select">
+            ${presets.map((p) => `<option value="${p.id}">${p.name}: "${p.text.slice(0, 38)}..."</option>`).join('')}
+            <option value="custom">✏️ Custom Sentence...</option>
+          </select>
+        </div>
+        <div class="bpe-text-field-wrap">
+          <input type="text" id="bpe-input-text" class="cyber-input" value="${escapeHtml(currentText)}" placeholder="Type any sentence to see subword tokenization..." />
+          <button id="btn-bpe-tokenize" class="btn-attn-sub">Tokenize ✨</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Segmented Token Ribbon -->
+    <div class="bpe-ribbon-card">
+      <div class="bpe-ribbon-header">
+        <span>🔤 Atomic Token Stream (Click any token to inspect its embedding coordinates)</span>
+        <span class="bpe-active-pill" id="bpe-active-token-pill">Active: "${currentTokens[selectedTokenIdx]?.text || ''}" (ID: #${currentTokens[selectedTokenIdx]?.id || ''})</span>
+      </div>
+      <div class="bpe-token-chips-wrap" id="bpe-token-chips-wrap"></div>
+    </div>
+
+    <!-- Mode Sub-Tabs -->
+    <div class="bpe-subtab-bar">
+      <button class="bpe-subtab-btn ${activeTab === 'tokenizer' ? 'active' : ''}" data-tab="tokenizer">
+        <span>🔤</span> BPE Subword Morphisms
+      </button>
+      <button class="bpe-subtab-btn ${activeTab === 'embeddings' ? 'active' : ''}" data-tab="embeddings">
+        <span>🧭</span> 2D Semantic Vector Space
+      </button>
+      <button class="bpe-subtab-btn ${activeTab === 'rope' ? 'active' : ''}" data-tab="rope">
+        <span>🔄</span> Rotary Position (RoPE) Compass
+      </button>
+    </div>
+
+    <!-- Sub-Tab 1: Morphisms -->
+    <div class="bpe-subtab-content ${activeTab === 'tokenizer' ? 'active' : ''}" id="bpe-content-tokenizer">
+      <div class="bpe-morphisms-stage">
+        <div class="bpe-merge-panel">
+          <h4>Iterative Merge Tree for Active Word</h4>
+          <p class="bpe-panel-subtitle">How raw UTF-8 bytes fuse into high-frequency vocabulary subwords</p>
+          <div class="bpe-cascade-steps" id="bpe-cascade-steps">
+            <div class="bpe-step-row">
+              <span class="step-num">Step 0 (Chars):</span>
+              <div class="step-chips">
+                <span class="chip-char">T</span><span class="chip-char">o</span><span class="chip-char">k</span><span class="chip-char">e</span><span class="chip-char">n</span>
+                <span class="chip-char sep">·</span>
+                <span class="chip-char">i</span><span class="chip-char">z</span><span class="chip-char">a</span><span class="chip-char">t</span><span class="chip-char">i</span><span class="chip-char">o</span><span class="chip-char">n</span>
+              </div>
+            </div>
+            <div class="bpe-step-arrow">⬇ Byte Pair Merge (Highest Frequency: 'i' + 'z' ➔ 'iz')</div>
+            <div class="bpe-step-row">
+              <span class="step-num">Step 1 (Bigrams):</span>
+              <div class="step-chips">
+                <span class="chip-token violet">Token</span>
+                <span class="chip-char sep">·</span>
+                <span class="chip-token cyan">iz</span><span class="chip-token amber">ation</span>
+              </div>
+            </div>
+            <div class="bpe-step-arrow">⬇ Suffix Morphism Fusion ('iz' + 'ation' ➔ 'ization')</div>
+            <div class="bpe-step-row highlighted">
+              <span class="step-num">Final BPE Tokens:</span>
+              <div class="step-chips">
+                <span class="chip-token large violet">Token <small>(#4291)</small></span>
+                <span class="chip-token large cyan">ization <small>(#1324)</small></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bpe-complexity-panel">
+          <h4>Quadratic Attention Memory Impact</h4>
+          <p class="bpe-panel-subtitle">Why BPE is mandatory for modern 128k context windows</p>
+          <div class="complexity-comparison-grid">
+            <div class="complexity-box red">
+              <h5>Character-Level (No BPE)</h5>
+              <p class="val">${currentText.length} Tokens</p>
+              <p class="desc">Attention Matrix = ${currentText.length}²</p>
+              <strong class="highlight-stat">${currentText.length * currentText.length} Attention Ops</strong>
+              <small>⚠️ Memory explodes quadratically!</small>
+            </div>
+            <div class="complexity-box green">
+              <h5>Byte-Pair Encoding (BPE)</h5>
+              <p class="val">${currentTokens.length} Tokens</p>
+              <p class="desc">Attention Matrix = ${currentTokens.length}²</p>
+              <strong class="highlight-stat">${currentTokens.length * currentTokens.length} Attention Ops</strong>
+              <small>⚡ ${( (currentText.length * currentText.length) / Math.max(1, currentTokens.length * currentTokens.length) ).toFixed(1)}x faster computation!</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 2: Semantic Vector Space -->
+    <div class="bpe-subtab-content ${activeTab === 'embeddings' ? 'active' : ''}" id="bpe-content-embeddings">
+      <div class="bpe-vector-stage">
+        <div class="bpe-canvas-card">
+          <div class="bpe-canvas-header">
+            <span>🧭 2D PCA Semantic Coordinates</span>
+            <button id="btn-run-vector-arithmetic" class="btn-vector-action">▶ Run: King − Man + Woman = ?</button>
+          </div>
+          <canvas id="bpe-vector-canvas" width="600" height="340" class="bpe-interactive-canvas"></canvas>
+          <div class="bpe-canvas-legend">
+            <span><span class="dot violet"></span> Royalty</span>
+            <span><span class="dot blue"></span> Human</span>
+            <span><span class="dot emerald"></span> Technology</span>
+            <span><span class="dot amber"></span> Food</span>
+          </div>
+        </div>
+
+        <div class="bpe-vector-info-panel">
+          <h4>Active Token Vector Representation</h4>
+          <div class="token-meta-box">
+            <div class="meta-row"><span>Token String:</span><strong id="meta-token-str" style="color: var(--accent-cyan);">"Token"</strong></div>
+            <div class="meta-row"><span>Token ID:</span><code id="meta-token-id">#4291</code></div>
+            <div class="meta-row"><span>Bytes:</span><code id="meta-token-bytes">[0x54, 0x6f, 0x6b, 0x65, 0x6e]</code></div>
+            <div class="meta-row"><span>Embedding Norm:</span><code id="meta-token-norm">||v|| = 1.000</code></div>
+          </div>
+          <h5 style="margin-top: 1rem; color: #fff; font-size: 0.9rem;">Simulated Embedding Vector (d=8):</h5>
+          <div class="vector-cells-rack" id="vector-cells-rack"></div>
+          <div class="vector-arithmetic-result-box" id="vector-arithmetic-result" style="display: none;">
+            <h5>Vector Arithmetic Result:</h5>
+            <div class="arithmetic-eq">v("king") − v("man") + v("woman") ➔ v*</div>
+            <div class="arithmetic-cos">Nearest Neighbor: <strong style="color: #fbbf24;">"queen"</strong> (Cosine Similarity = <strong>0.948</strong>) ✓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 3: Rotary Position Compass (RoPE) -->
+    <div class="bpe-subtab-content ${activeTab === 'rope' ? 'active' : ''}" id="bpe-content-rope">
+      <div class="bpe-rope-stage">
+        <div class="rope-canvas-card">
+          <div class="rope-canvas-header">
+            <span>🔄 2D Complex Unit Circle Rotation</span>
+            <span class="rope-angle-pill" id="rope-angle-pill">Angle θ: 72.0°</span>
+          </div>
+          <canvas id="bpe-rope-canvas" width="460" height="340" class="bpe-interactive-canvas"></canvas>
+        </div>
+
+        <div class="rope-controls-panel">
+          <h4>Rotary Position Embedding Parameters</h4>
+          <p class="bpe-panel-subtitle">Rotate Query & Key vectors so inner products depend on relative distance (m − n)</p>
+          
+          <div class="control-slider-group">
+            <div class="slider-label-row">
+              <span>Token Sequence Position (m):</span>
+              <span class="val" id="val-rope-pos">${ropePos}</span>
+            </div>
+            <input type="range" class="cyber-slider" id="slider-rope-pos" min="0" max="12" step="1" value="${ropePos}" />
+          </div>
+
+          <div class="rope-math-card">
+            <h5>Rotary Matrix Applied:</h5>
+            <div class="rope-matrix-display" id="rope-matrix-display">
+              R_m = [[ cos(mθ), -sin(mθ) ], [ sin(mθ), cos(mθ) ]]
+            </div>
+            <div class="rope-math-insight">
+              <strong>Crucial Guarantee:</strong><br/>
+              ⟨R_m · q, R_n · k⟩ = f(q, k, m − n)<br/>
+              Absolute position m drops out! The attention mechanism perceives relative distance naturally.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- Render Token Chips ---
+  const chipsWrap = container.querySelector('#bpe-token-chips-wrap');
+  const activePill = container.querySelector('#bpe-active-token-pill');
+  const metaStr = container.querySelector('#meta-token-str');
+  const metaId = container.querySelector('#meta-token-id');
+  const metaBytes = container.querySelector('#meta-token-bytes');
+  const vectorRack = container.querySelector('#vector-cells-rack');
+
+  const COLORS = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa'];
+
+  function renderChips() {
+    chipsWrap.innerHTML = '';
+    currentTokens.forEach((tok, idx) => {
+      const chip = document.createElement('div');
+      const isSelected = idx === selectedTokenIdx;
+      const col = COLORS[idx % COLORS.length];
+      chip.className = `bpe-token-chip ${isSelected ? 'selected' : ''}`;
+      chip.style.borderColor = isSelected ? col : 'rgba(148,163,184,0.3)';
+      chip.style.backgroundColor = isSelected ? `${col}22` : 'rgba(15,23,42,0.6)';
+      chip.innerHTML = `
+        <span class="tok-prefix" style="color: ${col};">${tok.isPrefix ? '·' : 'Ġ'}</span>
+        <span class="tok-text">${escapeHtml(tok.text)}</span>
+        <span class="tok-id" style="color: ${col};">#${tok.id}</span>
+      `;
+      chip.addEventListener('click', () => {
+        selectedTokenIdx = idx;
+        state.bpeSelectedTokenIdx = idx;
+        renderChips();
+        updateTokenMetadata();
+      });
+      chipsWrap.appendChild(chip);
+    });
+  }
+
+  function updateTokenMetadata() {
+    const t = currentTokens[selectedTokenIdx] || currentTokens[0];
+    if (!t) return;
+    activePill.textContent = `Active: "${t.text}" (ID: #${t.id})`;
+    if (metaStr) metaStr.textContent = `"${t.text}"`;
+    if (metaId) metaId.textContent = `#${t.id}`;
+    if (metaBytes) {
+      const bytes = Array.from(new TextEncoder().encode(t.text)).map(b => '0x' + b.toString(16).padStart(2, '0'));
+      metaBytes.textContent = `[${bytes.join(', ')}]`;
+    }
+
+    if (vectorRack) {
+      vectorRack.innerHTML = '';
+      // Generate pseudo-random coordinates deterministically from ID
+      const seed = t.id * 1337;
+      for (let i = 0; i < 8; i++) {
+        const val = Math.sin(seed + i * 1.5) * 0.9;
+        const cell = document.createElement('div');
+        cell.className = 'vector-cell';
+        cell.innerHTML = `
+          <span class="dim-idx">d${i}</span>
+          <span class="dim-val ${val >= 0 ? 'pos' : 'neg'}">${val >= 0 ? '+' : ''}${val.toFixed(2)}</span>
+        `;
+        vectorRack.appendChild(cell);
+      }
+    }
+  }
+
+  // --- Sub-Tab Switching ---
+  container.querySelectorAll('.bpe-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.bpe-subtab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.bpe-subtab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const tabName = btn.dataset.tab;
+      activeTab = tabName;
+      state.bpeActiveTab = tabName;
+      const target = container.querySelector(`#bpe-content-${tabName}`);
+      if (target) target.classList.add('active');
+
+      if (tabName === 'embeddings') drawVectorCanvas();
+      if (tabName === 'rope') drawRopeCanvas();
+    });
+  });
+
+  // --- Tokenizer Action Handlers ---
+  const presetSelect = container.querySelector('#bpe-preset-select');
+  const inputText = container.querySelector('#bpe-input-text');
+  const btnTokenize = container.querySelector('#btn-bpe-tokenize');
+
+  presetSelect.addEventListener('change', (e) => {
+    const pId = e.target.value;
+    const found = presets.find(p => p.id === pId);
+    if (found) {
+      inputText.value = found.text;
+      applyNewText(found.text);
+    }
+  });
+
+  btnTokenize.addEventListener('click', () => {
+    applyNewText(inputText.value.trim());
+  });
+
+  inputText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyNewText(inputText.value.trim());
+  });
+
+  function applyNewText(text) {
+    if (!text) return;
+    currentText = text;
+    state.bpeText = text;
+    currentTokens = tokenizeText(text);
+    selectedTokenIdx = 0;
+    state.bpeSelectedTokenIdx = 0;
+
+    container.querySelector('#metric-bpe-tokens').textContent = `${currentTokens.length} Tokens`;
+    container.querySelector('#metric-bpe-chars').textContent = `${currentText.length} Chars`;
+    container.querySelector('#metric-bpe-ratio').textContent = `${(currentText.length / Math.max(1, currentTokens.length)).toFixed(2)} chars/tok`;
+
+    renderChips();
+    updateTokenMetadata();
+    if (activeTab === 'embeddings') drawVectorCanvas();
+    if (activeTab === 'rope') drawRopeCanvas();
+  }
+
+  // --- Canvas 1: Semantic Vector Space ---
+  const vectorCanvas = container.querySelector('#bpe-vector-canvas');
+  const vCtx = vectorCanvas ? vectorCanvas.getContext('2d') : null;
+  const btnArithmetic = container.querySelector('#btn-run-vector-arithmetic');
+  const arithmeticResult = container.querySelector('#vector-arithmetic-result');
+
+  let vectorArithmeticProgress = 0;
+  let vectorAnimId = null;
+
+  function drawVectorCanvas() {
+    if (!vCtx || !vectorCanvas) return;
+    const w = vectorCanvas.width;
+    const h = vectorCanvas.height;
+    vCtx.clearRect(0, 0, w, h);
+
+    // Background Grid
+    vCtx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
+    vCtx.lineWidth = 1;
+    for (let x = 40; x < w; x += 40) {
+      vCtx.beginPath(); vCtx.moveTo(x, 0); vCtx.lineTo(x, h); vCtx.stroke();
+    }
+    for (let y = 40; y < h; y += 40) {
+      vCtx.beginPath(); vCtx.moveTo(0, y); vCtx.lineTo(w, y); vCtx.stroke();
+    }
+
+    // Axes
+    const cx = w / 2;
+    const cy = h / 2;
+    vCtx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    vCtx.lineWidth = 1.5;
+    vCtx.beginPath(); vCtx.moveTo(20, cy); vCtx.lineTo(w - 20, cy); vCtx.stroke();
+    vCtx.beginPath(); vCtx.moveTo(cx, 20); vCtx.lineTo(cx, h - 20); vCtx.stroke();
+
+    const scale = 140;
+    const toCanvasX = (vx) => cx + vx * scale;
+    const toCanvasY = (vy) => cy - vy * scale;
+
+    const samples = [
+      { word: 'king', vx: 0.65, vy: 0.55, col: '#a78bfa' },
+      { word: 'queen', vx: 0.60, vy: 0.82, col: '#fbbf24' },
+      { word: 'man', vx: 0.30, vy: 0.20, col: '#60a5fa' },
+      { word: 'woman', vx: 0.25, vy: 0.47, col: '#fb7185' },
+      { word: 'robot', vx: -0.55, vy: -0.50, col: '#34d399' },
+      { word: 'computer', vx: -0.65, vy: -0.62, col: '#22d3ee' },
+      { word: 'apple', vx: -0.45, vy: 0.40, col: '#fbbf24' },
+      { word: 'banana', vx: -0.52, vy: 0.30, col: '#fbbf24' }
+    ];
+
+    // Draw arithmetic vectors if running
+    if (vectorArithmeticProgress > 0) {
+      const man = samples.find(s => s.word === 'man');
+      const king = samples.find(s => s.word === 'king');
+      const woman = samples.find(s => s.word === 'woman');
+      const queen = samples.find(s => s.word === 'queen');
+
+      const mx = toCanvasX(man.vx), my = toCanvasY(man.vy);
+      const kx = toCanvasX(king.vx), ky = toCanvasY(king.vy);
+      const wx = toCanvasX(woman.vx), wy = toCanvasY(woman.vy);
+      const qx = toCanvasX(queen.vx), qy = toCanvasY(queen.vy);
+
+      // Vector 1: man -> king (Royalty delta)
+      vCtx.strokeStyle = 'rgba(167, 139, 250, 0.8)';
+      vCtx.lineWidth = 2.5;
+      vCtx.beginPath();
+      vCtx.moveTo(mx, my);
+      vCtx.lineTo(mx + (kx - mx) * vectorArithmeticProgress, my + (ky - my) * vectorArithmeticProgress);
+      vCtx.stroke();
+
+      // Vector 2: woman -> woman + royalty delta
+      if (vectorArithmeticProgress > 0.5) {
+        const p2 = (vectorArithmeticProgress - 0.5) / 0.5;
+        const targetX = wx + (kx - mx);
+        const targetY = wy + (ky - my);
+        vCtx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
+        vCtx.lineWidth = 2.5;
+        vCtx.setLineDash([4, 4]);
+        vCtx.beginPath();
+        vCtx.moveTo(wx, wy);
+        vCtx.lineTo(wx + (targetX - wx) * p2, wy + (targetY - wy) * p2);
+        vCtx.stroke();
+        vCtx.setLineDash([]);
+      }
+    }
+
+    // Draw word nodes
+    samples.forEach(s => {
+      const px = toCanvasX(s.vx);
+      const py = toCanvasY(s.vy);
+      vCtx.fillStyle = s.col;
+      vCtx.beginPath();
+      vCtx.arc(px, py, 6, 0, Math.PI * 2);
+      vCtx.fill();
+      vCtx.strokeStyle = '#fff';
+      vCtx.lineWidth = 1.5;
+      vCtx.stroke();
+
+      vCtx.font = 'bold 12px "Outfit", sans-serif';
+      vCtx.fillStyle = '#ffffff';
+      vCtx.fillText(s.word, px + 9, py - 4);
+    });
+  }
+
+  if (btnArithmetic) {
+    btnArithmetic.addEventListener('click', () => {
+      if (vectorAnimId) cancelAnimationFrame(vectorAnimId);
+      vectorArithmeticProgress = 0;
+      if (arithmeticResult) arithmeticResult.style.display = 'block';
+
+      const startTime = performance.now();
+      const duration = 1200;
+
+      function step(now) {
+        const elapsed = now - startTime;
+        vectorArithmeticProgress = Math.min(1.0, elapsed / duration);
+        drawVectorCanvas();
+        if (vectorArithmeticProgress < 1.0) {
+          vectorAnimId = requestAnimationFrame(step);
+        }
+      }
+      vectorAnimId = requestAnimationFrame(step);
+    });
+  }
+
+  // --- Canvas 2: RoPE Rotary Compass ---
+  const ropeCanvas = container.querySelector('#bpe-rope-canvas');
+  const rCtx = ropeCanvas ? ropeCanvas.getContext('2d') : null;
+  const sliderRopePos = container.querySelector('#slider-rope-pos');
+  const valRopePos = container.querySelector('#val-rope-pos');
+  const ropeAnglePill = container.querySelector('#rope-angle-pill');
+  const ropeMatrixDisplay = container.querySelector('#rope-matrix-display');
+
+  function drawRopeCanvas() {
+    if (!rCtx || !ropeCanvas) return;
+    const w = ropeCanvas.width;
+    const h = ropeCanvas.height;
+    rCtx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const R = 110;
+
+    // Unit Circle
+    rCtx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    rCtx.lineWidth = 2;
+    rCtx.beginPath();
+    rCtx.arc(cx, cy, R, 0, Math.PI * 2);
+    rCtx.stroke();
+
+    // Cross axes
+    rCtx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+    rCtx.beginPath();
+    rCtx.moveTo(cx - R - 20, cy); rCtx.lineTo(cx + R + 20, cy);
+    rCtx.moveTo(cx, cy - R - 20); rCtx.lineTo(cx, cy + R + 20);
+    rCtx.stroke();
+
+    // Base query vector (angle 0)
+    const baseAngle = 0.4;
+    const rotatedAngle = baseAngle + ropePos * 0.35;
+
+    // Key vector (at position 0)
+    const kAngle = baseAngle + 0.1;
+    const kx = cx + R * Math.cos(kAngle);
+    const ky = cy - R * Math.sin(kAngle);
+    rCtx.strokeStyle = '#fb7185';
+    rCtx.lineWidth = 2.5;
+    rCtx.beginPath();
+    rCtx.moveTo(cx, cy);
+    rCtx.lineTo(kx, ky);
+    rCtx.stroke();
+    rCtx.fillStyle = '#fb7185';
+    rCtx.fillText('k (Key pos 0)', kx + 8, ky);
+
+    // Query vector (rotated by pos * theta)
+    const qx = cx + R * Math.cos(rotatedAngle);
+    const qy = cy - R * Math.sin(rotatedAngle);
+    rCtx.strokeStyle = '#38bdf8';
+    rCtx.lineWidth = 3;
+    rCtx.beginPath();
+    rCtx.moveTo(cx, cy);
+    rCtx.lineTo(qx, qy);
+    rCtx.stroke();
+    rCtx.fillStyle = '#38bdf8';
+    rCtx.font = 'bold 12px "Outfit", sans-serif';
+    rCtx.fillText(`q (Query pos ${ropePos})`, qx + 8, qy - 4);
+
+    // Arc of rotation
+    rCtx.strokeStyle = '#facc15';
+    rCtx.lineWidth = 2;
+    rCtx.beginPath();
+    rCtx.arc(cx, cy, 40, -rotatedAngle, -baseAngle);
+    rCtx.stroke();
+
+    const deg = Math.round((ropePos * 0.35 * 180) / Math.PI);
+    if (ropeAnglePill) ropeAnglePill.textContent = `Rotation Angle m·θ: ${deg}°`;
+    if (ropeMatrixDisplay) {
+      const cVal = Math.cos(ropePos * 0.35).toFixed(2);
+      const sVal = Math.sin(ropePos * 0.35).toFixed(2);
+      ropeMatrixDisplay.textContent = `R_${ropePos} = [[ ${cVal}, -${sVal} ], [ ${sVal}, ${cVal} ]]`;
+    }
+  }
+
+  if (sliderRopePos) {
+    sliderRopePos.addEventListener('input', (e) => {
+      ropePos = parseInt(e.target.value, 10);
+      state.bpeRopePos = ropePos;
+      if (valRopePos) valRopePos.textContent = ropePos;
+      drawRopeCanvas();
+    });
+  }
+
+  // Initial render
+  renderChips();
+  updateTokenMetadata();
+  if (activeTab === 'embeddings') drawVectorCanvas();
+  if (activeTab === 'rope') drawRopeCanvas();
+}
+
+// ============================================================================
+// WIDGET 9: Inside the GPT Block (Transformer Decoder Inspector)
+// ============================================================================
+function renderTransformerBlockInspectorWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'gpt-block-inspector-container';
+
+  let activeTab = state.gptActiveTab || 'flow';
+  let causalMaskActive = state.gptCausalMaskActive !== undefined ? state.gptCausalMaskActive : true;
+  let focusedLayerIdx = state.gptFocusedLayerIdx !== undefined ? state.gptFocusedLayerIdx : 2;
+  let kvSeqLen = state.gptKvSeqLen || 128;
+
+  const sampleTokens = ["The", "future", "of", "AI", "is"];
+  const N = sampleTokens.length;
+
+  const STAGES = [
+    {
+      idx: 0,
+      name: "Input Residual Highway (x)",
+      type: "residual",
+      color: "var(--accent-emerald)",
+      icon: "🛣️",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "x_0 = \\text{Embed}(tokens) + \\text{RoPE}",
+      role: "Continuous high-speed express highway carrying contextualized token representations throughout all 80 layers."
+    },
+    {
+      idx: 1,
+      name: "RMSNorm #1 (Pre-Attention)",
+      type: "norm",
+      color: "var(--accent-cyan)",
+      icon: "⚡",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "\\text{RMSNorm}(x) = \\frac{x}{\\sqrt{\\frac{1}{d}\\sum x_i^2 + \\epsilon}} \\odot \\gamma",
+      role: "Scales activations by root-mean-square variance to stabilize variance without slow mean-centering passes."
+    },
+    {
+      idx: 2,
+      name: "Causal Multi-Head Attention",
+      type: "attention",
+      color: "var(--accent-violet)",
+      icon: "🛡️",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}} + M_{\\text{causal}}\\right) V",
+      role: "Dynamically routes context between words while strictly blinding future tokens via lower-triangular causal masking."
+    },
+    {
+      idx: 3,
+      name: "Residual Addition #1 (+)",
+      type: "residual",
+      color: "var(--accent-emerald)",
+      icon: "➕",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "x^{(1)} = x + \\text{Attention}(\\text{RMSNorm}(x))",
+      role: "Adds attention deltas onto the baseline residual stream, providing a zero-loss gradient highway during backpropagation."
+    },
+    {
+      idx: 4,
+      name: "RMSNorm #2 (Pre-FFN)",
+      type: "norm",
+      color: "var(--accent-amber)",
+      icon: "⚡",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "\\text{RMSNorm}(x^{(1)})",
+      role: "Pre-normalizes the contextualized representations before sending them through wide feed-forward knowledge expansion."
+    },
+    {
+      idx: 5,
+      name: "SwiGLU Feed-Forward Network",
+      type: "ffn",
+      color: "var(--accent-rose)",
+      icon: "🧠",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "\\text{SwiGLU}(x) = (\\text{SiLU}(x W_{\\text{gate}}) \\odot x W_{\\text{up}}) W_{\\text{down}}",
+      role: "Expands hidden dimension to 14,336 with non-linear gating. Stores encyclopedic facts, concepts, and relational memory."
+    },
+    {
+      idx: 6,
+      name: "Residual Addition #2 (+)",
+      type: "residual",
+      color: "var(--accent-emerald)",
+      icon: "➕",
+      shapeIn: "[1, 5, 4096]",
+      shapeOut: "[1, 5, 4096]",
+      eq: "x^{(2)} = x^{(1)} + \\text{SwiGLU}(\\text{RMSNorm}(x^{(1)}))",
+      role: "Merges extracted factual knowledge back onto the residual highway, ready for the next stacked Transformer decoder block."
+    }
+  ];
+
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="gpt-diagnostic-hud">
+      <div class="gpt-hud-col">
+        <span class="gpt-hud-badge">🧱 Inside the GPT Decoder Block (Llama 3 / Mistral)</span>
+        <div class="gpt-hud-desc">
+          Dissecting the internal anatomy of a modern auto-regressive Transformer block: Causal Masking, RMSNorm, SwiGLU, and KV Caching.
+        </div>
+      </div>
+      <div class="gpt-metrics-grid">
+        <div class="gpt-metric-card">
+          <span class="metric-label">Hidden Dimension</span>
+          <strong class="metric-val" style="color: var(--accent-cyan);">4,096 Dims</strong>
+        </div>
+        <div class="gpt-metric-card">
+          <span class="metric-label">SwiGLU Intermediate</span>
+          <strong class="metric-val" style="color: var(--accent-rose);">14,336 Dims</strong>
+        </div>
+        <div class="gpt-metric-card">
+          <span class="metric-label">Causality Guard</span>
+          <strong class="metric-val" id="metric-gpt-causal">${causalMaskActive ? 'Active (-∞)' : 'Bypassed ⚠️'}</strong>
+        </div>
+        <div class="gpt-metric-card">
+          <span class="metric-label">Block Parameters</span>
+          <strong class="metric-val" style="color: var(--accent-amber);">~14.2M / Block</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mode Sub-Tabs -->
+    <div class="bpe-subtab-bar">
+      <button class="bpe-subtab-btn ${activeTab === 'flow' ? 'active' : ''}" data-tab="flow">
+        <span>🧱</span> 7-Stage Block Signal Highway
+      </button>
+      <button class="bpe-subtab-btn ${activeTab === 'mask' ? 'active' : ''}" data-tab="mask">
+        <span>🛡️</span> Causal Masking Laboratory
+      </button>
+      <button class="bpe-subtab-btn ${activeTab === 'kvcache' ? 'active' : ''}" data-tab="kvcache">
+        <span>🏎️</span> KV Cache Speedup Engine
+      </button>
+    </div>
+
+    <!-- Sub-Tab 1: Block Flow Stage -->
+    <div class="bpe-subtab-content ${activeTab === 'flow' ? 'active' : ''}" id="gpt-content-flow">
+      <div class="gpt-flow-layout">
+        <!-- Interactive Stage Highway Cards -->
+        <div class="gpt-stages-track" id="gpt-stages-track"></div>
+
+        <!-- Inspector Drawer -->
+        <div class="gpt-inspector-drawer" id="gpt-inspector-drawer">
+          <div class="drawer-header">
+            <span class="drawer-icon" id="drawer-icon">🛡️</span>
+            <div>
+              <h4 id="drawer-title">Causal Multi-Head Attention</h4>
+              <span class="drawer-type" id="drawer-type">Attention Layer</span>
+            </div>
+          </div>
+          <div class="drawer-body">
+            <div class="drawer-tensor-row">
+              <span class="tensor-tag in">Input: <code id="drawer-shape-in">[1, 5, 4096]</code></span>
+              <span class="tensor-arrow">➔</span>
+              <span class="tensor-tag out">Output: <code id="drawer-shape-out">[1, 5, 4096]</code></span>
+            </div>
+            <div class="drawer-math-card">
+              <h5>Mathematical Equation:</h5>
+              <div class="drawer-eq" id="drawer-eq">Attention(Q, K, V) = softmax(QK^T / sqrt(d_k) + M) V</div>
+            </div>
+            <p class="drawer-desc" id="drawer-desc">
+              Dynamically routes context between words while strictly blinding future tokens via lower-triangular causal masking.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 2: Causal Mask Matrix -->
+    <div class="bpe-subtab-content ${activeTab === 'mask' ? 'active' : ''}" id="gpt-content-mask">
+      <div class="gpt-mask-stage">
+        <div class="mask-grid-card">
+          <div class="mask-card-header">
+            <span>🛡️ 5×5 Attention Compatibility Matrix</span>
+            <button id="btn-toggle-causal-mask" class="btn-attn-sub ${causalMaskActive ? 'active' : 'warn'}">
+              ${causalMaskActive ? '✓ Causal Mask: ON (Lower Triangular)' : '⚠️ Causal Mask: OFF (Bidirectional Leaks)'}
+            </button>
+          </div>
+          <div class="mask-matrix-table-wrap" id="mask-matrix-table-wrap"></div>
+          <div class="mask-legend">
+            <span><span class="cell-sample green">✓</span> Allowed Past Attention ($j \\le i$)</span>
+            <span><span class="cell-sample red">−∞</span> Blinded Future Tokens ($j > i$, Prob = 0.00%)</span>
+          </div>
+        </div>
+
+        <div class="mask-explanation-panel">
+          <h4>Why Autoregressive LLMs Cannot Peek Ahead</h4>
+          <p class="bpe-panel-subtitle">The strict temporal barrier in next-token prediction</p>
+          <div class="mask-insight-card">
+            <div class="insight-row">
+              <span class="insight-num">1</span>
+              <div>
+                <strong>Next-Token Prediction Setup:</strong>
+                <p>Given words [1, 2, 3], the model is rewarded for predicting word 4.</p>
+              </div>
+            </div>
+            <div class="insight-row">
+              <span class="insight-num">2</span>
+              <div>
+                <strong>The Fatal Cheat without Masking:</strong>
+                <p>If word 2 could attend to word 3, the model would simply copy the answer off the test sheet instead of learning language!</p>
+              </div>
+            </div>
+            <div class="insight-row">
+              <span class="insight-num">3</span>
+              <div>
+                <strong>The Softmax Math Fix:</strong>
+                <p>Adding $-\\infty$ sets $e^{-\\infty} = 0$, guaranteeing zero weight to future tokens.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 3: KV Cache Speedup -->
+    <div class="bpe-subtab-content ${activeTab === 'kvcache' ? 'active' : ''}" id="gpt-content-kvcache">
+      <div class="gpt-kvcache-stage">
+        <div class="kv-controls-card">
+          <h4>KV Cache Generation Simulator</h4>
+          <p class="bpe-panel-subtitle">Compare quadratic full recomputation against lightning-fast Key-Value caching</p>
+          
+          <div class="control-slider-group">
+            <div class="slider-label-row">
+              <span>Context Length Generated (N tokens):</span>
+              <span class="val" id="val-kv-seq">${kvSeqLen} tokens</span>
+            </div>
+            <input type="range" class="cyber-slider" id="slider-kv-seq" min="16" max="2048" step="16" value="${kvSeqLen}" />
+          </div>
+
+          <div class="kv-stats-grid">
+            <div class="kv-stat-box red">
+              <h5>Naive Full Recomputation</h5>
+              <p class="stat-big" id="kv-stat-naive-flops">${( (kvSeqLen * kvSeqLen) / 2 ).toLocaleString()} MFLOPs</p>
+              <p class="stat-sub">Quadratic O(N²) Time Complexity</p>
+              <small>Recomputes tokens 1 to N-1 at every single word!</small>
+            </div>
+            <div class="kv-stat-box green">
+              <h5>With KV Caching Active</h5>
+              <p class="stat-big" id="kv-stat-cached-flops">${kvSeqLen.toLocaleString()} MFLOPs</p>
+              <p class="stat-sub">Linear O(N) Generation Time</p>
+              <small>Computes only the single newest Query!</small>
+            </div>
+          </div>
+
+          <div class="kv-speedup-banner">
+            <span class="speedup-icon">⚡</span>
+            <div>
+              <h4 id="kv-speedup-text">${(kvSeqLen / 2).toFixed(0)}x Faster Generation Speedup</h4>
+              <p id="kv-memory-text">VRAM Cache Footprint: ~${( (2 * 32 * 32 * 128 * kvSeqLen * 2) / (1024 * 1024) ).toFixed(1)} MB</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="kv-memory-visual-card">
+          <h4>VRAM KV Cache Slot Buffer</h4>
+          <p class="bpe-panel-subtitle">Keys and Values are preserved in GPU memory across time steps</p>
+          <div class="kv-buffer-slots" id="kv-buffer-slots"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- Render 7-Stage Flow Track ---
+  const stagesTrack = container.querySelector('#gpt-stages-track');
+  const drawerIcon = container.querySelector('#drawer-icon');
+  const drawerTitle = container.querySelector('#drawer-title');
+  const drawerType = container.querySelector('#drawer-type');
+  const drawerShapeIn = container.querySelector('#drawer-shape-in');
+  const drawerShapeOut = container.querySelector('#drawer-shape-out');
+  const drawerEq = container.querySelector('#drawer-eq');
+  const drawerDesc = container.querySelector('#drawer-desc');
+
+  function renderStages() {
+    stagesTrack.innerHTML = '';
+    STAGES.forEach((s) => {
+      const card = document.createElement('div');
+      const isFocused = s.idx === focusedLayerIdx;
+      card.className = `gpt-stage-card ${isFocused ? 'focused' : ''}`;
+      card.style.borderLeftColor = s.color;
+      card.innerHTML = `
+        <div class="stage-card-left">
+          <span class="stage-icon">${s.icon}</span>
+          <div class="stage-info">
+            <span class="stage-num">STAGE #${s.idx + 1}</span>
+            <strong class="stage-name">${s.name}</strong>
+          </div>
+        </div>
+        <div class="stage-card-right">
+          <span class="stage-shape">${s.shapeOut}</span>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        focusedLayerIdx = s.idx;
+        state.gptFocusedLayerIdx = s.idx;
+        renderStages();
+        updateDrawer();
+      });
+      stagesTrack.appendChild(card);
+    });
+  }
+
+  function updateDrawer() {
+    const s = STAGES[focusedLayerIdx] || STAGES[0];
+    if (drawerIcon) drawerIcon.textContent = s.icon;
+    if (drawerTitle) drawerTitle.textContent = s.name;
+    if (drawerType) drawerType.textContent = s.type.toUpperCase() + ' LAYER';
+    if (drawerShapeIn) drawerShapeIn.textContent = s.shapeIn;
+    if (drawerShapeOut) drawerShapeOut.textContent = s.shapeOut;
+    if (drawerEq) drawerEq.textContent = s.eq;
+    if (drawerDesc) drawerDesc.textContent = s.role;
+  }
+
+  // --- Render Causal Mask Matrix ---
+  const matrixWrap = container.querySelector('#mask-matrix-table-wrap');
+  const btnToggleMask = container.querySelector('#btn-toggle-causal-mask');
+  const metricCausal = container.querySelector('#metric-gpt-causal');
+
+  function renderMaskMatrix() {
+    matrixWrap.innerHTML = '';
+    const table = document.createElement('table');
+    table.className = 'mask-table';
+
+    // Header row
+    const thead = document.createElement('thead');
+    let hRow = '<tr><th>Query \\ Key</th>';
+    sampleTokens.forEach((t) => {
+      hRow += `<th>"${t}"</th>`;
+    });
+    hRow += '</tr>';
+    thead.innerHTML = hRow;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (let r = 0; r < N; r++) {
+      const tr = document.createElement('tr');
+      let rHtml = `<th class="row-token">"${sampleTokens[r]}" (#${r})</th>`;
+      for (let c = 0; c < N; c++) {
+        const allowed = causalMaskActive ? (c <= r) : true;
+        const cls = allowed ? 'allowed' : 'blocked';
+        const txt = allowed ? (1 / (r + 1)).toFixed(2) : '−∞';
+        rHtml += `<td class="cell ${cls}" title="Query: '${sampleTokens[r]}' ➔ Key: '${sampleTokens[c]}'">${txt}</td>`;
+      }
+      tr.innerHTML = rHtml;
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    matrixWrap.appendChild(table);
+  }
+
+  if (btnToggleMask) {
+    btnToggleMask.addEventListener('click', () => {
+      causalMaskActive = !causalMaskActive;
+      state.gptCausalMaskActive = causalMaskActive;
+      btnToggleMask.className = `btn-attn-sub ${causalMaskActive ? 'active' : 'warn'}`;
+      btnToggleMask.textContent = causalMaskActive
+        ? '✓ Causal Mask: ON (Lower Triangular)'
+        : '⚠️ Causal Mask: OFF (Bidirectional Leaks)';
+      if (metricCausal) metricCausal.textContent = causalMaskActive ? 'Active (-∞)' : 'Bypassed ⚠️';
+      renderMaskMatrix();
+    });
+  }
+
+  // --- KV Cache Calculations & Buffer Slots ---
+  const sliderKvSeq = container.querySelector('#slider-kv-seq');
+  const valKvSeq = container.querySelector('#val-kv-seq');
+  const statNaiveFlops = container.querySelector('#kv-stat-naive-flops');
+  const statCachedFlops = container.querySelector('#kv-stat-cached-flops');
+  const speedupText = container.querySelector('#kv-speedup-text');
+  const memoryText = container.querySelector('#kv-memory-text');
+  const bufferSlots = container.querySelector('#kv-buffer-slots');
+
+  function updateKvCacheMetrics() {
+    if (valKvSeq) valKvSeq.textContent = `${kvSeqLen} tokens`;
+    const naive = Math.round((kvSeqLen * kvSeqLen) / 2);
+    const cached = kvSeqLen;
+    const speedup = Math.max(1, Math.round(naive / cached));
+    const vramMb = ((2 * 32 * 32 * 128 * kvSeqLen * 2) / (1024 * 1024)).toFixed(1);
+
+    if (statNaiveFlops) statNaiveFlops.textContent = `${naive.toLocaleString()} MFLOPs`;
+    if (statCachedFlops) statCachedFlops.textContent = `${cached.toLocaleString()} MFLOPs`;
+    if (speedupText) speedupText.textContent = `${speedup}x Faster Generation Speedup`;
+    if (memoryText) memoryText.textContent = `VRAM Cache Footprint: ~${vramMb} MB (Locked in GPU Memory)`;
+
+    if (bufferSlots) {
+      bufferSlots.innerHTML = '';
+      const slotsCount = 8;
+      for (let i = 0; i < slotsCount; i++) {
+        const slot = document.createElement('div');
+        const isCurrent = i === slotsCount - 1;
+        slot.className = `kv-slot ${isCurrent ? 'current' : 'cached'}`;
+        slot.innerHTML = `
+          <span class="slot-idx">Step ${i * Math.floor(kvSeqLen / slotsCount)}</span>
+          <span class="slot-status">${isCurrent ? '⚡ New Query' : '💾 Cached K, V'}</span>
+        `;
+        bufferSlots.appendChild(slot);
+      }
+    }
+  }
+
+  if (sliderKvSeq) {
+    sliderKvSeq.addEventListener('input', (e) => {
+      kvSeqLen = parseInt(e.target.value, 10);
+      state.gptKvSeqLen = kvSeqLen;
+      updateKvCacheMetrics();
+    });
+  }
+
+  // --- Sub-Tab Switching ---
+  container.querySelectorAll('.bpe-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.bpe-subtab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.bpe-subtab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const tabName = btn.dataset.tab;
+      activeTab = tabName;
+      state.gptActiveTab = tabName;
+      const target = container.querySelector(`#gpt-content-${tabName}`);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // Initial render
+  renderStages();
+  updateDrawer();
+  renderMaskMatrix();
+  updateKvCacheMetrics();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -4073,7 +5138,7 @@ function renderQuiz(quest) {
             setTimeout(() => {
               soundFx.playDiplomaFanfare();
               confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 } });
-              alert('🎉 CONGRATULATIONS!\nYou have conquered all 7 Deep Learning Quests!\nSensei Tensor has conferred your Master Diploma! Click "Diploma" in the navbar to claim and download your credential.');
+              alert(`🎉 CONGRATULATIONS!\nYou have conquered all ${total} Deep Learning Quests!\nSensei Tensor has conferred your Master Diploma! Click "Diploma" in the navbar to claim and download your credential.`);
             }, 600);
           } else {
             soundFx.playQuestComplete();
@@ -4140,6 +5205,19 @@ const questPrompts = {
     { label: '📚 Explain Q, K, and V with an analogy', prompt: 'Explain Query, Key, and Value vectors using an intuitive everyday analogy like a research library or YouTube search engine.' },
     { label: '🤖 How does Multi-Head Attention see multiple angles?', prompt: 'Explain how splitting embeddings into multiple attention heads lets a model track grammar, coreference, and semantics simultaneously.' },
     { label: '🎯 Quiz me on Transformers', prompt: 'Give me a challenging question about self-attention, masking, or transformer architecture in PyTorch!' }
+  ],
+  'quest-8': [
+    { label: '🔤 How does BPE eliminate OOV errors?', prompt: 'Explain how Byte-Pair Encoding merges frequent character pairs so rare words and typos are decomposed into known subwords.' },
+    { label: '🧭 Explain King - Man + Woman = Queen', prompt: 'Walk through the linear relational geometry of word embeddings: why do dense vectors allow semantic concept arithmetic?' },
+    { label: '🔄 How does RoPE rotate Query and Key vectors?', prompt: 'Explain the mathematics of Rotary Position Embeddings (RoPE) in the 2D complex plane and why relative distance m - n matters.' },
+    { label: '🎯 Quiz me on Tokenization & Embeddings', prompt: 'Give me a challenging question about BPE, tokenizers, vocabulary size, and RoPE in modern LLMs!' }
+  ],
+  'quest-9': [
+    { label: '🧱 Why is Causal Masking mandatory in GPT?', prompt: 'Explain why auto-regressive next-token prediction strictly requires an upper-triangular -inf causal attention mask.' },
+    { label: '⚡ Why did Llama 3 switch from LayerNorm to RMSNorm?', prompt: 'Explain the mathematical and GPU memory advantages of RMSNorm over traditional LayerNorm (omitting mean centering).' },
+    { label: '🧠 What knowledge is stored in SwiGLU FFN?', prompt: 'Contrast the roles of Attention (routing tokens) and SwiGLU Feed-Forward Networks (storing factual associations) inside a Transformer block.' },
+    { label: '🏎️ How does KV Caching make generation 100x faster?', prompt: 'Explain how Key-Value (KV) caching slashes generation complexity from O(N^2) quadratic recomputation to O(N) linear time.' },
+    { label: '🎯 Quiz me on GPT Decoder Blocks', prompt: 'Give me a challenging question about Transformer decoder blocks, SwiGLU, residual highways, and KV caching!' }
   ]
 };
 
@@ -4697,7 +5775,7 @@ function updateDiplomaStatus() {
   }
   if (dom.sidebarDiplomaStatus) {
     if (completed >= total) {
-      dom.sidebarDiplomaStatus.textContent = '★ All 7 Conquered! Claim Master Diploma';
+      dom.sidebarDiplomaStatus.textContent = `★ All ${total} Conquered! Claim Master Diploma`;
     } else {
       dom.sidebarDiplomaStatus.textContent = `${completed}/${total} Conquered • Tap to view`;
     }
@@ -4784,7 +5862,8 @@ function setupDiplomaModal() {
     dom.btnShareDiploma.addEventListener('click', async () => {
       const name = (dom.diplomaStudentName ? dom.diplomaStudentName.value.trim() : '') || 'Tensor Scholar';
       const code = generateVerificationCode(name);
-      const text = `🥋 I just conquered all 7 Deep Learning Quests on NeuroQuest! Earned ${state.userXp} XP under Sensei Tensor. Credential ID: ${code} 🚀🧠`;
+      const total = state.curriculum.quests.length;
+      const text = `🥋 I just conquered all ${total} Deep Learning Quests on NeuroQuest! Earned ${state.userXp} XP under Sensei Tensor. Credential ID: ${code} 🚀🧠`;
       try {
         await navigator.clipboard.writeText(text);
         const originalText = dom.btnShareDiploma.innerHTML;

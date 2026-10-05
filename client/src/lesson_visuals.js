@@ -1232,6 +1232,410 @@ function q7MultiHead() {
   return { html: svg(640, 250, g), caption: 'Three heads, three specialisations. Concatenating them gives the model several complementary views of the same sentence.' };
 }
 
+// ==========================================
+// QUEST 8: WORDS INTO VECTORS & EMBEDDINGS
+// ==========================================
+
+function q8Subwords() {
+  let g = '';
+  // Top: Three Paradigms
+  const cards = [
+    { title: 'Character-Level', sub: 'Tiny Vocab (~256)', desc: 'Essay = 3,000 tokens\nQuadratic O(N²) memory explodes!', col: C.rose, x: 20 },
+    { title: 'Whole-Word', sub: 'Infinite Vocab (1M+)', desc: 'Rare words & typos crash!\nFatal Out-Of-Vocabulary (OOV)', col: C.amber, x: 230 },
+    { title: 'Byte-Pair Encoding (BPE)', sub: 'Golden Balance (32k - 128k)', desc: 'Decomposes words into morphemes.\nZero OOV + optimal compression!', col: C.emerald, x: 440 }
+  ];
+
+  cards.forEach(c => {
+    g += rect(c.x, 20, 180, 85, { fill: tint(c.col, 0.1), stroke: c.col, rx: 8, sw: 1.5 });
+    g += T(c.x + 90, 38, c.title, { size: 11.5, weight: 700, fill: c.col });
+    g += T(c.x + 90, 54, c.sub, { size: 9.5, fill: C.muted, italic: true });
+    const lines = c.desc.split('\n');
+    g += T(c.x + 90, 74, lines[0], { size: 9, fill: C.text });
+    g += T(c.x + 90, 88, lines[1], { size: 9, fill: c.col, weight: 600 });
+  });
+
+  // Bottom: BPE Merge Cascade Example: "unbelievable"
+  g += rect(30, 125, 580, 80, { fill: 'rgba(15, 23, 42, 0.65)', stroke: 'rgba(148,163,184,0.25)', rx: 8 });
+  g += T(320, 142, 'BPE Merge Cascade: “unbelievable” ➔ [ “un”, “believ”, “able” ]', { size: 11.5, weight: 700, fill: C.cyan });
+
+  const tokens = [
+    { text: 'un', id: 'ID: 412', x: 120, col: C.violet },
+    { text: 'believ', id: 'ID: 8931', x: 320, col: C.cyan },
+    { text: 'able', id: 'ID: 642', x: 500, col: C.emerald }
+  ];
+
+  tokens.forEach(t => {
+    g += rect(t.x - 55, 158, 110, 34, { fill: tint(t.col, 0.22), stroke: t.col, rx: 6, sw: 1.5 });
+    g += T(t.x, 170, `“${t.text}”`, { size: 13, weight: 700, fill: '#ffffff' });
+    g += T(t.x, 184, t.id, { size: 9, mono: true, fill: t.col, weight: 600 });
+  });
+
+  g += arrow(180, 175, 260, 175, 'muted', 1.5);
+  g += arrow(380, 175, 440, 175, 'muted', 1.5);
+
+  return {
+    html: svg(640, 220, g),
+    caption: 'BPE merges frequent byte pairs. Common roots, prefixes, and suffixes are tokenized cleanly, eliminating unseen word crashes.'
+  };
+}
+
+function q8EmbeddingMatrix() {
+  let g = '';
+  // Left: Token IDs
+  g += rect(20, 25, 110, 160, { fill: 'rgba(15,23,42,0.7)', stroke: C.dim, rx: 8 });
+  g += T(75, 45, 'Token IDs', { size: 12, weight: 700, fill: C.cyan });
+  const ids = [
+    { t: 'king', id: '4291', col: C.violet, y: 72 },
+    { t: 'man', id: '1302', col: C.blue, y: 102 },
+    { t: 'woman', id: '1540', col: C.rose, y: 132 },
+    { t: 'queen', id: '4883', col: C.amber, y: 162 }
+  ];
+  ids.forEach(i => {
+    g += pill(75, i.y, `${i.id} (${i.t})`, i.col, 9);
+  });
+
+  // Arrow to Embedding Table
+  g += arrow(135, 105, 175, 105, 'cyan', 2);
+
+  // Center: Embedding Table (V x d)
+  g += rect(180, 25, 140, 160, { fill: 'rgba(30,41,59,0.5)', stroke: C.cyan, rx: 6 });
+  g += T(250, 42, 'Embedding Table W_E', { size: 10.5, weight: 700, fill: '#fff' });
+  g += T(250, 56, 'V × d (e.g. 128k × 4096)', { size: 9, mono: true, fill: C.muted });
+  // Simulated row highlights
+  [75, 105, 135, 165].forEach((y, idx) => {
+    g += rect(186, y - 7, 128, 16, { fill: tint(ids[idx].col, 0.25), stroke: ids[idx].col, rx: 3, sw: 1 });
+    g += T(250, y + 1, `row[${ids[idx].id}] ➔ [0.82, -0.41, ...]`, { size: 8, mono: true, fill: ids[idx].col });
+  });
+
+  // Arrow to Vector Space
+  g += arrow(325, 105, 365, 105, 'emerald', 2);
+
+  // Right: 2D Semantic Space Vector Arithmetic
+  g += rect(370, 20, 250, 175, { fill: 'rgba(15,23,42,0.8)', stroke: C.emerald, rx: 8 });
+  g += T(495, 36, 'Vector Arithmetic Space', { size: 11, weight: 700, fill: C.emerald });
+  g += line(390, 170, 600, 170, C.axis, 1);
+  g += line(390, 170, 390, 50, C.axis, 1);
+
+  // Points & Vectors
+  const pts = {
+    king: { x: 530, y: 70, label: 'king', c: C.violet },
+    man: { x: 440, y: 130, label: 'man', c: C.blue },
+    woman: { x: 490, y: 145, label: 'woman', c: C.rose },
+    queen: { x: 580, y: 85, label: 'queen', c: C.amber }
+  };
+  // Vector arrow from man to king (royalty vector)
+  g += arrow(pts.man.x, pts.man.y, pts.king.x, pts.king.y, 'violet', 1.8);
+  // Vector arrow from woman to queen (parallel royalty vector!)
+  g += arrow(pts.woman.x, pts.woman.y, pts.queen.x, pts.queen.y, 'amber', 1.8);
+  // Dashed parallel relation
+  g += line(pts.man.x, pts.man.y, pts.woman.x, pts.woman.y, C.dim, 1, 'stroke-dasharray="3,3"');
+  g += line(pts.king.x, pts.king.y, pts.queen.x, pts.queen.y, C.dim, 1, 'stroke-dasharray="3,3"');
+
+  Object.values(pts).forEach(p => {
+    g += circ(p.x, p.y, 5, { fill: p.c, stroke: '#fff', sw: 1.5 });
+    g += T(p.x + 8, p.y - 8, p.label, { size: 10, weight: 700, fill: p.c, anchor: 'start' });
+  });
+
+  g += T(495, 185, 'king − man + woman ≈ queen', { size: 10.5, mono: true, weight: 700, fill: '#facc15' });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'Each token ID extracts a dense row vector from the embedding table. In high-dimensional space, linear vector directions encode semantic concepts like gender and royalty.'
+  };
+}
+
+function q8Permutation() {
+  let g = '';
+  // Contrast two sentences that have opposite meaning but identical words
+  g += T(320, 25, 'The Permutation Equivariance Problem in Pure Self-Attention', { size: 13, weight: 700, fill: C.text });
+
+  // Sentence 1
+  g += rect(30, 48, 580, 58, { fill: 'rgba(34, 211, 238, 0.08)', stroke: C.cyan, rx: 8 });
+  g += T(50, 77, 'Sentence A:', { size: 11, weight: 700, fill: C.cyan, anchor: 'start' });
+  ['The (1)', 'chef (2)', 'ate (3)', 'the (4)', 'mushroom (5)'].forEach((w, idx) => {
+    g += rect(140 + idx * 95, 62, 85, 30, { fill: 'rgba(2,6,23,0.6)', stroke: C.cyan, rx: 6 });
+    g += T(182 + idx * 95, 77, w, { size: 10, fill: '#fff', weight: 600 });
+  });
+
+  // Sentence 2
+  g += rect(30, 118, 580, 58, { fill: 'rgba(251, 113, 133, 0.08)', stroke: C.rose, rx: 8 });
+  g += T(50, 147, 'Sentence B:', { size: 11, weight: 700, fill: C.rose, anchor: 'start' });
+  ['The (1)', 'mushroom (2)', 'ate (3)', 'the (4)', 'chef (5)'].forEach((w, idx) => {
+    g += rect(140 + idx * 95, 132, 85, 30, { fill: 'rgba(2,6,23,0.6)', stroke: C.rose, rx: 6 });
+    g += T(182 + idx * 95, 147, w, { size: 10, fill: '#fff', weight: 600 });
+  });
+
+  g += T(320, 196, '⚠️ Without positional encoding, pure attention treats both sentences identically: same bag of words!', { size: 10.5, fill: C.amber, weight: 600 });
+
+  return {
+    html: svg(640, 215, g),
+    caption: 'Self-attention processes all tokens in parallel. Order must be explicitly injected so the network knows who ate whom.'
+  };
+}
+
+function q8RoPE() {
+  let g = '';
+  // RoPE Rotary Compass Diagram
+  g += T(320, 22, 'Rotary Position Embedding (RoPE) in the 2D Complex Plane', { size: 13, weight: 700, fill: C.text });
+
+  // Left circle: Position m (Query)
+  const cx1 = 180, cy1 = 115, r = 60;
+  g += circ(cx1, cy1, r, { fill: 'rgba(15,23,42,0.6)', stroke: 'rgba(148,163,184,0.3)', sw: 1.5 });
+  g += line(cx1 - r - 10, cy1, cx1 + r + 10, cy1, C.axis, 1);
+  g += line(cx1, cy1 - r - 10, cx1, cy1 + r + 10, C.axis, 1);
+  // Rotated vector q_m
+  const ang1 = -Math.PI / 4; // 45 deg
+  const qx = cx1 + r * 0.9 * Math.cos(ang1);
+  const qy = cy1 + r * 0.9 * Math.sin(ang1);
+  g += arrow(cx1, cy1, qx, qy, 'cyan', 2.5);
+  g += T(qx + 12, qy - 6, 'R_{m} · q', { size: 11, mono: true, weight: 700, fill: C.cyan, anchor: 'start' });
+  g += T(cx1, cy1 + r + 24, 'Token at Position m', { size: 11, weight: 700, fill: C.cyan });
+  g += T(cx1, cy1 + r + 38, 'Rotated by angle m·θ', { size: 9.5, fill: C.muted });
+
+  // Center: Dot Product Interaction
+  g += rect(275, 80, 90, 70, { fill: 'rgba(30,41,59,0.7)', stroke: C.emerald, rx: 8 });
+  g += T(320, 98, 'Inner Product', { size: 10, weight: 700, fill: C.emerald });
+  g += T(320, 114, '⟨R_m q, R_n k⟩', { size: 9.5, mono: true, fill: '#fff' });
+  g += line(285, 126, 355, 126, C.axis, 1);
+  g += T(320, 138, '= f(q, k, m - n)', { size: 9.5, mono: true, fill: '#facc15', weight: 700 });
+
+  // Right circle: Position n (Key)
+  const cx2 = 460, cy2 = 115;
+  g += circ(cx2, cy2, r, { fill: 'rgba(15,23,42,0.6)', stroke: 'rgba(148,163,184,0.3)', sw: 1.5 });
+  g += line(cx2 - r - 10, cy2, cx2 + r + 10, cy2, C.axis, 1);
+  g += line(cx2, cy2 - r - 10, cx2, cy2 + r + 10, C.axis, 1);
+  // Rotated vector k_n
+  const ang2 = -Math.PI / 1.5; // 120 deg
+  const kx = cx2 + r * 0.9 * Math.cos(ang2);
+  const ky = cy2 + r * 0.9 * Math.sin(ang2);
+  g += arrow(cx2, cy2, kx, ky, 'rose', 2.5);
+  g += T(kx - 12, ky - 6, 'R_{n} · k', { size: 11, mono: true, weight: 700, fill: C.rose, anchor: 'end' });
+  g += T(cx2, cy2 + r + 24, 'Token at Position n', { size: 11, weight: 700, fill: C.rose });
+  g += T(cx2, cy2 + r + 38, 'Rotated by angle n·θ', { size: 9.5, fill: C.muted });
+
+  g += T(320, 198, 'Key Property: Absolute coordinates cancel out; attention score depends purely on relative distance (m − n)!', { size: 10, fill: C.emerald, weight: 600 });
+
+  return {
+    html: svg(640, 215, g),
+    caption: 'RoPE rotates vector pairs in 2D planes. The dot product preserves relative distance (m − n), enabling context length scaling up to 128k tokens.'
+  };
+}
+
+// ==========================================
+// QUEST 9: INSIDE THE GPT DECODER BLOCK
+// ==========================================
+
+function q9CausalMask() {
+  let g = '';
+  const toks = ['The', 'future', 'of', 'AI', 'is'];
+  const n = toks.length;
+  const cs = 26;
+  const x0 = 150, y0 = 40;
+
+  g += T(320, 20, 'Causal Attention Masking (Lower Triangular Matrix)', { size: 13, weight: 700, fill: C.text });
+
+  // Column header tokens (Key)
+  toks.forEach((t, j) => {
+    g += T(x0 + j * cs + cs / 2, y0 - 8, t, { size: 10, weight: 700, fill: C.cyan });
+  });
+
+  // Grid
+  for (let i = 0; i < n; i++) {
+    // Row header token (Query)
+    g += T(x0 - 10, y0 + i * cs + cs / 2 + 1, toks[i], { size: 10, weight: 700, fill: C.amber, anchor: 'end' });
+    for (let j = 0; j < n; j++) {
+      const allowed = j <= i;
+      const col = allowed ? 'rgba(34, 197, 94, 0.25)' : 'rgba(239, 68, 68, 0.15)';
+      const stroke = allowed ? C.emerald : 'rgba(239,68,68,0.4)';
+      g += rect(x0 + j * cs, y0 + i * cs, cs - 3, cs - 3, { fill: col, stroke, rx: 4, sw: 1 });
+      g += T(x0 + j * cs + cs / 2 - 1, y0 + i * cs + cs / 2 + 1, allowed ? '✓' : '−∞', {
+        size: allowed ? 12 : 9,
+        weight: 700,
+        fill: allowed ? C.emerald : C.rose,
+        mono: !allowed
+      });
+    }
+  }
+
+  // Explanatory callout card on the right
+  g += rect(315, 38, 290, 130, { fill: 'rgba(15,23,42,0.85)', stroke: C.dim, rx: 8 });
+  g += T(460, 58, 'Why Upper Triangle = −∞?', { size: 11.5, weight: 700, fill: C.amber });
+  g += T(460, 80, '1. Mask adds −∞ to future token logits.', { size: 9.5, fill: C.text });
+  g += T(460, 98, '2. Softmax: e^(−∞) = 0.00% probability.', { size: 9.5, mono: true, fill: C.emerald, weight: 600 });
+  g += T(460, 118, '3. Forbids the model from peeking ahead', { size: 9.5, fill: C.text });
+  g += T(460, 134, '   at the answer it must predict!', { size: 9.5, fill: C.rose, weight: 700 });
+
+  g += T(320, 190, 'Query token i can only attend to past Keys j ≤ i · Future keys are strictly blinded', { size: 10.5, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 205, g),
+    caption: 'The lower-triangular causal mask forces the model to predict the next word using only past information, guaranteeing valid autoregressive generation.'
+  };
+}
+
+function q9ResidualHighway() {
+  let g = '';
+  g += T(320, 22, 'The Residual Highway & Pre-RMSNorm Architecture', { size: 13, weight: 700, fill: C.text });
+
+  // Main horizontal highway line (Residual Stream)
+  g += line(30, 95, 610, 95, C.emerald, 4);
+  g += T(60, 75, 'Input x', { size: 11, mono: true, weight: 700, fill: C.emerald });
+  g += T(570, 75, 'Output x_next', { size: 11, mono: true, weight: 700, fill: C.emerald });
+
+  // Stage 1: Attention Loop
+  // Diverge down to RMSNorm + Attention
+  g += path('M 120,95 L 120,140 L 160,140', { stroke: C.cyan, sw: 2 });
+  g += rect(160, 125, 75, 30, { fill: 'rgba(34,211,238,0.15)', stroke: C.cyan, rx: 6 });
+  g += T(197, 140, 'RMSNorm', { size: 9.5, weight: 700, fill: C.cyan });
+
+  g += arrow(235, 140, 260, 140, 'cyan', 1.5);
+  g += rect(260, 125, 80, 30, { fill: 'rgba(167,139,250,0.2)', stroke: C.violet, rx: 6 });
+  g += T(300, 140, 'Causal MHA', { size: 9.5, weight: 700, fill: C.violet });
+
+  // Merge back to highway (+)
+  g += path('M 340,140 L 370,140 L 370,105', { stroke: C.violet, sw: 2 });
+  g += circ(370, 95, 10, { fill: '#0f172a', stroke: C.emerald, sw: 2 });
+  g += T(370, 95, '+', { size: 14, weight: 700, fill: C.emerald });
+
+  // Stage 2: SwiGLU Loop
+  g += path('M 390,95 L 390,140 L 415,140', { stroke: C.amber, sw: 2 });
+  g += rect(415, 125, 75, 30, { fill: 'rgba(251,191,36,0.15)', stroke: C.amber, rx: 6 });
+  g += T(452, 140, 'RMSNorm', { size: 9.5, weight: 700, fill: C.amber });
+
+  g += arrow(490, 140, 510, 140, 'amber', 1.5);
+  g += rect(510, 125, 70, 30, { fill: 'rgba(251,113,133,0.2)', stroke: C.rose, rx: 6 });
+  g += T(545, 140, 'SwiGLU', { size: 9.5, weight: 700, fill: C.rose });
+
+  // Merge back to highway (+)
+  g += path('M 580,140 L 595,140 L 595,105', { stroke: C.rose, sw: 2 });
+  g += circ(595, 95, 10, { fill: '#0f172a', stroke: C.emerald, sw: 2 });
+  g += T(595, 95, '+', { size: 14, weight: 700, fill: C.emerald });
+
+  // Reverse Gradient Arrow along main highway
+  g += arrow(550, 45, 80, 45, 'rose', 2, 'stroke-dasharray="4,4"');
+  g += T(320, 38, 'Unimpeded Backward Gradient Flow: ∂x_{l+1}/∂x_l = I + ∂F/∂x', { size: 10, mono: true, fill: C.rose, weight: 700 });
+
+  g += T(320, 192, 'Features are added onto the uninterrupted residual stream, preventing vanishing gradients across 80+ layers.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 205, g),
+    caption: 'The Residual Stream acts as an expressway. Sub-layers (Attention and SwiGLU) compute additive deltas without replacing the baseline representation.'
+  };
+}
+
+function q9RMSNorm() {
+  let g = '';
+  g += T(320, 20, 'LayerNorm vs. RMSNorm Efficiency Comparison', { size: 13, weight: 700, fill: C.text });
+
+  // Left: LayerNorm (4 steps)
+  g += rect(40, 45, 255, 135, { fill: 'rgba(15,23,42,0.7)', stroke: C.dim, rx: 8 });
+  g += T(167, 65, 'Traditional LayerNorm (2016)', { size: 11, weight: 700, fill: C.muted });
+  const lnSteps = [
+    '1. Compute Mean: μ = (1/d) ∑ x_i',
+    '2. Subtract Mean: x - μ (Centering)',
+    '3. Compute Variance: σ² = (1/d) ∑ (x - μ)²',
+    '4. Scale & Shift: ((x - μ)/σ) · γ + β'
+  ];
+  lnSteps.forEach((s, idx) => {
+    g += T(167, 90 + idx * 20, s, { size: 9, mono: true, fill: C.muted });
+  });
+
+  // Right: RMSNorm (Lean & Fast)
+  g += rect(345, 45, 255, 135, { fill: 'rgba(34, 197, 94, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 65, 'Modern RMSNorm (Llama / Mistral)', { size: 11, weight: 700, fill: C.emerald });
+  const rmsSteps = [
+    '1. Root Mean Square: RMS(x) = √( (1/d) ∑ x_i² + ε )',
+    '2. Direct Scaling: (x / RMS(x)) · γ',
+    '✓ Zero mean-centering passes needed!',
+    '⚡ Up to 20% faster memory bandwidth on GPU'
+  ];
+  rmsSteps.forEach((s, idx) => {
+    const isSpecial = idx >= 2;
+    g += T(472, 90 + idx * 20, s, { size: 9, mono: !isSpecial, fill: isSpecial ? C.emerald : '#fff', weight: isSpecial ? 700 : 400 });
+  });
+
+  g += T(320, 196, 'Dropping mean-centering preserves 100% of training stability while saving memory passes.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'RMSNorm scales activations by their root-mean-square without mean-centering, cutting GPU memory overhead and accelerating LLM training.'
+  };
+}
+
+function q9SwiGLU() {
+  let g = '';
+  g += T(320, 20, 'SwiGLU Gated Feed-Forward Architecture', { size: 13, weight: 700, fill: C.text });
+
+  // Input x (d_model = 4096)
+  g += rect(30, 85, 110, 36, { fill: 'rgba(15,23,42,0.8)', stroke: C.cyan, rx: 6 });
+  g += T(85, 98, 'Input Tensor x', { size: 10, weight: 700, fill: C.cyan });
+  g += T(85, 112, '[Batch, S, 4096]', { size: 8.5, mono: true, fill: C.muted });
+
+  // Branch 1: Gate (Linear + SiLU/Swish)
+  g += path('M 140,103 L 180,65 L 205,65', { stroke: C.amber, sw: 2 });
+  g += rect(205, 50, 95, 30, { fill: 'rgba(251,191,36,0.15)', stroke: C.amber, rx: 6 });
+  g += T(252, 65, 'W_gate + SiLU', { size: 9.5, weight: 700, fill: C.amber });
+
+  // Branch 2: Up (Linear)
+  g += path('M 140,103 L 180,140 L 205,140', { stroke: C.violet, sw: 2 });
+  g += rect(205, 125, 95, 30, { fill: 'rgba(167,139,250,0.15)', stroke: C.violet, rx: 6 });
+  g += T(252, 140, 'W_up (Linear)', { size: 9.5, weight: 700, fill: C.violet });
+
+  // Elementwise multiplication (odot)
+  g += arrow(300, 65, 345, 95, 'amber', 1.5);
+  g += arrow(300, 140, 345, 110, 'violet', 1.5);
+  g += circ(355, 103, 14, { fill: '#0f172a', stroke: C.emerald, sw: 2 });
+  g += T(355, 103, '⊙', { size: 14, weight: 700, fill: C.emerald });
+  g += T(355, 128, 'Gated Multiply', { size: 8.5, fill: C.emerald });
+
+  // Projection down (W_down)
+  g += arrow(370, 103, 415, 103, 'emerald', 2);
+  g += rect(415, 85, 95, 36, { fill: 'rgba(34,197,94,0.15)', stroke: C.emerald, rx: 6 });
+  g += T(462, 98, 'W_down (Linear)', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(462, 112, '14336 ➔ 4096', { size: 8.5, mono: true, fill: C.muted });
+
+  // Output
+  g += arrow(510, 103, 545, 103, 'cyan', 2);
+  g += rect(545, 85, 75, 36, { fill: 'rgba(15,23,42,0.8)', stroke: C.cyan, rx: 6 });
+  g += T(582, 98, 'Output', { size: 10, weight: 700, fill: C.cyan });
+  g += T(582, 112, 'dim = 4096', { size: 8.5, mono: true, fill: C.muted });
+
+  g += T(320, 192, 'SwiGLU = (SiLU(x · W_gate) ⊙ (x · W_up)) · W_down · Factual memory is stored in these weights', { size: 10, mono: true, fill: '#facc15', weight: 600 });
+
+  return {
+    html: svg(640, 205, g),
+    caption: 'SwiGLU expands activations to 14k dimensions with a non-linear gate before compressing back down. This is where encyclopedic facts are retrieved.'
+  };
+}
+
+function q9KVCache() {
+  let g = '';
+  g += T(320, 20, 'Key-Value (KV) Caching: Slashing Quadratic O(N²) Inference', { size: 13, weight: 700, fill: C.text });
+
+  // Left: Naive Recomputation (Slow)
+  g += rect(30, 45, 260, 135, { fill: 'rgba(239, 68, 68, 0.08)', stroke: C.rose, rx: 8 });
+  g += T(160, 65, 'Naive Recomputation: O(N²)', { size: 11, weight: 700, fill: C.rose });
+  g += T(160, 88, 'At step 100: Recomputes tokens 1 to 99', { size: 9, fill: C.text });
+  g += T(160, 106, 'At step 101: Recomputes tokens 1 to 100', { size: 9, fill: C.text });
+  g += T(160, 126, 'Total Attention FLOPs: ~N² / 2', { size: 9.5, mono: true, fill: C.rose, weight: 700 });
+  g += T(160, 150, '🐢 100x slower on long paragraphs!', { size: 9.5, fill: C.rose });
+
+  // Right: With KV Cache (Fast)
+  g += rect(340, 45, 270, 135, { fill: 'rgba(34, 197, 94, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(475, 65, 'With KV Caching: O(N) Linear Time', { size: 11, weight: 700, fill: C.emerald });
+  g += T(475, 88, 'Store past K and V tensors in GPU memory.', { size: 9, fill: C.text });
+  g += T(475, 106, 'Step 101: Compute ONLY token 101’s Query!', { size: 9, fill: C.emerald, weight: 600 });
+  g += T(475, 126, 'New FLOPs per token: Exactly O(1)', { size: 9.5, mono: true, fill: C.emerald, weight: 700 });
+  g += T(475, 150, '⚡ Real-time instant token streaming', { size: 9.5, fill: C.emerald, weight: 700 });
+
+  g += T(320, 196, 'KV Cache trades a small amount of GPU VRAM for massive 10x - 100x generation speedups.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'Past token Keys and Values are saved in VRAM. Each generation step only calculates the Query vector for the newest token, delivering linear scaling.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -1240,7 +1644,9 @@ const VISUALS = {
   'quest-4': [q4Flatten, q4Sliding, q4Hierarchy, q4Pool, q4Softmax],
   'quest-5': [q5Conv, q5Filters, q5Calculator, q5PadStride],
   'quest-6': [q6BiasVariance, q6LossCurves, q6Dropout, q6WeightDecay, q6Augment],
-  'quest-7': [q7Sequential, q7QKV, q7Scale, q7Bank, q7MultiHead]
+  'quest-7': [q7Sequential, q7QKV, q7Scale, q7Bank, q7MultiHead],
+  'quest-8': [q8Subwords, q8EmbeddingMatrix, q8Permutation, q8RoPE],
+  'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache]
 };
 
 let activeCleanups = [];

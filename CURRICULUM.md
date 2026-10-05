@@ -153,20 +153,72 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
           return self.classifier(self.features(x))
   ```
 
-### ⚔️ Quest 7: The Live Doodle Battle & Ask AI Arena
-- **The Game**:
-  - A real-time HTML5 sketch canvas.
-  - As you draw, the PyTorch model evaluates the canvas every 100ms.
-  - Live top-3 confidence bars glow and update.
-  - "Sensei Tensor" (Google Gemini AI) analyzes why the model picked a certain class or gives tips on how to improve network accuracy.
+### ⚔️ Quest 6: The Overfitting Beast & Regularization Arena
+- **The Concept**:
+  Generalization vs Overfitting. Why deep networks memorize noise and how Dropout ($p=0.5$), L2 Weight Decay, and Early Stopping force neurons to learn robust features.
+- **The Interactive Widget**:
+  - Live decision boundary regularizer: toggle Dropout and Weight Decay sliders to watch jagged boundaries smooth out.
 
 ---
 
-## 🤖 Dynamic Prompt Updates Workflow
-As you learn, you can prompt me anytime:
-- *"Add a lesson on Dropout and how to prevent overfitting"*
-- *"Show me how Transformers and Attention work with an interactive game"*
-- *"Add audio classification or a music genre guesser"*
-- *"Let's build a data augmentation visualizer for our doodle dataset"*
+## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 9)
 
-Every new prompt will update the curriculum, add interactive widgets, and provide immediate executable code!
+```
+[Quest 7: The Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside the GPT Block]
+```
+
+### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
+- **The Concept**:
+  How Transformers replaced sequential RNN loops with parallel $Q, K, V$ matrix multiplications.
+  - **Query ($Q$):** What a token seeks.
+  - **Key ($K$):** What a token offers.
+  - **Value ($V$):** The semantic payload extracted.
+  - **Scaled Dot-Product:** $\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V$
+- **The Interactive Sandbox**:
+  - Real-time Attention Matrix Heatmap, Polysemy contextualization inspector ("river bank" vs "central bank"), and Multi-Head Attention switcher.
+
+---
+
+### 🔤 Quest 8: Words into Vectors (Tokenization & Embeddings)
+- **The Concept**:
+  How raw natural language becomes geometric coordinates:
+  - **Byte-Pair Encoding (BPE):** Iteratively merging high-frequency byte pairs to prevent Out-Of-Vocabulary (OOV) crashes while keeping vocabularies compact (~32k to 128k).
+  - **Dense Embedding Matrix ($V \times d$):** High-dimensional geometry where linear vector directions encode abstract concepts:
+    $$\text{Vector}(\text{"king"}) - \text{Vector}(\text{"man"}) + \text{Vector}(\text{"woman"}) \approx \text{Vector}(\text{"queen"})$$
+  - **Rotary Position Embeddings (RoPE):** Rotating Query and Key vectors in the 2D complex plane by angle $m\theta$, ensuring attention inner products preserve relative token distance $(m - n)$ naturally.
+- **The Interactive Sandbox**:
+  - Live BPE Subword Splitter with token ID and byte breakdown.
+  - 2D PCA Semantic Vector Arithmetic visualizer.
+  - RoPE Rotary Compass dial showing vector rotations as sequence index changes.
+
+---
+
+### 🧱 Quest 9: Inside the GPT Block (Causal Decoder Architecture)
+- **The Concept**:
+  The complete anatomy of a modern auto-regressive Transformer decoder (Llama 3, Mistral, GPT-4):
+  - **Causal Masking:** Adding $-\infty$ to upper-triangle attention logits to forbid peeking at future tokens.
+  - **The Residual Highway:** Gradients sprint backward through $x + \mathcal{F}(x)$ via the identity matrix $\mathbf{I}$, preventing vanishing gradients across 80+ layers.
+  - **RMSNorm:** Omitting mean-centering ($x - \mu$) to save ~20% GPU memory overhead.
+  - **SwiGLU FFN:** Non-linear gated linear unit storing world knowledge and factual associations:
+    $$\text{SwiGLU}(x) = (\text{SiLU}(x W_{\text{gate}}) \odot x W_{\text{up}}) W_{\text{down}}$$
+  - **Key-Value (KV) Caching:** Caching past Keys and Values in VRAM to slash generation complexity from quadratic $O(N^2)$ to linear $O(N)$.
+- **The Interactive Sandbox**:
+  - 7-Stage Block Signal Highway card deck with tensor shape inspector.
+  - Interactive $5 \times 5$ Causal Mask compatibility matrix.
+  - KV Cache Speedup & VRAM Memory footprint simulator.
+
+---
+
+## 🔮 Roadmap: Future Expansion Quests
+- **Quest 10: The Generation Loop & Sampling Dynamics:** Logits, Softmax, Temperature ($T$), Top-K, and Top-P (Nucleus) sampling.
+- **Quest 11: Post-Training & Alignment:** Pretraining vs SFT, ChatML templates, RLHF, and Direct Preference Optimization (DPO).
+- **Quest 12: Parameter-Efficient Fine-Tuning (PEFT & LoRA):** Low-Rank decomposition ($W_0 + B \times A$) and 4-bit quantization (QLoRA).
+
+---
+
+## 🤖 Dynamic Sensei Dojo Integration
+At any time, summon **Sensei Tensor** (Google Gemini AI) by clicking **"Ask AI"** or pressing **Esc** to:
+- Explain mathematical equations through intuitive analogies.
+- Run interactive pop quizzes (+XP).
+- Debug and optimize PyTorch code snippets in the built-in Python Lab!
+

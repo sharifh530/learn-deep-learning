@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 7,
+    totalQuests = 9,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -104,15 +104,18 @@ export function generateDiplomaCanvas(options = {}) {
 
   ctx.restore();
 
-  // 6. Mastered Disciplines Grid (7 Curriculum Badges)
-  drawMasteredDisciplinesGrid(ctx, 800, 520, completedQuests, totalQuests);
+  // 6. Mastered Disciplines Grid (9 Curriculum Badges)
+  drawMasteredDisciplinesGrid(ctx, 800, 485, completedQuests, totalQuests);
 
   // 7. Footer: Sensei Hanko Stamp, XP Achievement, Signature, Verification
+  const completedCount = completedQuests.length >= totalQuests ? totalQuests : completedQuests.length;
   drawDiplomaFooter(ctx, 1600, 1100, {
     userXp,
     completionDate,
     verificationCode,
-    isCompleted: completedQuests.length >= totalQuests
+    totalQuests,
+    completedCount,
+    isCompleted: completedCount >= totalQuests
   });
 
   return canvas;
@@ -204,60 +207,71 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'IV', icon: '🎨', title: 'Vision CNN', tag: 'Convolutions & Pooling' },
     { num: 'V', icon: '🔍', title: 'Feature Maps', tag: 'Spatial Kernels' },
     { num: 'VI', icon: '🐉', title: 'Regularization', tag: 'Dropout & Weight Decay' },
-    { num: 'VII', icon: '⚡', title: 'Transformers', tag: 'QKV Self-Attention' }
+    { num: 'VII', icon: '⚡', title: 'Transformers', tag: 'QKV Self-Attention' },
+    { num: 'VIII', icon: '🔤', title: 'Tokenization', tag: 'BPE & RoPE Embeddings' },
+    { num: 'IX', icon: '🧱', title: 'GPT Decoder', tag: 'Causal Mask & SwiGLU' }
   ];
-
-  const cardWidth = 186;
-  const cardHeight = 110;
-  const gap = 14;
-  const totalWidth = 7 * cardWidth + 6 * gap;
-  const startX = centerX - totalWidth / 2;
 
   ctx.save();
 
-  quests.forEach((q, idx) => {
-    const x = startX + idx * (cardWidth + gap);
-    const y = startY;
-    const isDone = completedQuests.includes(`quest-${idx + 1}`) || completedQuests.length >= totalQuests;
+  // Split into two balanced rows: Row 1 = 5 cards, Row 2 = 4 cards
+  const row1 = quests.slice(0, 5);
+  const row2 = quests.slice(5);
 
-    // Card background
-    ctx.fillStyle = isDone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(30, 41, 59, 0.5)';
-    ctx.strokeStyle = isDone ? 'rgba(16, 185, 129, 0.6)' : 'rgba(71, 85, 105, 0.4)';
-    ctx.lineWidth = 1.5;
+  const cardWidth = 240;
+  const cardHeight = 98;
+  const gap = 16;
 
-    // Rounded card rect
-    drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 10);
-    ctx.fill();
-    ctx.stroke();
+  const renderRow = (rowItems, rowIdx, y) => {
+    const totalRowWidth = rowItems.length * cardWidth + (rowItems.length - 1) * gap;
+    const startX = centerX - totalRowWidth / 2;
 
-    // Quest number badge
-    ctx.font = '700 12px "Outfit", sans-serif';
-    ctx.fillStyle = isDone ? '#34d399' : '#64748b';
-    ctx.textAlign = 'left';
-    ctx.fillText(`QUEST ${q.num}`, x + 12, y + 22);
+    rowItems.forEach((q, idx) => {
+      const globalIdx = rowIdx === 0 ? idx : 5 + idx;
+      const x = startX + idx * (cardWidth + gap);
+      const isDone = completedQuests.includes(`quest-${globalIdx + 1}`) || completedQuests.length >= totalQuests;
 
-    // Icon + Status checkmark
-    ctx.font = '22px "Segoe UI Emoji", sans-serif';
-    ctx.fillText(q.icon, x + 12, y + 54);
+      // Card background
+      ctx.fillStyle = isDone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(30, 41, 59, 0.5)';
+      ctx.strokeStyle = isDone ? 'rgba(16, 185, 129, 0.6)' : 'rgba(71, 85, 105, 0.4)';
+      ctx.lineWidth = 1.5;
 
-    if (isDone) {
-      ctx.font = '700 13px "Outfit", sans-serif';
-      ctx.fillStyle = '#10b981';
-      ctx.textAlign = 'right';
-      ctx.fillText('✓ PASSED', x + cardWidth - 10, y + 22);
-    }
+      drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 10);
+      ctx.fill();
+      ctx.stroke();
 
-    // Quest Title
-    ctx.font = '600 13px "Outfit", sans-serif';
-    ctx.fillStyle = isDone ? '#f8fafc' : '#94a3b8';
-    ctx.textAlign = 'left';
-    ctx.fillText(q.title, x + 12, y + 78);
+      // Quest number badge
+      ctx.font = '700 12px "Outfit", sans-serif';
+      ctx.fillStyle = isDone ? '#34d399' : '#64748b';
+      ctx.textAlign = 'left';
+      ctx.fillText(`QUEST ${q.num}`, x + 12, y + 22);
 
-    // Technical tag
-    ctx.font = '400 10px "JetBrains Mono", monospace';
-    ctx.fillStyle = isDone ? '#67e8f9' : '#475569';
-    ctx.fillText(q.tag, x + 12, y + 96);
-  });
+      // Icon + Status checkmark
+      ctx.font = '22px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(q.icon, x + 12, y + 54);
+
+      if (isDone) {
+        ctx.font = '700 13px "Outfit", sans-serif';
+        ctx.fillStyle = '#10b981';
+        ctx.textAlign = 'right';
+        ctx.fillText('✓ PASSED', x + cardWidth - 12, y + 22);
+      }
+
+      // Quest Title
+      ctx.font = '600 14px "Outfit", sans-serif';
+      ctx.fillStyle = isDone ? '#f8fafc' : '#94a3b8';
+      ctx.textAlign = 'left';
+      ctx.fillText(q.title, x + 44, y + 54);
+
+      // Technical tag
+      ctx.font = '400 11px "JetBrains Mono", monospace';
+      ctx.fillStyle = isDone ? '#67e8f9' : '#475569';
+      ctx.fillText(q.tag, x + 12, y + 80);
+    });
+  };
+
+  renderRow(row1, 0, startY);
+  renderRow(row2, 1, startY + cardHeight + gap);
 
   ctx.restore();
 }
@@ -321,7 +335,10 @@ function drawDiplomaFooter(ctx, width, height, data) {
 
   ctx.font = '400 14px "JetBrains Mono", monospace';
   ctx.fillStyle = '#64748b';
-  ctx.fillText('Curriculum: 7 / 7 Quests Conquered • 100% Mastery', centerX, bottomY + 20);
+  const total = data.totalQuests || 9;
+  const count = data.completedCount !== undefined ? data.completedCount : (isCompleted ? total : 0);
+  const pct = Math.round((count / total) * 100);
+  ctx.fillText(`Curriculum: ${count} / ${total} Quests Conquered • ${pct}% Mastery`, centerX, bottomY + 20);
 
   // --- Right: Verification Hash & Issue Date ---
   const rightX = 1380;

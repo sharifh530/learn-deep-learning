@@ -291,6 +291,97 @@ print(attn_weights.round(decimals=3))
         answer: "B",
         explanation: "Brilliant! For large embedding dimensions $d_k$, the variance of the dot product grows as $d_k$. Without scaling by $\\sqrt{d_k}$, extreme values push the softmax function into saturating regions where its gradient approaches zero!"
       }
+    },
+
+    'quest-8': {
+      title: 'Tokenization, Embeddings & RoPE',
+      eli10: `🔤 **The High-Dimensional Semantic GPS & Airport Barcode:**\n\nComputers have zero concept of alphabets, grammar, or human slang—they only calculate floating-point matrix multiplications!\n\n1. **Byte-Pair Encoding (BPE):** Words are broken into atomic subwords (e.g. *"unbelievable"* $\\to$ \`['un', 'believ', 'able']\`). This eliminates Out-Of-Vocabulary (OOV) crashes while keeping vocab sizes compact (~32k - 128k).\n2. **The Embedding Matrix ($V \\times d$):** Each token ID acts as an index into a high-dimensional dictionary (e.g., 4,096 dimensions in Llama 3). Words with related meanings cluster together geometrically: $$\\text{king} - \\text{man} + \\text{woman} \\approx \\text{queen}$$\n3. **Rotary Position Embeddings (RoPE):** Self-attention is permutation-invariant—it has no innate sense of word order! RoPE treats pairs of dimensions in Query and Key vectors as coordinates in the complex plane, rotating them by angle $m \\theta$. When multiplying Query and Key, absolute indices cancel out, leaving attention dependent purely on the relative token distance $(m - n)$!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+
+# 1. Embedding lookup table (10,000 vocab, 8 dimensions)
+emb = nn.Embedding(num_embeddings=10000, embedding_dim=8)
+
+# Input token IDs for: ["Token", "ization", "powers", "AI"]
+token_ids = torch.tensor([4291, 1324, 7820, 2045])
+vectors = emb(token_ids)
+
+# 2. Rotary Position Embedding 2D rotation
+def apply_rope(x, pos):
+    angle = pos / (10000.0 ** 0.0)
+    cos_a, sin_a = torch.cos(angle), torch.sin(angle)
+    x0, x1 = x[..., 0], x[..., 1]
+    return torch.stack([x0 * cos_a - x1 * sin_a, x0 * sin_a + x1 * cos_a], dim=-1)
+
+pos = torch.arange(len(token_ids), dtype=torch.float32)
+rotated = apply_rope(vectors[:, :2], pos)
+
+print("Dense Vectors Shape:", vectors.shape)
+print("RoPE Rotated Coordinates (first 2 dims):")
+print(rotated.detach().round(decimals=3).numpy())
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Byte-Pair Encoding (BPE)**\n\nWhy do modern LLMs use BPE subwords instead of storing every English whole word in a giant dictionary?",
+        options: [
+          "A) Because whole words take up too much physical RAM on SSDs",
+          "B) To prevent Out-Of-Vocabulary (OOV) crashes on rare words or typos, while keeping vocabulary size compact (~32k to 128k)",
+          "C) Because attention can only process syllables, not letters",
+          "D) To convert text into audio waveforms"
+        ],
+        answer: "B",
+        explanation: "Osu! Whole-word dictionaries explode to millions of words and crash on rare words or slang. BPE decomposes unseen words into known subword roots, suffixes, and prefixes!"
+      }
+    },
+
+    'quest-9': {
+      title: 'Transformer Decoder Block & GPT Architecture',
+      eli10: `🧱 **The High-Speed Conveyor Belt & Assembly Line (Inside the GPT Block):**\n\nHow do modern LLMs like GPT-4, Llama 3, and Claude generate text without gradients vanishing across 80+ layers?\n\n1. **The Causal Mask:** During generation, when predicting word 4, the model must NOT look at word 5, 6, 7. Setting the upper triangle of attention to $-\\infty$ ensures that $e^{-\\infty} = 0\\%$, blinding future tokens completely!\n2. **The Residual Highway:** Gradients sprint backward through $x + \\mathcal{F}(x)$ via the identity matrix $\\mathbf{I}$, preventing vanishing gradients even across 100 deep layers.\n3. **RMSNorm:** Modern LLMs dropped mean-centering ($x - \\mu$) from LayerNorm and only scale by root-mean-square variance, saving ~20% GPU memory overhead.\n4. **SwiGLU FFN:** While attention routes information between tokens, the SwiGLU Feed-Forward Network serves as an associative factual memory store for world knowledge.\n5. **KV Caching:** Past Keys and Values are kept in GPU memory so the model only calculates the single newest token's Query vector, turning $O(N^2)$ inference into lightning-fast $O(N)$ streaming!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+    def forward(self, x):
+        # Scale by Root Mean Square variance
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps) * self.weight
+
+class SwiGLU(nn.Module):
+    def __init__(self, d_model, d_ff):
+        super().__init__()
+        self.w_gate = nn.Linear(d_model, d_ff, bias=False)
+        self.w_up = nn.Linear(d_model, d_ff, bias=False)
+        self.w_down = nn.Linear(d_ff, d_model, bias=False)
+    def forward(self, x):
+        # Swish(xW_gate) * xW_up projected back down
+        return self.w_down(F.silu(self.w_gate(x)) * self.w_up(x))
+
+norm = RMSNorm(dim=64)
+ffn = SwiGLU(d_model=64, d_ff=172)
+x = torch.randn(1, 5, 64)
+out = x + ffn(norm(x))  # Residual addition
+print("Output context tensor shape:", out.shape)
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Causal Masking in Auto-regressive LLMs**\n\nWhat would happen if an auto-regressive model was trained without a causal mask on the attention matrix?",
+        options: [
+          "A) Training would crash immediately with a division by zero error",
+          "B) The model would cheat by looking ahead at the next token it is supposed to predict, making it useless for real text generation",
+          "C) The model would generate text in reverse order",
+          "D) Memory consumption would decrease by 90%"
+        ],
+        answer: "B",
+        explanation: "Spot on! Without causal masking, token i would simply copy token i+1 from the future. The training loss would drop to zero, but the model would never learn to generate or predict!"
+      }
     }
   },
 
@@ -415,6 +506,12 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('attention') || hasPhrase('transformer') || hasPhrase('qkv') || hasPhrase('quest 7')) {
     return DOJO_KNOWLEDGE.quests['quest-7'].eli10;
+  }
+  if (hasPhrase('token') || hasPhrase('embedding') || hasPhrase('bpe') || hasPhrase('rope') || hasPhrase('subword') || hasPhrase('quest 8')) {
+    return DOJO_KNOWLEDGE.quests['quest-8'].eli10;
+  }
+  if (hasPhrase('gpt') || hasPhrase('causal') || hasPhrase('rmsnorm') || hasPhrase('swiglu') || hasPhrase('decoder') || hasPhrase('kv cache') || hasPhrase('quest 9')) {
+    return DOJO_KNOWLEDGE.quests['quest-9'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

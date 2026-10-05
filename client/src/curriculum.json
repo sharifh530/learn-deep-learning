@@ -1160,6 +1160,281 @@
           }
         ]
       }
+    },
+    {
+      "id": "quest-8",
+      "number": 8,
+      "title": "Words into Vectors: Tokenization & Embeddings",
+      "subtitle": "BPE Subwords, Semantic Coordinates & Rotary Position Embeddings (RoPE)",
+      "tag": "LLM FOUNDATIONS",
+      "icon": "🔤",
+      "xp": 350,
+      "story": "Neural networks are mathematical calculators that only understand continuous floating-point numbers. They have no innate understanding of alphabets, grammar, or human slang. Before an LLM can reason, write poetry, or generate Python code, text must be fractured into atomic subwords (Tokens), looked up in a high-dimensional dictionary (Embeddings), and stamped with geometric position coordinates (RoPE). Enter the gateway where raw human language transforms into geometry!",
+      "mentalModel": "The High-Dimensional Semantic GPS & Airport Barcode: A word is assigned an airline baggage barcode (Token ID). In the computer's memory, that barcode unlocks a coordinate in a 4,096-dimensional universe. Words with similar meanings land close together in this universe, while a rotary compass (RoPE) twists the vectors to record their exact word order.",
+      "interactiveType": "bpe_embedding_lab",
+      "interactiveConfig": {
+        "presets": [
+          {
+            "id": "intro",
+            "name": "Transformer Slogan",
+            "text": "Tokenization powers modern LLMs like ChatGPT and Llama."
+          },
+          {
+            "id": "subwords",
+            "name": "Subword Morphisms",
+            "text": "Antigravity algorithms are unbelievably fast and transformative."
+          },
+          {
+            "id": "math",
+            "name": "Math & Geometry",
+            "text": "Rotary position embeddings rotate Query and Key vectors in complex space."
+          }
+        ],
+        "defaultText": "Tokenization powers modern LLMs like ChatGPT and Llama.",
+        "embeddingSamples": [
+          { "word": "king", "coords": [0.82, 0.65], "category": "Royalty" },
+          { "word": "queen", "coords": [0.78, 0.92], "category": "Royalty" },
+          { "word": "man", "coords": [0.45, 0.30], "category": "Human" },
+          { "word": "woman", "coords": [0.42, 0.58], "category": "Human" },
+          { "word": "apple", "coords": [-0.65, 0.40], "category": "Food/Tech" },
+          { "word": "banana", "coords": [-0.72, 0.32], "category": "Food" },
+          { "word": "robot", "coords": [0.20, -0.75], "category": "Tech" },
+          { "word": "computer", "coords": [0.15, -0.85], "category": "Tech" }
+        ]
+      },
+      "codeSnippet": "import torch\nimport torch.nn as nn\n\n# 1. Vocabulary of 10,000 subwords, embedding dim d_model = 8\nvocab_size = 10000\nd_model = 8\nembedding_table = nn.Embedding(vocab_size, d_model)\n\n# 2. Simulated input token IDs for: [\"Token\", \"ization\", \"powers\", \"AI\"]\ntoken_ids = torch.tensor([4291, 1324, 7820, 2045])\n\n# 3. Lookup dense semantic coordinates: Shape (4, 8)\nembedded_tokens = embedding_table(token_ids)\n\n# 4. Rotary Position Embedding (RoPE) preview: Rotate 2D pairs by angle m * theta\ndef apply_rope_2d(x, seq_pos, theta=10000.0):\n    # Rotate each 2D vector [x0, x1] by angle pos * (theta ** -0)\n    angle = seq_pos / (theta ** 0.0)\n    cos_a = torch.cos(angle)\n    sin_a = torch.sin(angle)\n    x0, x1 = x[..., 0], x[..., 1]\n    rotated_x0 = x0 * cos_a - x1 * sin_a\n    rotated_x1 = x0 * sin_a + x1 * cos_a\n    return torch.stack([rotated_x0, rotated_x1], dim=-1)\n\npos = torch.arange(len(token_ids), dtype=torch.float32)\nrope_rotated_2d = apply_rope_2d(embedded_tokens[:, :2], pos)\n\nprint(\"Token IDs:\", token_ids.tolist())\nprint(\"Embedded Vectors Shape:\", embedded_tokens.shape)\nprint(\"First Token Vector (8D):\\n\", embedded_tokens[0].detach().round(decimals=3).numpy())\nprint(\"RoPE Rotated First 2 Dimensions:\\n\", rope_rotated_2d.detach().round(decimals=3).numpy())",
+      "quiz": [
+        {
+          "question": "Why do modern LLMs use Byte-Pair Encoding (BPE) subwords instead of whole-word tokenization?",
+          "options": [
+            "Because whole words cannot be stored on modern solid-state drives",
+            "To keep vocabulary size compact (~32k to 128k) while eliminating Out-Of-Vocabulary (OOV) errors for unseen or rare words",
+            "Because English grammar forbids storing spaces between words",
+            "To prevent the GPU from calculating floating-point dot products"
+          ],
+          "answer": 1,
+          "explanation": "Whole-word vocabularies explode to millions of words and crash on typos or rare conjugations (OOV). Character-level is too long. BPE strikes the golden balance: frequent words get 1 token, while rare words split into meaningful subword morphemes."
+        },
+        {
+          "question": "What is the famous vector arithmetic property discovered in dense word embeddings?",
+          "options": [
+            "Vector('king') * Vector('queen') = 0",
+            "Vector('king') - Vector('man') + Vector('woman') ≈ Vector('queen')",
+            "All words have identical coordinates in high-dimensional space",
+            "Negative vectors automatically turn off the neural network"
+          ],
+          "answer": 1,
+          "explanation": "Dense embeddings capture linear relational structure! Subtracting the direction of 'man' and adding 'woman' transfers the gender concept while preserving the royalty semantic axis."
+        },
+        {
+          "question": "Why do modern models like Llama 3, Mistral, and Gemma use Rotary Position Embeddings (RoPE) instead of traditional additive positional encodings?",
+          "options": [
+            "RoPE deletes the Key and Value matrices to save memory",
+            "RoPE naturally incorporates relative distance directly into the inner product <R_m q, R_n k> through complex rotation, making context length extrapolation much smoother",
+            "RoPE only works on vowels and ignores consonants",
+            "RoPE forces all tokens to be processed in reverse alphabetical order"
+          ],
+          "answer": 1,
+          "explanation": "RoPE multiplies Query and Key vectors by orthogonal rotation matrices. When taking their dot product q^T k, the absolute positions cancel out, leaving a function that depends purely on the relative distance (m - n)!"
+        }
+      ],
+      "lesson": {
+        "readTime": "5 min read",
+        "difficulty": "Advanced • LLM Foundations",
+        "hook": "How can a model made purely of matrix multiplications read a poem, understand a typo, or remember that 'dog bites man' is very different from 'man bites dog'?",
+        "analogy": {
+          "title": "The Airport Luggage Barcode & High-Dimensional Semantic GPS 🏷️🧭",
+          "description": "When you check luggage at an airport, the counter prints a barcode sticker (Token ID). The automated sorting machinery doesn't read your handwritten address; it scans the barcode and routes your bag to a designated 3D coordinate bay in the terminal (Embedding Space). Bags destined for Tokyo congregate in Bay A, while bags for Paris go to Bay B. To know which bag came first on the conveyor belt, an optical timestamp tag rotates on each bag (Rotary Position Embedding)."
+        },
+        "sections": [
+          {
+            "heading": "1. The Dilemma: Characters vs. Words vs. Subwords",
+            "content": "Early NLP faced an impossible compromise:\n• **Character-level:** Tiny vocabulary (~256 bytes), but a 500-word essay requires 3,000 tokens! Attention memory is quadratic $O(N^2)$, so sequences become dangerously expensive.\n• **Word-level:** 1 token per word, but English has over 1,000,000 words. Rare words, slang ('delulu'), and typos trigger fatal **Out-Of-Vocabulary (OOV)** tokens.\n**Byte-Pair Encoding (BPE)** solved this dilemma. Starting with raw byte characters, it iteratively merges the most frequent adjacent pairs:\n`'u'` + `'n'` $\\to$ `'un'`, `'b'` + `'e'` $\\to$ `'be'`, $\\dots$ $\\to$ `'unbelievable'` $\\to$ `['un', 'believ', 'able']`.\nModern LLMs use vocabularies between 32,000 (Llama 2) and 128,000 tokens (Llama 3 / GPT-4o).",
+            "callout": "💡 Key Insight: BPE lets LLMs understand words they have never seen before by analyzing their constituent roots, prefixes, and suffixes."
+          },
+          {
+            "heading": "2. The Embedding Matrix: Geometry of Meaning",
+            "content": "Once text is tokenized into integer IDs $[t_1, t_2, \\dots, t_N]$, how does math begin?\nThe model maintains a lookup table $\\mathbf{W}_E \\in \\mathbb{R}^{V \\times d_{\\text{model}}}$, where $V$ is vocabulary size and $d_{\\text{model}}$ is hidden dimension (e.g. 4,096 in Llama 3-8B).\nLooking up token 4291 simply extracts row 4291 of this matrix! These continuous vectors are initialized randomly and tuned via backpropagation. Over training, words with similar contexts migrate toward the same geometric neighborhoods. Angles between vectors represent semantic relationships through **Cosine Similarity**:\n$$\\cos(\\theta) = \\frac{\\mathbf{u} \\cdot \\mathbf{v}}{\\|\\mathbf{u}\\| \\|\\mathbf{v}\\|}$$",
+            "callout": "📐 Vector Arithmetic: High-dimensional space organizes abstract concepts into linear directional axes (tense, gender, capital cities, coding syntax)."
+          },
+          {
+            "heading": "3. The Permutation Problem: Why Transformers Need Positions",
+            "content": "Look closely at the self-attention formula from Quest 7: $\\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V$.\nIf you shuffle the input tokens into a completely random order, the output vectors remain identical up to permutation! In computer science, self-attention is **permutation-equivariant**.\nTo a pure attention mechanism:\n*“The chef ate the mushroom”* and *“The mushroom ate the chef”*\nare mathematically indistinguishable!\nWe must explicitly inject positional knowledge into the token representations.",
+            "callout": "⚠️ The Danger: Without position information, Transformers cannot distinguish word order, grammatical tense, or code structure."
+          },
+          {
+            "heading": "4. From Sinusoidal Encodings to Modern RoPE",
+            "content": "Original Transformers (Vaswani et al., 2017) added static sine and cosine waves to embeddings: $\\mathbf{x}_i = \\mathbf{e}_i + \\mathbf{p}_i$.\nModern open-weights models (Llama 3, Mistral, Gemma, Qwen) use **Rotary Position Embeddings (RoPE)**.\nInstead of adding numbers, RoPE treats pairs of dimensions in the Query and Key vectors as coordinates in the complex plane, rotating them by an angle proportional to their sequence index $m$:\n$$\\mathbf{q}_m = R_{\\Theta, m} \\mathbf{W}_Q \\mathbf{x}_m, \\quad \\mathbf{k}_n = R_{\\Theta, n} \\mathbf{W}_K \\mathbf{x}_n$$\nWhen the attention dot product is calculated, the rotation matrices interact: $\\mathbf{q}_m^T \\mathbf{k}_n = \\mathbf{x}_m^T \\mathbf{W}_Q^T R_{\\Theta, m}^T R_{\\Theta, n} \\mathbf{W}_K \\mathbf{x}_n = \\mathbf{x}_m^T \\mathbf{W}_Q^T R_{\\Theta, n - m} \\mathbf{W}_K \\mathbf{x}_n$.\nThe dot product depends **only on the relative distance $m - n$**, allowing seamless attention between nearby and distant tokens!",
+            "callout": "🔄 RoPE Genius: Relative distance matters far more than absolute index. RoPE allows extending context windows from 4k to 128k+ tokens via rotary frequency scaling."
+          }
+        ],
+        "formulaCard": {
+          "title": "Rotary Position Embedding (RoPE) 2D Block",
+          "equation": "R_{\\Theta, m}^{(i)} = \\begin{pmatrix} \\cos(m \\theta_i) & -\\sin(m \\theta_i) \\\\ \\sin(m \\theta_i) & \\cos(m \\theta_i) \\end{pmatrix}, \\quad \\theta_i = 10000^{-2(i-1)/d}",
+          "breakdown": [
+            {
+              "symbol": "m",
+              "meaning": "Sequential position index of the token (0, 1, 2, ...)"
+            },
+            {
+              "symbol": "\\theta_i",
+              "meaning": "Base rotary frequency assigned to feature dimension pair i"
+            },
+            {
+              "symbol": "R_{\\Theta, m}",
+              "meaning": "Orthogonal rotation matrix that rotates Query/Key vectors without altering their magnitude"
+            },
+            {
+              "symbol": "m - n",
+              "meaning": "Relative token distance preserved inside the attention inner product"
+            }
+          ]
+        },
+        "takeaways": [
+          "BPE tokenization eliminates out-of-vocabulary errors by decomposing rare words into subwords.",
+          "Embedding matrices convert discrete token IDs into dense semantic coordinate vectors.",
+          "Self-attention has no innate sense of word order; position encoding is strictly mandatory.",
+          "RoPE rotates Query and Key vectors so attention scores depend purely on relative token distance.",
+          "High-dimensional geometry allows models to perform semantic reasoning via vector arithmetic."
+        ],
+        "commonPitfalls": [
+          "Assuming 1 word = 1 token: In practice, 100 English words typically produce ~130 to 140 tokens.",
+          "Applying RoPE to Value vectors (V): RoPE is only applied to Query (Q) and Key (K) vectors to determine affinity; Values retain their semantic content unchanged.",
+          "Ignoring byte fallback: If a tokenizer encounters unseen foreign characters or emojis, it must cleanly fall back to raw UTF-8 bytes rather than crashing."
+        ]
+      }
+    },
+    {
+      "id": "quest-9",
+      "number": 9,
+      "title": "Inside the GPT Block: Causal Decoder Architecture",
+      "subtitle": "Causal Masking, RMSNorm, SwiGLU & The Residual Highway",
+      "tag": "TRANSFORMER ARCHITECTURE",
+      "icon": "🧱",
+      "xp": 400,
+      "story": "Attention is the engine, but what houses the engine? Modern LLMs like GPT-4, Llama 3, and Claude are built by stacking dozens of identical Transformer Decoder Blocks. Inside each block lies a masterpiece of engineering: Causal Masking that forbids peeking into the future, RMSNorm for lightning-fast numerical stability, SwiGLU Feed-Forward networks where factual knowledge is stored, and Residual Highways that let training gradients sprint across 100 deep layers without fading.",
+      "mentalModel": "The High-Speed Conveyor Belt with Checkpoints: Think of a factory assembly line. A continuous conveyor belt (The Residual Highway) carries raw parts forward. At Station A, robot arms inspect and adjust parts without taking them off the belt (Self-Attention). At Station B, a specialized stamp imprints knowledge (SwiGLU FFN). Because parts stay on the main belt, nothing is ever lost!",
+      "interactiveType": "transformer_block_inspector",
+      "interactiveConfig": {
+        "sequenceLength": 5,
+        "tokens": ["The", "future", "of", "AI", "is"],
+        "layers": [
+          { "name": "Input Embeddings + RoPE", "type": "input", "shape": "[1, 5, 4096]", "desc": "Tokens converted to 4096-dim vectors with rotary coordinates." },
+          { "name": "RMSNorm #1", "type": "norm", "shape": "[1, 5, 4096]", "desc": "Scales activations by root-mean-square to prevent exploding gradients." },
+          { "name": "Causal Multi-Head Attention", "type": "attention", "shape": "[1, 5, 4096]", "desc": "Upper-triangular masked attention. Each token only attends to past tokens!" },
+          { "name": "Residual Addition #1", "type": "residual", "shape": "[1, 5, 4096]", "desc": "x = x + Attention(x). Clean gradient highway directly back to inputs." },
+          { "name": "RMSNorm #2", "type": "norm", "shape": "[1, 5, 4096]", "desc": "Pre-normalization before non-linear feed-forward transformation." },
+          { "name": "SwiGLU Feed-Forward Network", "type": "ffn", "shape": "[1, 5, 14336]", "desc": "Expands to 14,336 hidden dims. Knowledge retrieval engine with gated Swish." },
+          { "name": "Residual Addition #2", "type": "residual", "shape": "[1, 5, 4096]", "desc": "x = x + SwiGLU(x). Final contextualized block representation." }
+        ]
+      },
+      "codeSnippet": "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass RMSNorm(nn.Module):\n    def __init__(self, dim, eps=1e-6):\n        super().__init__()\n        self.eps = eps\n        self.weight = nn.Parameter(torch.ones(dim))\n    def forward(self, x):\n        # Root Mean Square normalization (no mean centering needed!)\n        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)\n        return x * rms * self.weight\n\nclass SwiGLU(nn.Module):\n    def __init__(self, d_model, d_ff):\n        super().__init__()\n        self.w_gate = nn.Linear(d_model, d_ff, bias=False)\n        self.w_up = nn.Linear(d_model, d_ff, bias=False)\n        self.w_down = nn.Linear(d_ff, d_model, bias=False)\n    def forward(self, x):\n        # SwiGLU: (Swish(xW_gate) * xW_up) * W_down\n        return self.w_down(F.silu(self.w_gate(x)) * self.w_up(x))\n\nclass MiniGPTBlock(nn.Module):\n    def __init__(self, d_model=64, num_heads=4, d_ff=172):\n        super().__init__()\n        self.norm1 = RMSNorm(d_model)\n        self.attn = nn.MultiheadAttention(d_model, num_heads, batch_first=True)\n        self.norm2 = RMSNorm(d_model)\n        self.ffn = SwiGLU(d_model, d_ff)\n    \n    def forward(self, x):\n        B, S, D = x.shape\n        # Create Causal Mask (lower triangular True, upper False)\n        causal_mask = torch.triu(torch.full((S, S), float('-inf')), diagonal=1)\n        \n        # 1. Pre-norm Attention with Residual connection\n        normed = self.norm1(x)\n        attn_out, _ = self.attn(normed, normed, normed, attn_mask=causal_mask)\n        x = x + attn_out\n        \n        # 2. Pre-norm SwiGLU with Residual connection\n        x = x + self.ffn(self.norm2(x))\n        return x\n\nblock = MiniGPTBlock(d_model=64, num_heads=4, d_ff=172)\nsample_input = torch.randn(1, 5, 64)  # Batch=1, Seq=5, Dim=64\noutput = block(sample_input)\nprint(\"Input Tensor:\", sample_input.shape)\nprint(\"Output Contextual Tensor:\", output.shape)\nprint(\"Block Parameters Total:\", sum(p.numel() for p in block.parameters()))",
+      "quiz": [
+        {
+          "question": "What happens if you remove the Causal Mask (upper-triangular -inf) during auto-regressive pre-training?",
+          "options": [
+            "The model trains 10x faster with no downsides",
+            "The model cheats by looking ahead at the ground-truth target word it is supposed to predict, causing training loss to plummet but making text generation completely useless",
+            "The computer memory fills up and crashes instantly",
+            "Softmax output becomes strictly negative"
+          ],
+          "answer": 1,
+          "explanation": "Without the causal mask, token i could attend to token i+1. In next-token prediction, the model would simply copy the next word directly rather than learning syntax, facts, or reasoning!"
+        },
+        {
+          "question": "Why did modern LLMs (Llama, Mistral, Gemma) replace standard LayerNorm with RMSNorm?",
+          "options": [
+            "RMSNorm deletes half of the weights to reduce file size",
+            "RMSNorm eliminates mean-centering (subtracting mu) and only scales by root-mean-square variance, saving ~15-20% GPU latency with zero loss in training accuracy",
+            "RMSNorm requires an internet connection to run",
+            "LayerNorm is mathematically illegal in PyTorch"
+          ],
+          "answer": 1,
+          "explanation": "Research showed that the primary benefit of LayerNorm comes from scaling invariance, not mean centering. By dropping mean subtraction, RMSNorm saves precious memory bandwidth on GPUs."
+        },
+        {
+          "question": "What is the primary role of the Feed-Forward Network (SwiGLU) inside a Transformer block compared to the Attention layer?",
+          "options": [
+            "Attention routes information between tokens; the FFN acts as a factual key-value memory store for world knowledge",
+            "The FFN deletes grammar errors from the prompt",
+            "The FFN converts the output back into raw audio waveforms",
+            "The FFN only runs when the user asks a question about mathematics"
+          ],
+          "answer": 0,
+          "explanation": "Attention is a dynamic communication network allowing words to share context. The Feed-Forward Network (with its wide intermediate expansion) stores static encyclopedic facts, concepts, and relational knowledge learned during pre-training."
+        }
+      ],
+      "lesson": {
+        "readTime": "6 min read",
+        "difficulty": "Advanced • Transformer Decoder",
+        "hook": "How do you stack 80 layers of neural networks without gradients exploding into infinity or shrinking to absolute zero?",
+        "analogy": {
+          "title": "The Bullet Train Express Track & Local Stations 🚄🚉",
+          "description": "Imagine a high-speed express train track (The Residual Stream) running between two major cities. At every stop along the line (Transformer Block), passenger cars don't switch to a whole new train. Instead, specialized service pods pull alongside the train, deliver hot meals or fresh passengers (Attention & SwiGLU features), and merge right back onto the express line. The express line stays open end-to-end, so messages and gradients travel from the final station back to the departure station at the speed of light!"
+        },
+        "sections": [
+          {
+            "heading": "1. The Causal Rule: You Cannot Peek at Tomorrow",
+            "content": "In BERT or Vision Transformers, attention is **bidirectional**—every token sees every other token. But an autoregressive LLM (like GPT) is trained on **Next-Token Prediction**:\nGiven $\\mathbf{x}_{1 \\dots t}$, predict $\\mathbf{x}_{t+1}$.\nIf token $t$ could attend to token $t+1$, the network would simply read the answer off the board! To enforce causality, we apply a **Causal Mask** $\\mathbf{M}$ where the upper triangle is filled with $-\\infty$:\n$$M_{ij} = \\begin{cases} 0 & \\text{if } j \\le i \\\\ -\\infty & \\text{if } j > i \\end{cases}$$\nWhen added to attention scores before softmax: $\\text{softmax}(S + M)$.\nSince $e^{-\\infty} = 0$, attention weights to all future tokens become mathematically zero!",
+            "callout": "🛡️ The Strict Barrier: Word 1 only sees Word 1. Word 2 sees Words 1 and 2. Word 10 sees Words 1 through 10. The future remains completely invisible."
+          },
+          {
+            "heading": "2. The Residual Highway: Highway for Gradients",
+            "content": "Deep networks prior to 2015 could not exceed 20 layers because gradients vanished or exploded during backpropagation. The **Residual Connection** (He et al., ResNet) changed deep learning forever:\n$$\\mathbf{x}_{l+1} = \\mathbf{x}_l + \\mathcal{F}(\\mathbf{x}_l)$$\nNotice the mathematical derivative:\n$$\\frac{\\partial \\mathbf{x}_{l+1}}{\\partial \\mathbf{x}_l} = \\mathbf{I} + \\frac{\\partial \\mathcal{F}}{\\partial \\mathbf{x}_l}$$\nThe identity matrix $\\mathbf{I}$ guarantees that gradients can flow backwards through 80+ stacked decoder blocks without being multiplied down to zero! In modern LLMs, we use **Pre-Layer Normalization** (Pre-LN / Pre-RMSNorm), normalizing the input before sending it through the sub-layer.",
+            "callout": "🚀 Gradient Sprint: The residual connection forms an unimpeded express highway directly connecting the output loss back to the input embeddings."
+          },
+          {
+            "heading": "3. RMSNorm: Streamlined Normalization",
+            "content": "Traditional LayerNorm standardizes inputs to zero mean and unit variance:\n$$\\text{LN}(x) = \\frac{x - \\mu}{\\sigma} \\odot \\gamma + \\beta$$\nIn 2019, researchers demonstrated that the centering operation ($x - \\mu$) contributes virtually nothing to training stability. What actually matters is scaling by the **Root Mean Square (RMS)**:\n$$\\text{RMSNorm}(x) = \\frac{x}{\\sqrt{\\frac{1}{d}\\sum_{i=1}^d x_i^2 + \\epsilon}} \\odot \\gamma$$\nRMSNorm eliminates two memory-bound reduction passes per layer, accelerating GPU execution by up to 20% across billions of training tokens.",
+            "callout": "⚡ Lean & Fast: Llama 3, Mistral, and Gemma exclusively use RMSNorm for maximum throughput on GPU tensor cores."
+          },
+          {
+            "heading": "4. SwiGLU: Where Factual Knowledge Lives",
+            "content": "While Multi-Head Attention routes information between words, the **Feed-Forward Network (FFN)** serves as the model's associative memory.\nModern architectures replaced old ReLU/GELU MLPs with **SwiGLU** (Gated Linear Units):\n$$\\text{SwiGLU}(x) = \\left(\\text{Swish}(x W_{\\text{gate}}) \\odot x W_{\\text{up}}\\right) W_{\\text{down}}$$\nThe hidden dimension is typically expanded to $\\frac{8}{3} d_{\\text{model}}$ (e.g. from 4,096 to 14,336 in Llama 3-8B).\nThe gating mechanism allows the network to dynamically choose which factual features to amplify or suppress based on the input context.",
+            "callout": "🧠 Knowledge Warehouse: Experiments show that factual associations (e.g., 'Paris is the capital of France') are predominantly stored in the weights of the FFN layers."
+          },
+          {
+            "heading": "5. The Inference Superpower: Key-Value (KV) Caching",
+            "content": "During generation, the LLM outputs one token at a time. At step 100, do we need to recompute the Keys and Values for tokens 1 through 99?\n**No!** Since past tokens never change, their $K$ and $V$ vectors are identical. **KV Caching** stores previously computed $K$ and $V$ tensors in GPU VRAM.\nAt each new step, the model only computes $Q$ for the single new token and appends its new $K$ and $V$ to the cache. This slashes inference computation from quadratic $O(N^2)$ down to linear $O(N)$!",
+            "callout": "🏎️ Real-Time Chat: Without KV Caching, ChatGPT would become 100x slower on every paragraph it writes."
+          }
+        ],
+        "formulaCard": {
+          "title": "Complete Transformer Decoder Block Equations",
+          "equation": "\\mathbf{x}^{(1)} = \\mathbf{x} + \\text{CausalMHA}(\\text{RMSNorm}(\\mathbf{x})), \\quad \\mathbf{x}^{(2)} = \\mathbf{x}^{(1)} + \\text{SwiGLU}(\\text{RMSNorm}(\\mathbf{x}^{(1)}))",
+          "breakdown": [
+            {
+              "symbol": "\\mathbf{x}",
+              "meaning": "Input tensor passing along the residual stream"
+            },
+            {
+              "symbol": "\\text{RMSNorm}",
+              "meaning": "Pre-layer root mean square scaling for healthy variance"
+            },
+            {
+              "symbol": "\\text{CausalMHA}",
+              "meaning": "Multi-head attention masked to prevent future token information leakage"
+            },
+            {
+              "symbol": "\\text{SwiGLU}",
+              "meaning": "Gated feed-forward network storing semantic and factual representations"
+            }
+          ]
+        },
+        "takeaways": [
+          "A modern LLM is built by repeating 32 to 128 identical Transformer Decoder Blocks.",
+          "Causal masking forces the model to predict the future based strictly on the past.",
+          "The Residual Highway keeps the gradient signal alive across deep architectures.",
+          "RMSNorm saves GPU memory bandwidth by omitting mean-centering.",
+          "The SwiGLU FFN acts as an associative memory bank for world knowledge.",
+          "KV caching avoids redundant past-token calculations to deliver real-time generation speed."
+        ],
+        "commonPitfalls": [
+          "Post-LN vs Pre-LN: Putting LayerNorm after the residual addition (Post-LN) causes severe training instability in deep models. Modern LLMs strictly use Pre-LN / Pre-RMSNorm.",
+          "KV Cache memory consumption: While KV caching speeds up generation, the cache grows linearly with context length and batch size, becoming the main VRAM bottleneck for 128k context windows.",
+          "Confusing token routing with token storage: Attention decides WHERE to move information; FFN decides WHAT knowledge to recall."
+        ]
+      }
     }
   ]
 }
