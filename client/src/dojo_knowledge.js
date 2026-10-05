@@ -1,0 +1,422 @@
+/**
+ * NeuroQuest: Sensei Tensor Offline Dojo Knowledge Base
+ * Provides comprehensive, instant offline deep learning tutoring, intuitive analogies,
+ * runnable Python snippets, and interactive quizzes without requiring an external API key.
+ */
+
+export const DOJO_KNOWLEDGE = {
+  // --- QUEST-SPECIFIC CURATED RESPONSES ---
+  quests: {
+    'quest-1': {
+      title: 'The Coffee Neuron & Artificial Perceptrons',
+      eli10: `☕ **The Coffee Making Metaphor (Explain Like You're 10):**\n\nImagine you are building a robot barista! Your customer has a "Taste Score" from 0 to 10:\n\n1. **Inputs ($x$):** The spoonfuls of ingredients you put in the cup — sugar, milk, and espresso shots.\n2. **Weights ($w$):** How much the customer cares about each ingredient! If they love sugar, sugar's weight is $+3.0$. If they despise bitter espresso, espresso's weight might be $-2.0$.\n3. **Bias ($b$):** The customer's baseline mood before taking a single sip! If they are naturally cheerful, bias is $+2.0$. If they are a grumpy morning critic, bias is $-3.0$.\n\nYour neuron simply multiplies each ingredient by its weight, adds the bias baseline, and makes a decision:\n$$\\text{Output} = (w_1 x_1 + w_2 x_2 + w_3 x_3) + b$$\n\nThat's the entire secret of a linear artificial neuron! 🥋`,
+      
+      snippet: `\`\`\`python
+import numpy as np
+
+# Inputs: [Sugar (spoons), Milk (oz), Espresso (shots)]
+inputs = np.array([2.0, 1.0, 3.0])
+
+# Synaptic Weights: customer's preference knobs
+weights = np.array([0.8, 0.4, 1.5])
+
+# Bias: baseline morning tolerance threshold
+bias = -0.5
+
+# Feedforward linear combination: z = (w · x) + b
+linear_sum = np.dot(inputs, weights) + bias
+print(f"Coffee Enjoyment Score: {linear_sum:.2f}")
+
+# Activation decision (threshold at 0)
+is_happy = linear_sum > 0
+print(f"Customer Satisfied? {'Yes! ☕' if is_happy else 'No! 😖'}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The Perceptron Threshold**\n\nSuppose all inputs to a neuron are exactly zero ($x_1=0, x_2=0, x_3=0$). What is the neuron's linear output $\\hat{y}$?",
+        options: [
+          "A) Always 0.0",
+          "B) Equal to the bias term $b$",
+          "C) Equal to the sum of weights $\\sum w_i$",
+          "D) Undefined (division by zero)"
+        ],
+        answer: "B",
+        explanation: "Correct! When inputs are zero, $\\sum (w_i \\cdot 0) = 0$, so $\\hat{y} = 0 + b = b$. This is precisely why bias is called the intercept or baseline threshold!"
+      }
+    },
+
+    'quest-2': {
+      title: 'Activation Spark & Non-Linear Space Bending',
+      eli10: `⚡ **Why Do We Need Activations? (The Origami Sheet Metaphor):**\n\nImagine you have a flat sheet of blue and red dots. If you can only use straight cuts (linear equations), you can only divide the paper with a straight ruler.\n\nNo matter how many straight rulers you stack together, **a straight line plus another straight line is STILL a straight line!** ($w_2(w_1 x + b_1) + b_2 = w_{new} x + b_{new}$).\n\nAn **Activation Function** (like ReLU or Sigmoid) is the power to **fold, crease, and bend the paper in 3D space**! Once the paper is folded, a single flat cut can separate complex spiral, circular, and swirling patterns!\n\n- **ReLU ($max(0, x)$):** The light switch! Turns OFF negative signals to zero, and passes positive signals straight through.\n- **Sigmoid:** The gentle dimmer dial! Squashes everything between $0.0$ and $1.0$.`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+# A batch of incoming linear activations
+z = torch.tensor([-3.0, -0.5, 0.0, 1.5, 4.0])
+
+# 1. ReLU: zeroes out negative values
+relu_out = F.relu(z)
+print("ReLU:", relu_out.tolist())  # [0.0, 0.0, 0.0, 1.5, 4.0]
+
+# 2. Sigmoid: squashes between 0.0 and 1.0 (probabilities)
+sigmoid_out = torch.sigmoid(z)
+print("Sigmoid:", [round(p, 3) for p in sigmoid_out.tolist()])
+
+# 3. GELU: modern smooth Gaussian activation used in Transformers
+gelu_out = F.gelu(z)
+print("GELU:", [round(g, 3) for g in gelu_out.tolist()])
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The Stacking Illusion**\n\nWhat happens if you build a deep neural network with 100 hidden layers, but you do NOT use any activation function?",
+        options: [
+          "A) It learns 100 times faster",
+          "B) It collapses mathematically into a single single-layer linear model",
+          "C) The outputs explode to infinity on the first pass",
+          "D) It converts into a Convolutional Neural Network"
+        ],
+        answer: "B",
+        explanation: "Brilliant! Because the composition of linear functions is always linear ($W_2(W_1 x) = (W_2 W_1) x = W_{combo} x$), a 100-layer linear network has zero extra expressive power over a 1-layer network!"
+      }
+    },
+
+    'quest-3': {
+      title: 'Gradient Valley & Backpropagation',
+      eli10: `⛰️ **Rolling Down Foggy Mountains (The Blind Hiker):**\n\nImagine you are dropped on a misty mountain at midnight with zero visibility. Your goal is to reach the campsite down at the lowest lake (Minimum Loss / Error).\n\n1. **The Ground Slope (The Gradient $\\nabla L$):** You feel the terrain with your feet. The gradient tells you which direction is uphill. So you walk in the **opposite direction** (Downhill / Negative Gradient $-\\nabla L$).\n2. **Step Size (Learning Rate $\\eta$):**\n   - If your step is too tiny ($0.00001$), you take 40 years to reach the camp!\n   - If your step is gigantic ($10.0$), you leap across the mountain and crash over the cliff!\n   - Just right ($0.01 - 0.001$), you stride smoothly into the valley.\n3. **Backpropagation (The Chain Rule):** Passing the blame backwards through the network to tell every single knob how much it contributed to the mistake at the bottom!`,
+
+      snippet: `\`\`\`python
+import torch
+
+# Parameter we want to optimize (our weight knob)
+w = torch.tensor([5.0], requires_grad=True)
+
+# Target value we want the network to predict
+y_target = torch.tensor([10.0])
+
+# Learning rate
+lr = 0.1
+
+print(f"Initial Weight: {w.item():.2f}")
+
+for step in range(5):
+    # Forward pass: prediction y_hat = w * 2.0
+    y_hat = w * 2.0
+    
+    # Mean Squared Error loss: (y_hat - target)^2
+    loss = (y_hat - y_target) ** 2
+    
+    # Backpropagation: calculate d(loss)/dw
+    loss.backward()
+    
+    # Gradient descent update step (w = w - lr * grad)
+    with torch.no_grad():
+        w -= lr * w.grad
+        w.grad.zero_()  # Clear gradients for next step
+        
+    print(f"Step {step+1}: Loss = {loss.item():.4f}, Weight = {w.item():.2f}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The Gradient Update Rule**\n\nIn standard Gradient Descent, why is there a MINUS sign in $w \\leftarrow w - \\eta \\cdot \\frac{\\partial L}{\\partial w}$?",
+        options: [
+          "A) Because gradients are always negative numbers",
+          "B) Because we want to minimize loss, so we move in the direction opposite to the steepest ascent",
+          "C) To prevent division by zero",
+          "D) To convert tensors from float64 to float32"
+        ],
+        answer: "B",
+        explanation: "Correct! The gradient vector $\\nabla L$ points in the direction of greatest increase. Since we want to decrease error down to zero, we take steps in the negative gradient direction!"
+      }
+    },
+
+    'quest-4': {
+      title: 'Computer Vision & Convolutional Neural Networks',
+      eli10: `🎨 **The Flashlight Detective (How CNNs See Images):**\n\nImagine trying to recognize a cat in a photo. A standard dense network flattens the image into a long 1D list of numbers and forgets where pixels were next to each other! If the cat shifts 2 inches to the left, the network thinks it's a completely different object!\n\n**A Convolutional Neural Network (CNN) is smarter:**\n1. It takes a tiny $3 \\times 3$ sliding magnifying glass called a **Kernel or Filter**.\n2. It slides the filter across the image row by row, scanning for local patterns (whiskers, curved edges, circular eyes).\n3. Because the same filter slides everywhere, if a cat moves anywhere in the picture, the detector still triggers! This is called **Translation Invariance**.\n4. **Pooling (MaxPool):** Shrinks the image down by keeping only the strongest features, discarding useless noise!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+
+# A simple 2D Convolutional layer:
+# 1 input channel (grayscale), 16 output filters, 3x3 kernel size
+conv = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+
+# Dummy 28x28 grayscale doodle input: [batch_size, channels, height, width]
+x = torch.randn(1, 1, 28, 28)
+
+features = conv(x)
+print("Conv1 Output Shape:", features.shape)  # [1, 16, 28, 28]
+
+# Max Pooling (2x2) halves the spatial dimensions: 28x28 -> 14x14
+pool = nn.MaxPool2d(kernel_size=2, stride=2)
+pooled = pool(features)
+print("Pooled Shape:", pooled.shape)          # [1, 16, 14, 14]
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Convolutions & Stride**\n\nIf you apply a $3 \\times 3$ convolutional kernel to a $28 \\times 28$ image with `padding=1` and `stride=1`, what is the spatial output size?",
+        options: [
+          "A) 26 × 26",
+          "B) 28 × 28",
+          "C) 14 × 14",
+          "D) 30 × 30"
+        ],
+        answer: "B",
+        explanation: "Spot on! The formula is $O = \\lfloor (W - K + 2P)/S \\rfloor + 1$. Here: $(28 - 3 + 2(1))/1 + 1 = (27)/1 + 1 = 28$. Padding by 1 preserves spatial resolution perfectly!"
+      }
+    },
+
+    'quest-5': {
+      title: 'Kernel Detective & Feature Map Extraction',
+      eli10: `🔍 **The Secret Filters of Vision (Sobel, Edges, Ridges):**\n\nHave you ever wondered what the first layer of a deep neural network actually computes? It discovers the same mathematical filters that scientists spent 50 years designing by hand!\n\n- **Horizontal Edge Filter (Sobel H):** Has $+1$ on the top row and $-1$ on the bottom row. When sliding over a horizontal line (like the horizon or a table edge), top minus bottom creates a huge contrast spike!\n- **Vertical Edge Filter (Sobel V):** Has $+1$ on the left and $-1$ on the right, catching vertical stripes, tree trunks, and borders!\n- **Corner & Texture Filters:** Catch cross-points and ripples.\n\nIn deep networks, Layer 1 sees raw edges $\\to$ Layer 2 sees curves & circles $\\to$ Layer 3 sees noses, wheels & ears $\\to$ Output sees full bicycles and cats!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+# A classic Sobel Horizontal Edge detector filter (3x3)
+sobel_h = torch.tensor([
+    [-1.0, -2.0, -1.0],
+    [ 0.0,  0.0,  0.0],
+    [ 1.0,  2.0,  1.0]
+]).unsqueeze(0).unsqueeze(0)  # Shape: [1, 1, 3, 3]
+
+# Create a test 6x6 image with a sharp horizontal brightness step
+img = torch.zeros((1, 1, 6, 6))
+img[:, :, 3:, :] = 1.0  # Bottom half is bright white
+
+# Convolve
+edges = F.conv2d(img, sobel_h, padding=1)
+print("Detected Horizontal Edge Intensity across row 3:")
+print(edges[0, 0, 3, :].tolist())
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Edge Filter Symmetries**\n\nWhy do standard edge-detection kernels (like Sobel) have coefficients that sum to exactly ZERO ($(-1-2-1) + (0+0+0) + (1+2+1) = 0$)?",
+        options: [
+          "A) To ensure the model runs faster on GPU",
+          "B) So that flat, solid uniform regions produce an output of ZERO (no false edges)",
+          "C) To prevent gradients from vanishing in backprop",
+          "D) Because weights must always be normalized to unit norm"
+        ],
+        answer: "B",
+        explanation: "Masterful intuition! When an edge filter passes over a completely uniform white or grey wall, all pixels have identical intensity $c$. Summing $(w_i \\cdot c) = c \\sum w_i = c \\cdot 0 = 0$. No edge is reported unless contrast exists!"
+      }
+    },
+
+    'quest-6': {
+      title: 'Overfitting Arena & Regularization',
+      eli10: `🐉 **The Over-Memorizing Student (Overfitting):**\n\nImagine studying for a driving exam. Instead of learning the principles of steering and stopping distance, a student memorizes the exact license plate numbers of every test car in the sample questions!\n\nWhen they take the practice test, they score **100% (Zero Training Loss)**. But when taken out on a real highway, they crash instantly because the world has cars they never memorized (**High Generalization Error / Overfitting**).\n\n**How we cure it (Regularization):**\n1. **Dropout:** Randomly disabling 25% of neurons during training! This forces neurons to collaborate and prevents any single neuron from becoming a lazy dictator.\n2. **Weight Decay ($L_2$ Penalty):** Punishes overly large weights, keeping function curves smooth rather than jagged.\n3. **Data Augmentation:** Rotating, jittering, and zooming images so the network learns the underlying concept, not memorized pixels!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+class RegularizedNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(128, 64)
+        # 1. Dropout randomly zeros out 30% of activations during training
+        self.dropout = nn.Dropout(p=0.30)
+        self.fc2 = nn.Linear(64, 10)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)  # Active during model.train(), inactive in model.eval()
+        return self.fc2(x)
+
+model = RegularizedNet()
+# 2. Weight Decay (L2 regularization penalty) configured directly in optimizer
+optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
+print("Model initialized with Dropout + AdamW Weight Decay!")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Dropout at Evaluation Time**\n\nDuring testing/inference (`model.eval()`), what does PyTorch's `nn.Dropout` layer do?",
+        options: [
+          "A) Continues dropping 50% of neurons to save memory",
+          "B) Turns completely OFF and scales weights so all neurons fire deterministically",
+          "C) Sets all weights to zero",
+          "D) Inverts the output activations"
+        ],
+        answer: "B",
+        explanation: "Correct! Dropout is strictly a training-time regularizer. During inference, we want deterministic, robust predictions using the full ensemble of all trained neurons!"
+      }
+    },
+
+    'quest-7': {
+      title: 'Attention Machine & Transformer Foundations',
+      eli10: `⚡ **The Library Search Metaphor (Query, Key, Value):**\n\nHow do modern LLMs (like GPT and Gemini) understand long sentences?\n\nImagine you are researching in a vast library:\n1. **Query ($Q$):** What you are searching for! (e.g., *"What does 'it' refer to in this sentence?"*).\n2. **Key ($K$):** The label or title printed on every book's spine on the shelves.\n3. **Attention Score ($Q \\cdot K^T$):** Comparing your Query against every Key via dot-product. The closer the match, the higher the score!\n4. **Softmax:** Turns those scores into percentage weights that add up to 100%.\n5. **Value ($V$):** The actual contents inside the books. You combine the values proportionally to their attention weights!\n\n$$\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right) V$$\n\nBecause every word can look directly at every other word in parallel, Transformers conquer language without slow sequential loops!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+# 3 word tokens, each with an embedding dimension of 4
+# Sequence: ["The", "robot", "moved"]
+tokens = torch.tensor([
+    [1.0, 0.0, 0.5, 0.2],  # The
+    [0.1, 2.0, 1.5, 0.8],  # robot
+    [0.5, 0.8, 2.2, 1.0]   # moved
+])
+
+# For simplicity, assume Q = K = V = tokens
+Q = K = V = tokens
+d_k = Q.size(-1)  # 4
+
+# 1. Compute raw attention scores: Q · K^T
+scores = torch.matmul(Q, K.transpose(-2, -1)) / (d_k ** 0.5)
+
+# 2. Softmax along rows yields attention weights (probabilities)
+attn_weights = F.softmax(scores, dim=-1)
+
+# 3. Contextual output representations
+out = torch.matmul(attn_weights, V)
+
+print("Attention Matrix (3x3 weights):")
+print(attn_weights.round(decimals=3))
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The Scaled Dot-Product Factor**\n\nIn the attention equation, why do we divide $Q K^T$ by $\\sqrt{d_k}$?",
+        options: [
+          "A) To convert the matrices to integer format",
+          "B) To prevent large dot products from pushing softmax into regions with vanishingly small gradients",
+          "C) Because the matrix rank is 4",
+          "D) To enforce causality in autoregressive models"
+        ],
+        answer: "B",
+        explanation: "Brilliant! For large embedding dimensions $d_k$, the variance of the dot product grows as $d_k$. Without scaling by $\\sqrt{d_k}$, extreme values push the softmax function into saturating regions where its gradient approaches zero!"
+      }
+    }
+  },
+
+  // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
+  general: [
+    {
+      keywords: ['who are you', 'what is this', 'sensei', 'dojo', 'hello', 'hi', 'hey', 'greetings'],
+      response: `🥋 **Osu! Welcome to the Sensei Tensor Dojo!**\n\nI am **Sensei Tensor** 🧠, your interactive Deep Learning mentor. My mission is to guide you from biological perceptrons to deep convolutional vision and transformer attention mechanisms.\n\n### 🧭 How I can help you right now:\n- **Explain any concept:** Ask *"Why do we need bias?"*, *"Explain ReLU"*, or *"How does backprop work?"*\n- **Provide runnable PyTorch code:** Ask *"Show me how to train a CNN"* or *"How to write a custom loss function?"*\n- **Test your mastery:** Ask *"Quiz me (+XP)"* to earn Dojo honor and XP!\n- **Simulate & Spar:** Click any preset prompt chip below based on your active Quest!`
+    },
+    {
+      keywords: ['why bias', 'bias term', 'what is bias', 'purpose of bias'],
+      response: `⚖️ **Why Neural Networks Absolutely Require a Bias Term ($b$):**\n\nThink of a linear function: $y = w \\cdot x + b$.\n\n1. **Without bias ($b=0$):** Every line, plane, or hyperplane is forced to pass directly through the origin $(0, 0)$. No matter how you twist the weight knob $w$, if $x=0$, $y$ MUST be 0!\n2. **With bias ($b \\neq 0$):** The line can shift freely up, down, left, or right anywhere in space!\n\n### 🏠 The Real-World Metaphor:\nImagine predicting house prices based on square footage ($x$). If square footage is 0, is the lot price always $0? No! The land itself has a base cost—that baseline is the **bias**!\n\n$$\\text{Output} = \\sum_{i} (w_i x_i) + b$$\n\nWithout bias, a network cannot model scenarios where zero input requires a non-zero reaction!`
+    },
+    {
+      keywords: ['loss function', 'cross entropy', 'mse', 'difference between mse and cross entropy'],
+      response: `🎯 **MSE vs. Cross-Entropy Loss: When to Use Which?**\n\n1. **Mean Squared Error (MSE):**\n   - Formula: $\\text{MSE} = \\frac{1}{N} \\sum (y - \\hat{y})^2$\n   - **Use Case:** **Regression problems** (predicting continuous real numbers like house prices, temperature, coordinates).\n   - **Drawback for classification:** Gives tiny gradients when combined with Sigmoid/Softmax.\n\n2. **Cross-Entropy Loss (Log Loss):**\n   - Formula: $\\text{CE} = -\\sum y_i \\log(\\hat{y}_i)$\n   - **Use Case:** **Classification problems** (predicting categories like Cat vs. Bicycle vs. Star in Quest 4).\n   - **Superpower:** Heavily penalizes high-confidence mistakes! If the network is 99% confident an image is a Cat, but the label is Bicycle, $-\\log(0.01) \\approx 4.6$ creates a massive gradient that forces rapid learning!`
+    },
+    {
+      keywords: ['learning rate', 'too high', 'too low', 'schedule', 'adam', 'sgd'],
+      response: `⚡ **The Learning Rate (Step Size $\\eta$):**\n\nThe learning rate dictates how aggressively weights are updated in each gradient descent step:\n\n$$w_{new} = w_{old} - \\eta \\cdot \\frac{\\partial L}{\\partial w}$$\n\n- **Too High ($\eta > 0.5$):** The optimizer overshoots the minimum, oscillations grow, and the loss explodes to \`NaN\`!\n- **Too Low ($\eta < 10^{-5}$):** The network crawls like a snail and gets trapped in shallow local plateaus.\n- **Modern Standard (Adam / AdamW with $\\eta = 0.001 - 0.0003$):** Adam computes adaptive, per-parameter learning rates with momentum, smoothing out the descent automatically!`
+    },
+    {
+      keywords: ['vanishing gradient', 'exploding gradient', 'why relu over sigmoid'],
+      response: `🕳️ **The Vanishing Gradient Problem (Why ReLU Saved Deep Learning):**\n\nIn the 1990s, everyone used **Sigmoid** activations. The derivative of Sigmoid has a maximum value of only $0.25$:\n\n$$\\sigma'(x) = \\sigma(x)(1 - \\sigma(x)) \\le 0.25$$\n\nWhen backpropagating through a 10-layer network, the chain rule multiplies these tiny derivatives together:\n$$0.25 \\times 0.25 \\times 0.25 \\times \\dots \\approx 0.00000095$$\n\nBy the time the gradient reached early layers, it **vanished to zero**! Early layers never learned.\n\n### 💡 The ReLU Revolution:\n$$\\text{ReLU}(x) = \\max(0, x), \\quad \\text{Derivative} = \\begin{cases} 1 & \\text{if } x > 0 \\\\ 0 & \\text{if } x < 0 \\end{cases}$$\n\nFor all positive activations, the gradient is **exactly 1.0**! No matter how deep your network is, $1 \\times 1 \\times 1 = 1$, gradients flow without vanishing!`
+    },
+    {
+      keywords: ['pytorch', 'tensor', 'gpu', 'cuda', 'cpu'],
+      response: `🐍 **What is a PyTorch Tensor?**\n\nA PyTorch **Tensor** is a multi-dimensional array (like a NumPy \`ndarray\`), but with two transformative superpowers:\n\n1. **Hardware Acceleration:** Can seamlessly run on GPUs (CUDA/MPS) with thousands of parallel arithmetic cores for $50\\times$ faster matrix multiplications.\n2. **Automatic Differentiation (\`Autograd\`):** By setting \`requires_grad=True\`, PyTorch tracks the computational graph of every math operation and automatically computes all partial derivatives when you call \`loss.backward()\`!\n\n\`\`\`python\nimport torch\n\nx = torch.tensor([2.0], requires_grad=True)\ny = x ** 3 + 4 * x\ny.backward()  # dy/dx = 3*x^2 + 4 = 3*(4) + 4 = 16\nprint(\"dy/dx:\", x.grad.item())  # 16.0\n\`\`\``
+    }
+  ]
+};
+
+/**
+ * Searches the offline knowledge base for the best matching response.
+ */
+export function queryDojoKnowledge(userPrompt, questContext = null) {
+  const p = userPrompt.toLowerCase().trim();
+  const questId = questContext?.id || 'quest-1';
+  const questData = DOJO_KNOWLEDGE.quests[questId] || DOJO_KNOWLEDGE.quests['quest-1'];
+
+  // Helper: word-boundary regex tester
+  const hasWord = (term) => new RegExp('\\b' + term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i').test(p);
+  const hasPhrase = (phrase) => p.includes(phrase.toLowerCase());
+
+  // 1. Direct prompt chips / intentions
+  if (
+    hasPhrase("explain like i'm 10") ||
+    hasPhrase("explain like i am 10") ||
+    hasPhrase("like i'm 10") ||
+    hasPhrase("like i am 10") ||
+    hasWord('eli5') ||
+    hasWord('simplified') ||
+    hasPhrase('simple terms') ||
+    hasPhrase('metaphor')
+  ) {
+    return questData.eli10;
+  }
+
+  if (
+    hasPhrase('code snippet') ||
+    hasPhrase('python snippet') ||
+    hasPhrase('show code') ||
+    hasPhrase('python code') ||
+    hasPhrase('show python') ||
+    hasPhrase('pytorch snippet')
+  ) {
+    return `🐍 **Python Implementation for ${questData.title}:**\n\nHere is a clean, runnable snippet. You can test it directly in the **Python Lab** tab:\n\n${questData.snippet}\n\n*Click "▶ Run in Python Engine" to execute!*`;
+  }
+
+  if (
+    hasPhrase('quiz me') ||
+    hasPhrase('pop quiz') ||
+    hasPhrase('give me a quiz') ||
+    hasPhrase('test me') ||
+    hasPhrase('challenge me')
+  ) {
+    const q = questData.quiz;
+    return `${q.question}\n\n${q.options.join('\n')}\n\n*Reply with **A**, **B**, **C**, or **D** to test your knowledge!*`;
+  }
+
+  // 2. Check if user is replying to a quiz question (A, B, C, D)
+  const isQuizAnswer = /^(option\s*)?([abcd])(\))?$/i.exec(p);
+  if (isQuizAnswer) {
+    const chosen = isQuizAnswer[2].toUpperCase();
+    const q = questData.quiz;
+    if (chosen === q.answer) {
+      return `🎉 **CORRECT! (+30 XP EARNED!)**\n\n${q.explanation}\n\n🥋 Sensei Tensor praises your sharp intellect, Tensor Cadet! Try another quest prompt or explore the Playful Sandbox!`;
+    } else {
+      return `❌ **Not quite!** You selected **(${chosen})**, but the correct answer is **(${q.answer})**.\n\n${q.explanation}\n\n*Review the Concept Lesson tab to strengthen your foundation!*`;
+    }
+  }
+
+  // 3. Match general deep learning FAQs with word boundaries
+  for (const item of DOJO_KNOWLEDGE.general) {
+    const matched = item.keywords.some(k => {
+      if (k.length <= 3) return hasWord(k);
+      return hasPhrase(k);
+    });
+    if (matched) {
+      return item.response;
+    }
+  }
+
+  // 4. Check other quests if mentioned specifically by number or keyword
+  if (hasPhrase('percept') || hasPhrase('coffee') || hasPhrase('quest 1')) {
+    return DOJO_KNOWLEDGE.quests['quest-1'].eli10;
+  }
+  if (hasPhrase('activation') || hasPhrase('relu') || hasPhrase('sigmoid') || hasPhrase('quest 2')) {
+    return DOJO_KNOWLEDGE.quests['quest-2'].eli10;
+  }
+  if (hasPhrase('gradient') || hasPhrase('backprop') || hasPhrase('chain rule') || hasPhrase('quest 3')) {
+    return DOJO_KNOWLEDGE.quests['quest-3'].eli10;
+  }
+  if (hasPhrase('cnn') || hasPhrase('convolution') || hasPhrase('doodle') || hasPhrase('quest 4')) {
+    return DOJO_KNOWLEDGE.quests['quest-4'].eli10;
+  }
+  if (hasPhrase('kernel') || hasPhrase('sobel') || hasPhrase('filter') || hasPhrase('quest 5')) {
+    return DOJO_KNOWLEDGE.quests['quest-5'].eli10;
+  }
+  if (hasPhrase('overfit') || hasPhrase('regulariz') || hasPhrase('dropout') || hasPhrase('quest 6')) {
+    return DOJO_KNOWLEDGE.quests['quest-6'].eli10;
+  }
+  if (hasPhrase('attention') || hasPhrase('transformer') || hasPhrase('qkv') || hasPhrase('quest 7')) {
+    return DOJO_KNOWLEDGE.quests['quest-7'].eli10;
+  }
+
+  // 5. Fallback context-rich synthesis based on active quest
+  return `🥋 **Sensei Tensor Dojo Insight on ${questData.title}:**\n\nRegarding your inquiry: *"__${userPrompt}__"*\n\n${questData.eli10}\n\n### 🐍 Runnable Python Snippet:\n${questData.snippet}\n\n💡 *Tip: You can ask for a pop quiz by clicking "🎯 Quiz Me (+XP)" below!*`;
+}

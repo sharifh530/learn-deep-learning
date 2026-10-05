@@ -4217,6 +4217,15 @@ function enhanceCodeBlocks(containerEl) {
   });
 }
 
+function formatAiBubbleHtml(text) {
+  if (!text) return '';
+  // Convert KaTeX formulas before markdown parsing
+  let processed = String(text)
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => `<div class="math-display">${renderTex(m.trim(), true)}</div>`)
+    .replace(/\$([^$\n]+?)\$/g, (_, m) => renderTex(m.trim()));
+  return marked.parse(processed);
+}
+
 function renderMessageBubble(sender, text, time = null, shouldScroll = true) {
   const bubble = document.createElement('div');
   bubble.className = `chat-bubble ${sender}`;
@@ -4233,7 +4242,7 @@ function renderMessageBubble(sender, text, time = null, shouldScroll = true) {
       <span class="bubble-time">${timestamp}</span>
     </div>
     <div class="bubble-content">
-      ${isAi ? marked.parse(text) : `<p>${escapeHtml(text)}</p>`}
+      ${isAi ? formatAiBubbleHtml(text) : `<p>${escapeHtml(text)}</p>`}
     </div>
   `;
 
@@ -4258,7 +4267,8 @@ function renderDefaultWelcomeMessage() {
       </div>
       <div class="bubble-content">
         <p>Osu! Welcome to the <strong>Sensei Tensor Dojo</strong> 🥋🧠.</p>
-        <p>I am your dedicated Deep Learning mentor. Whether you're curious about how weights act like volume knobs, why non-linearity bends space, rolling marbles down gradient slopes, or debugging PyTorch convolutional layers, ask away!</p>
+        <p>I am your dedicated Deep Learning mentor, powered by the built-in <strong>Offline Dojo Knowledge Engine</strong> (ready instantly with zero setup, zero API key required!).</p>
+        <p>Whether you're curious about how weights act like volume knobs, why non-linearity bends space, rolling marbles down gradient slopes, or debugging PyTorch convolutional layers, ask away or click any suggested prompt below!</p>
       </div>
     </div>
   `;
@@ -4365,6 +4375,11 @@ async function handleSend(customPrompt = null) {
   const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   renderMessageBubble('ai', answer, aiTime);
   persistChatMessage('ai', answer, aiTime);
+
+  // If the answer awarded pop quiz XP, grant it
+  if (answer.includes('+30 XP EARNED')) {
+    awardXp(30, 'Dojo Pop Quiz Correct Answer');
+  }
 }
 
 function setupAiTutor() {
@@ -4435,10 +4450,13 @@ function setupAiTutor() {
 // --- TUTOR BADGE HELPER ---
 function updateTutorBadge() {
   if (dom.tutorModelBadge) {
-    if (tutorService.providerType === 'custom_agent') {
-      dom.tutorModelBadge.textContent = 'Custom Cloud Agent';
+    dom.tutorModelBadge.textContent = tutorService.getModeBadge();
+    if (tutorService.isOfflineMode()) {
+      dom.tutorModelBadge.classList.add('offline-dojo');
+      dom.tutorModelBadge.title = 'Sensei Tensor is running in built-in Offline Dojo Mode! Add an API key in Settings for live cloud generative model.';
     } else {
-      dom.tutorModelBadge.textContent = tutorService.model;
+      dom.tutorModelBadge.classList.remove('offline-dojo');
+      dom.tutorModelBadge.title = 'Live Generative Cloud AI active';
     }
   }
 }

@@ -1,6 +1,9 @@
+import { queryDojoKnowledge } from './dojo_knowledge.js';
+
 /**
  * NeuroQuest: Sensei Tensor (AI Tutor) Client
- * Direct integration with Google Gemini API & Google Cloud Agent Platform.
+ * Direct integration with Google Gemini API, Google Cloud Agent Platform,
+ * and built-in Offline Dojo Knowledge Engine.
  */
 
 const SYSTEM_INSTRUCTION = `You are Sensei Tensor 🥋🧠, an inspiring, playful, and brilliant Deep Learning tutor inside the "NeuroQuest" learning studio.
@@ -17,6 +20,20 @@ export class AITutorService {
     this.model = localStorage.getItem('neuroquest_gemini_model') || 'gemini-3.8-flash';
     this.providerType = localStorage.getItem('neuroquest_provider_type') || 'gemini'; // 'gemini' | 'custom_agent'
     this.customAgentUrl = localStorage.getItem('neuroquest_custom_agent_url') || '';
+  }
+
+  isOfflineMode() {
+    return !this.hasApiKey() && this.providerType !== 'custom_agent';
+  }
+
+  getModeBadge() {
+    if (this.providerType === 'custom_agent' && this.customAgentUrl) {
+      return '☁️ Custom Agent';
+    }
+    if (this.hasApiKey()) {
+      return `⚡ ${this.model} (Cloud)`;
+    }
+    return '🥋 Sensei Tensor (Offline Dojo)';
   }
 
   setApiKey(key) {
@@ -133,8 +150,9 @@ export class AITutorService {
       if (!text) throw new Error("Empty response returned from Google API.");
       return text;
     } catch (err) {
-      console.error("Gemini API Error:", err);
-      return `⚠️ **Sensei Tensor encountered an issue:**\n\n${err.message}\n\n*Check your API key in Settings (⚙️) or verify your connection to Google AI Studio / Google Cloud.*`;
+      console.warn("Cloud Tutor Error, falling back to Offline Dojo Knowledge:", err);
+      const fallback = queryDojoKnowledge(userPrompt, questContext);
+      return `💡 *Note: Cloud API unavailable (${err.message}). Showing Sensei Tensor Offline Dojo response:*\n\n---\n\n${fallback}`;
     }
   }
 
@@ -166,11 +184,13 @@ export class AITutorService {
       const data = await res.json();
       return data.reply || data.output || data.text || JSON.stringify(data);
     } catch (err) {
-      return `⚠️ **Custom Agent Error:**\n\n${err.message}\n\n*Verify the Custom Agent Endpoint URL and authorization token in Settings ⚙️.*`;
+      console.warn("Custom Agent Error, falling back to Offline Dojo Knowledge:", err);
+      const fallback = queryDojoKnowledge(userPrompt, questContext);
+      return `💡 *Note: Custom Agent unavailable (${err.message}). Showing Sensei Tensor Offline Dojo response:*\n\n---\n\n${fallback}`;
     }
   }
 
   getMockResponse(userPrompt, questContext) {
-    return `👋 **Hey there, Tensor Cadet!**\n\nI see you asked: *"${userPrompt}"*\n\nTo unlock live real-time answers with **Sensei Tensor** using Google Gemini, simply click the **Settings ⚙️** icon in the header or drawer and paste your **Google API key** (from Google AI Studio or Google Cloud).\n\n💡 *Quick Tip for ${questContext ? questContext.title : "this quest"}: Remember, weights are your knobs, bias is your baseline, and activation functions keep our network from being just a straight ruler!*`;
+    return queryDojoKnowledge(userPrompt, questContext);
   }
 }

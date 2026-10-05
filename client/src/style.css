@@ -1574,6 +1574,13 @@ body {
   background: rgba(6, 182, 212, 0.15);
   color: var(--accent-cyan);
   border: 1px solid rgba(6, 182, 212, 0.35);
+  transition: all var(--transition-fast);
+}
+
+.tutor-badge.offline-dojo {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .tutor-context-row {
