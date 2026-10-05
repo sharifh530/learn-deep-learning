@@ -1,0 +1,1268 @@
+/* ==========================================================================
+   NEUROQUEST — LESSON VISUALS
+   One illustrative figure per concept-lesson section.
+   Each factory returns { html, caption, mount? } where mount(rootEl) wires up
+   interactivity and may return a cleanup function.
+   ========================================================================== */
+import katex from 'katex';
+
+// ---------- Palette ----------
+const C = {
+  violet: '#a78bfa',
+  cyan: '#22d3ee',
+  emerald: '#34d399',
+  amber: '#fbbf24',
+  rose: '#fb7185',
+  blue: '#60a5fa',
+  text: '#e2e8f0',
+  muted: '#94a3b8',
+  dim: '#475569',
+  grid: 'rgba(148,163,184,0.12)',
+  axis: 'rgba(148,163,184,0.45)'
+};
+const SUB = ['₀', '₁', '₂', '₃', '₄', '₅'];
+
+let uid = 0;
+const nextId = (p) => `${p}-${++uid}`;
+
+// ---------- SVG primitives ----------
+const ARROW_DEFS = ['cyan', 'muted', 'rose', 'emerald', 'amber', 'violet', 'blue']
+  .map(k => `<marker id="lv-ar-${k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${C[k]}"/></marker>`)
+  .join('');
+
+function svg(w, h, inner, cls = '') {
+  return `<svg class="lv-svg ${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg"><defs>${ARROW_DEFS}</defs>${inner}</svg>`;
+}
+
+function T(x, y, s, o = {}) {
+  const { size = 12, fill = C.text, anchor = 'middle', weight = 500, mono = false, italic = false, opacity = null, extra = '' } = o;
+  return `<text x="${x}" y="${y}" font-size="${size}" fill="${fill}" text-anchor="${anchor}" font-weight="${weight}" font-family="${mono ? "'JetBrains Mono', monospace" : "'Outfit', sans-serif"}" ${italic ? 'font-style="italic"' : ''} ${opacity != null ? `opacity="${opacity}"` : ''} dominant-baseline="middle" ${extra}>${s}</text>`;
+}
+const line = (x1, y1, x2, y2, stroke = C.axis, w = 1.2, extra = '') =>
+  `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${w}" ${extra}/>`;
+const arrow = (x1, y1, x2, y2, color = 'muted', w = 1.8, extra = '') =>
+  `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${C[color]}" stroke-width="${w}" marker-end="url(#lv-ar-${color})" stroke-linecap="round" ${extra}/>`;
+const rect = (x, y, w, h, { fill = 'none', stroke = 'none', rx = 6, sw = 1.2, extra = '' } = {}) =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const circ = (cx, cy, r, { fill = 'none', stroke = 'none', sw = 1.5, extra = '' } = {}) =>
+  `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const path = (d, { stroke = C.cyan, sw = 2, fill = 'none', extra = '' } = {}) =>
+  `<path d="${d}" stroke="${stroke}" stroke-width="${sw}" fill="${fill}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
+
+function pill(x, y, text, color, size = 11) {
+  const w = text.length * size * 0.56 + 14;
+  return rect(x - w / 2, y - size * 0.85, w, size * 1.7, { fill: 'rgba(7,10,19,0.85)', stroke: color, rx: size * 0.85, sw: 1 }) +
+    T(x, y + 0.5, text, { size, fill: color, weight: 700, mono: true });
+}
+
+const tint = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+// ---------- Plot helpers ----------
+function scale(box, xr, yr) {
+  return {
+    sx: (x) => box.x + ((x - xr[0]) / (xr[1] - xr[0])) * box.w,
+    sy: (y) => box.y + box.h - ((y - yr[0]) / (yr[1] - yr[0])) * box.h
+  };
+}
+function fnPath(f, s, xr, n = 160) {
+  let d = '';
+  for (let i = 0; i <= n; i++) {
+    const x = xr[0] + ((xr[1] - xr[0]) * i) / n;
+    const y = f(x);
+    if (!isFinite(y)) continue;
+    d += `${d ? 'L' : 'M'}${s.sx(x).toFixed(1)},${s.sy(y).toFixed(1)}`;
+  }
+  return d;
+}
+function clipBox(box) {
+  const id = nextId('lv-clip');
+  return { id, def: `<clipPath id="${id}"><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}"/></clipPath>`, attr: `clip-path="url(#${id})"` };
+}
+function axes(box, s, xr, yr, { xTicks = [], yTicks = [], xLabel = '', yLabel = '', zeroAxes = true } = {}) {
+  let g = rect(box.x, box.y, box.w, box.h, { fill: 'rgba(2,6,23,0.35)', stroke: 'rgba(148,163,184,0.15)', rx: 4, sw: 1 });
+  xTicks.forEach(t => { g += line(s.sx(t), box.y, s.sx(t), box.y + box.h, C.grid, 1); g += T(s.sx(t), box.y + box.h + 11, t, { size: 9.5, fill: C.dim, mono: true }); });
+  yTicks.forEach(t => { g += line(box.x, s.sy(t), box.x + box.w, s.sy(t), C.grid, 1); g += T(box.x - 6, s.sy(t), t, { size: 9.5, fill: C.dim, anchor: 'end', mono: true }); });
+  if (zeroAxes) {
+    if (yr[0] <= 0 && yr[1] >= 0) g += line(box.x, s.sy(0), box.x + box.w, s.sy(0), C.axis, 1.2);
+    if (xr[0] <= 0 && xr[1] >= 0) g += line(s.sx(0), box.y, s.sx(0), box.y + box.h, C.axis, 1.2);
+  }
+  if (xLabel) g += T(box.x + box.w, box.y + box.h + 24, xLabel, { size: 10.5, fill: C.muted, anchor: 'end', italic: true });
+  if (yLabel) g += T(box.x + 4, box.y - 9, yLabel, { size: 10.5, fill: C.muted, anchor: 'start', italic: true });
+  return g;
+}
+
+const softmax = (arr) => { const m = Math.max(...arr); const e = arr.map(v => Math.exp(v - m)); const s = e.reduce((a, b) => a + b, 0); return e.map(v => v / s); };
+const tex = (src, display = false) => katex.renderToString(src, { displayMode: display, throwOnError: false, strict: 'ignore' });
+
+/** Run cb on an interval only while the element is attached and visible. */
+function visibleInterval(el, cb, ms) {
+  const id = setInterval(() => {
+    if (!el.isConnected) { clearInterval(id); return; }
+    if (el.offsetParent === null) return; // hidden tab
+    cb();
+  }, ms);
+  return () => clearInterval(id);
+}
+
+/* ==========================================================================
+   QUEST 1 — THE NEURON
+   ========================================================================== */
+function q1Neuron() {
+  const ins = [
+    { n: 'Sugar', v: 2, w: 0.8, y: 62 },
+    { n: 'Milk', v: 5, w: 0.4, y: 140 },
+    { n: 'Espresso', v: 2, w: 1.5, y: 218 }
+  ];
+  const sx = 150, nx = 395, ny = 140, ox = 578;
+  let s = '';
+  s += circ(nx, 32, 16, { fill: tint(C.amber, 0.15), stroke: C.amber });
+  s += T(nx, 33, 'b', { fill: C.amber, weight: 700, italic: true, size: 15 });
+  s += T(nx + 26, 33, 'bias = −0.5', { anchor: 'start', size: 11, fill: C.muted });
+  s += arrow(nx, 49, nx, ny - 44, 'amber', 1.6);
+  ins.forEach((d, i) => {
+    const p = `M${sx + 23},${d.y} L${nx - 41},${ny}`;
+    s += path(p, { stroke: tint(C.cyan, 0.45), sw: (d.w * 3.4 + 1).toFixed(1) });
+    s += `<circle r="4.5" fill="${C.cyan}" opacity="0.95"><animateMotion dur="2.2s" begin="${i * 0.4}s" repeatCount="indefinite" path="${p}"/></circle>`;
+    s += circ(sx, d.y, 23, { fill: tint(C.cyan, 0.12), stroke: C.cyan });
+    s += T(sx, d.y + 1, `x${SUB[i + 1]}`, { weight: 700, italic: true, size: 14 });
+    s += T(sx - 34, d.y - 7, d.n, { anchor: 'end', size: 12.5, weight: 600 });
+    s += T(sx - 34, d.y + 10, `value = ${d.v}`, { anchor: 'end', size: 10.5, fill: C.muted, mono: true });
+    const mx = (sx + 23 + nx - 41) / 2, my = (d.y + ny) / 2;
+    s += pill(mx, my - (i === 1 ? 14 : 0), `w${SUB[i + 1]} = ${d.w}`, C.violet, 10.5);
+  });
+  s += circ(nx, ny, 41, { fill: tint('#8b5cf6', 0.22), stroke: C.violet, sw: 2, extra: 'class="lv-pulse"' });
+  s += T(nx, ny - 6, 'Σ', { size: 26, weight: 700, fill: '#fff' });
+  s += T(nx, ny + 19, 'weighted sum', { size: 9.5, fill: C.muted });
+  s += arrow(nx + 43, ny, ox - 30, ny, 'emerald', 2.4);
+  s += circ(ox, ny, 26, { fill: tint(C.emerald, 0.15), stroke: C.emerald, sw: 2 });
+  s += T(ox, ny + 1, 'y', { size: 16, weight: 700, italic: true });
+  s += T(ox, ny + 46, 'y = 6.1', { size: 12, fill: C.emerald, weight: 700, mono: true });
+  s += T(ox, ny - 42, 'output', { size: 11, fill: C.muted });
+  s += T(320, 268, 'Line thickness ∝ weight — Espresso (w = 1.5) has the loudest voice', { size: 11, fill: C.muted, italic: true });
+  return {
+    html: svg(640, 285, s),
+    caption: 'An artificial neuron: each input travels along a weighted connection, gets summed, and is shifted by the bias.'
+  };
+}
+
+function q1DotProduct() {
+  const rows = [
+    { n: '🍬 Sugar', x: 2, w: 0.8 },
+    { n: '🥛 Milk', x: 5, w: 0.4 },
+    { n: '☕ Espresso', x: 2, w: 1.5 }
+  ];
+  const html = `
+    <div class="lv-dot">
+      <div class="lv-dot-head"><span>Ingredient</span><span>x</span><span></span><span>weight w</span><span></span><span>x · w</span><span>contribution</span></div>
+      ${rows.map((r, i) => `
+        <div class="lv-dot-row">
+          <span class="lv-dot-name">${r.n}</span>
+          <span class="lv-chip lv-chip-x">${r.x}</span>
+          <span class="lv-op">×</span>
+          <span class="lv-dot-slider"><input type="range" min="-2" max="3" step="0.1" value="${r.w}" data-i="${i}" aria-label="${r.n} weight"><b class="lv-wval">${r.w.toFixed(1)}</b></span>
+          <span class="lv-op">=</span>
+          <span class="lv-chip lv-chip-p" data-p="${i}">0</span>
+          <span class="lv-bar-track"><span class="lv-bar-fill" data-b="${i}"></span></span>
+        </div>`).join('')}
+      <div class="lv-dot-row lv-dot-bias">
+        <span class="lv-dot-name">⚖️ Bias b</span><span></span><span></span>
+        <span class="lv-dot-slider"><input type="range" min="-3" max="3" step="0.1" value="-0.5" data-bias aria-label="bias"><b class="lv-bval">-0.5</b></span>
+        <span class="lv-op">=</span>
+        <span class="lv-chip lv-chip-b" data-bp>-0.5</span>
+        <span class="lv-bar-track"><span class="lv-bar-fill lv-bias-fill" data-bb></span></span>
+      </div>
+      <div class="lv-dot-total">
+        <span>Happiness score</span>
+        <span class="lv-dot-eq" data-eq></span>
+        <span class="lv-dot-result" data-total>0</span>
+      </div>
+    </div>`;
+  const mount = (root) => {
+    const sliders = [...root.querySelectorAll('input[data-i]')];
+    const bias = root.querySelector('input[data-bias]');
+    const MAX = 8;
+    const setBar = (el, v) => {
+      const pct = Math.min(50, (Math.abs(v) / MAX) * 50);
+      el.style.width = `${pct}%`;
+      el.style.left = v >= 0 ? '50%' : `${50 - pct}%`;
+      el.classList.toggle('neg', v < 0);
+    };
+    const update = () => {
+      let total = 0;
+      const terms = [];
+      sliders.forEach((sl, i) => {
+        const w = parseFloat(sl.value);
+        const p = rows[i].x * w;
+        total += p;
+        terms.push(p.toFixed(1));
+        sl.parentElement.querySelector('.lv-wval').textContent = w.toFixed(1);
+        root.querySelector(`[data-p="${i}"]`).textContent = p.toFixed(1);
+        setBar(root.querySelector(`[data-b="${i}"]`), p);
+      });
+      const b = parseFloat(bias.value);
+      total += b;
+      root.querySelector('.lv-bval').textContent = b.toFixed(1);
+      root.querySelector('[data-bp]').textContent = b.toFixed(1);
+      setBar(root.querySelector('[data-bb]'), b);
+      root.querySelector('[data-eq]').innerHTML = tex(`${terms.join(' + ')} + (${b.toFixed(1)}) =`).replace(/\+ -/g, '- ');
+      const out = root.querySelector('[data-total]');
+      out.textContent = total.toFixed(2);
+      out.classList.toggle('neg', total < 0);
+    };
+    [...sliders, bias].forEach(s => s.addEventListener('input', update));
+    update();
+  };
+  return {
+    html,
+    mount,
+    caption: '<b>Try it:</b> drag the weight sliders — each row is one term of the dot product, and the total is the neuron\'s output.'
+  };
+}
+
+function q1WeightLines() {
+  const box = { x: 50, y: 22, w: 400, h: 230 };
+  const xr = [-3, 3], yr = [-4, 4];
+  const s = scale(box, xr, yr);
+  const cl = clipBox(box);
+  const lines = [
+    { w: 2, c: C.amber, l: 'w = 2  → large: very sensitive' },
+    { w: 0.5, c: C.cyan, l: 'w = 0.5 → positive: gentle increase' },
+    { w: 0, c: C.muted, l: 'w = 0  → ignored completely' },
+    { w: -1, c: C.rose, l: 'w = −1 → negative: inhibits' }
+  ];
+  let g = cl.def + axes(box, s, xr, yr, { xTicks: [-2, -1, 1, 2], yTicks: [-3, -2, -1, 1, 2, 3], xLabel: 'input x', yLabel: 'output w·x' });
+  g += `<g ${cl.attr}>`;
+  lines.forEach((L, i) => {
+    g += path(fnPath(x => L.w * x, s, xr, 2), { stroke: L.c, sw: 2.6, extra: `class="lv-draw" style="animation-delay:${i * 0.15}s"` });
+  });
+  g += '</g>';
+  lines.forEach((L, i) => {
+    const y = 60 + i * 44;
+    g += line(475, y, 500, y, L.c, 3);
+    g += T(508, y, L.l.split('→')[0].trim(), { anchor: 'start', size: 12, fill: L.c, weight: 700, mono: true });
+    g += T(508, y + 15, L.l.split('→')[1].trim(), { anchor: 'start', size: 10.5, fill: C.muted });
+  });
+  return {
+    html: svg(640, 275, g),
+    caption: 'A weight is literally the slope: bigger magnitude = steeper response; the sign decides whether the input excites or inhibits.'
+  };
+}
+
+function q1Bias() {
+  const box = { x: 46, y: 18, w: 560, h: 230 };
+  const xr = [-5, 5], yr = [-4, 7];
+  const s = scale(box, xr, yr);
+  const pts = [[-4.2, 0.1], [-3.1, 0.6], [-2, 1.1], [-1.1, 2.1], [0, 2.2], [0.9, 2.9], [2.1, 3.1], [3, 4.1], [4.1, 4.4]];
+  const cl = clipBox(box);
+  let g = cl.def + axes(box, s, xr, yr, { xTicks: [-4, -2, 2, 4], yTicks: [-2, 2, 4, 6], xLabel: 'x', yLabel: 'y' });
+  g += circ(s.sx(0), s.sy(0), 6, { stroke: C.rose, sw: 1.6, extra: 'class="lv-origin"' });
+  g += T(s.sx(0) + 10, s.sy(0) + 13, 'origin (0,0)', { anchor: 'start', size: 10, fill: C.rose });
+  pts.forEach(([x, y]) => { g += circ(s.sx(x), s.sy(y), 4.5, { fill: C.cyan, stroke: '#0b1222', sw: 1.2 }); });
+  g += `<g ${cl.attr}><path data-line d="" stroke="${C.amber}" stroke-width="2.8" fill="none"/><g data-res></g></g>`;
+  const html = `
+    <div class="lv-interactive">
+      ${svg(640, 268, g)}
+      <div class="lv-controls">
+        <label>Bias <code>b</code> <input type="range" min="-3" max="4" step="0.1" value="0" data-b aria-label="bias"> <b data-bv>0.0</b></label>
+        <span class="lv-readout" data-msg></span>
+      </div>
+    </div>`;
+  const mount = (root) => {
+    const input = root.querySelector('[data-b]');
+    const ln = root.querySelector('[data-line]');
+    const res = root.querySelector('[data-res]');
+    const msg = root.querySelector('[data-msg]');
+    const update = () => {
+      const b = parseFloat(input.value);
+      ln.setAttribute('d', fnPath(x => 0.5 * x + b, s, xr, 2));
+      let r = '', mse = 0;
+      pts.forEach(([x, y]) => {
+        const yh = 0.5 * x + b;
+        mse += (y - yh) ** 2;
+        r += line(s.sx(x), s.sy(y), s.sx(x), s.sy(yh), C.rose, 1.2, 'stroke-dasharray="3 3" opacity="0.8"');
+      });
+      mse /= pts.length;
+      res.innerHTML = r;
+      root.querySelector('[data-bv]').textContent = b.toFixed(1);
+      msg.innerHTML = Math.abs(b) < 0.05
+        ? `⚠️ <b>Origin trap!</b> Line forced through (0,0) — error ${mse.toFixed(2)}`
+        : (mse < 0.25 ? `✅ <b>Great fit</b> — error ${mse.toFixed(2)}` : `Error (MSE): <b>${mse.toFixed(2)}</b>`);
+      msg.className = `lv-readout ${mse < 0.25 ? 'good' : (Math.abs(b) < 0.05 ? 'bad' : '')}`;
+    };
+    input.addEventListener('input', update);
+    update();
+  };
+  return {
+    html,
+    mount,
+    caption: '<b>Try it:</b> the slope is fixed at 0.5. Without bias (b = 0) the line is pinned to the origin — slide <i>b</i> to lift it onto the data.'
+  };
+}
+
+/* ==========================================================================
+   QUEST 2 — ACTIVATIONS
+   ========================================================================== */
+function q2Collapse() {
+  const block = (x, y, w, label, color, sub) =>
+    rect(x, y - 20, w, 40, { fill: tint(color, 0.14), stroke: color, rx: 8 }) +
+    T(x + w / 2, y - (sub ? 4 : 0), label, { size: 14, weight: 700, italic: true }) +
+    (sub ? T(x + w / 2, y + 11, sub, { size: 9, fill: C.muted }) : '');
+  let g = '';
+  g += T(20, 30, 'Three linear layers, no activation…', { anchor: 'start', size: 12, fill: C.muted, weight: 600 });
+  const y1 = 72;
+  g += block(20, y1, 50, 'x', C.cyan);
+  [0, 1, 2].forEach(i => {
+    const x = 110 + i * 150;
+    g += arrow(x - 38, y1, x - 4, y1, 'muted');
+    g += block(x, y1, 90, `W${SUB[i + 1]}x + b${SUB[i + 1]}`, C.violet, 'linear');
+    if (i < 2) g += T(x + 112, y1 - 26, 'no σ', { size: 9.5, fill: C.rose, weight: 700 });
+  });
+  g += arrow(532, y1, 566, y1, 'muted');
+  g += block(570, y1, 50, 'y', C.emerald);
+  g += T(320, 128, '⇓  multiply the matrices out  ⇓', { size: 13, fill: C.amber, weight: 700 });
+  g += T(20, 160, '…are mathematically identical to ONE linear layer', { anchor: 'start', size: 12, fill: C.muted, weight: 600 });
+  const y2 = 205;
+  g += block(150, y2, 50, 'x', C.cyan);
+  g += arrow(204, y2, 246, y2, 'muted');
+  g += block(250, y2, 160, 'W* x + b*', C.rose, 'W* = W₃W₂W₁');
+  g += arrow(414, y2, 456, y2, 'muted');
+  g += block(460, y2, 50, 'y', C.emerald);
+  return {
+    html: svg(640, 240, g),
+    caption: 'Depth without non-linearity is an illusion: any stack of linear layers collapses into a single matrix multiply.'
+  };
+}
+
+function q2Xor() {
+  let g = '';
+  // Left panel: raw XOR space
+  const b1 = { x: 40, y: 34, w: 200, h: 180 };
+  const s1 = scale(b1, [-0.3, 1.3], [-0.3, 1.3]);
+  g += T(b1.x + b1.w / 2, 16, 'Input space (x₁, x₂)', { size: 12, weight: 700 });
+  g += axes(b1, s1, [-0.3, 1.3], [-0.3, 1.3], { xTicks: [0, 1], yTicks: [0, 1], zeroAxes: false });
+  g += line(s1.sx(-0.3), s1.sy(1.0), s1.sx(1.3), s1.sy(0.2), C.muted, 1.5, 'stroke-dasharray="5 4"');
+  g += line(s1.sx(0.2), s1.sy(-0.3), s1.sx(0.95), s1.sy(1.3), C.muted, 1.5, 'stroke-dasharray="5 4"');
+  g += T(b1.x + b1.w - 14, b1.y + 16, '✗', { size: 18, fill: C.rose, weight: 800 });
+  const xorPts = [[0, 0, 0], [1, 1, 0], [0, 1, 1], [1, 0, 1]];
+  xorPts.forEach(([a, b, c]) => {
+    g += circ(s1.sx(a), s1.sy(b), 9, { fill: c ? C.cyan : C.rose, stroke: '#0b1222', sw: 2 });
+    g += T(s1.sx(a), s1.sy(b) + 0.5, c, { size: 10, weight: 800, fill: '#0b1222' });
+  });
+  g += T(b1.x + b1.w / 2, b1.y + b1.h + 26, 'No single straight line separates them', { size: 10.5, fill: C.rose });
+
+  // Middle arrow
+  g += arrow(262, 124, 372, 124, 'amber', 2.4);
+  g += T(317, 104, 'hidden layer', { size: 11, fill: C.amber, weight: 700 });
+  g += T(317, 145, 'h = ReLU(Wx + b)', { size: 10.5, fill: C.muted, mono: true });
+
+  // Right panel: transformed space h1 = relu(x1+x2), h2 = relu(x1+x2-1)
+  const b2 = { x: 400, y: 34, w: 200, h: 180 };
+  const xr = [-0.3, 2.3], yr = [-0.3, 1.3];
+  const s2 = scale(b2, xr, yr);
+  const cl = clipBox(b2);
+  g += T(b2.x + b2.w / 2, 16, 'Hidden space (h₁, h₂)', { size: 12, weight: 700 });
+  g += cl.def + axes(b2, s2, xr, yr, { xTicks: [0, 1, 2], yTicks: [0, 1], zeroAxes: false });
+  g += `<g ${cl.attr}>` + path(fnPath(h1 => (h1 - 0.5) / 2, s2, xr, 2), { stroke: C.emerald, sw: 2.6, extra: 'class="lv-draw"' }) + '</g>';
+  const mapped = [[0, 0, 0], [2, 1, 0], [1, 0, 1]];
+  mapped.forEach(([a, b, c]) => {
+    g += circ(s2.sx(a), s2.sy(b), 9, { fill: c ? C.cyan : C.rose, stroke: '#0b1222', sw: 2 });
+    g += T(s2.sx(a), s2.sy(b) + 0.5, c, { size: 10, weight: 800, fill: '#0b1222' });
+  });
+  g += T(s2.sx(1) + 18, s2.sy(0) - 14, '×2', { size: 9.5, fill: C.cyan, weight: 700 });
+  g += T(b2.x + b2.w - 14, b2.y + 16, '✓', { size: 18, fill: C.emerald, weight: 800 });
+  g += T(b2.x + b2.w / 2, b2.y + b2.h + 26, 'Space is folded — now one line works', { size: 10.5, fill: C.emerald });
+  return {
+    html: svg(640, 250, g),
+    caption: 'XOR: the ReLU hidden layer folds the plane so (0,1) and (1,0) land on the same spot — then a straight cut separates the classes.'
+  };
+}
+
+function q2Activations() {
+  const fns = [
+    { n: 'ReLU', f: x => Math.max(0, x), yr: [-1, 4], c: C.cyan, r: 'range [0, ∞)' },
+    { n: 'Sigmoid', f: x => 1 / (1 + Math.exp(-x)), yr: [-0.25, 1.25], c: C.violet, r: 'range (0, 1)' },
+    { n: 'Tanh', f: x => Math.tanh(x), yr: [-1.3, 1.3], c: C.emerald, r: 'range (−1, 1)' },
+    { n: 'Leaky ReLU', f: x => (x > 0 ? x : 0.15 * x), yr: [-1, 4], c: C.amber, r: 'small slope for x < 0' }
+  ];
+  let g = '';
+  fns.forEach((F, i) => {
+    const box = { x: 14 + i * 157, y: 34, w: 140, h: 120 };
+    const xr = [-4, 4];
+    const s = scale(box, xr, F.yr);
+    const cl = clipBox(box);
+    g += T(box.x + box.w / 2, 16, F.n, { size: 13, weight: 800, fill: F.c });
+    g += cl.def + axes(box, s, xr, F.yr, {});
+    g += `<g ${cl.attr}>` + path(fnPath(F.f, s, xr), { stroke: F.c, sw: 2.8, extra: `class="lv-draw" style="animation-delay:${i * 0.12}s"` }) + '</g>';
+    if (F.n === 'Sigmoid') {
+      g += line(box.x, s.sy(1), box.x + box.w, s.sy(1), F.c, 1, 'stroke-dasharray="3 3" opacity="0.5"');
+    }
+    if (F.n === 'Tanh') {
+      [1, -1].forEach(v => { g += line(box.x, s.sy(v), box.x + box.w, s.sy(v), F.c, 1, 'stroke-dasharray="3 3" opacity="0.5"'); });
+    }
+    g += T(box.x + box.w / 2, box.y + box.h + 16, F.r, { size: 10, fill: C.muted });
+  });
+  return {
+    html: svg(640, 180, g),
+    caption: 'The four classic activation curves. Note how Sigmoid and Tanh flatten out at the extremes — that flatness is what causes vanishing gradients.'
+  };
+}
+
+function q2Cheatsheet() {
+  const cards = [
+    { icon: '🧱', where: 'Hidden layers', act: 'ReLU / GELU', why: 'fast, healthy gradients', c: 'cyan' },
+    { icon: '🔘', where: 'Binary output', act: 'Sigmoid', why: 'one probability in (0, 1)', c: 'violet' },
+    { icon: '🗂️', where: 'Multi-class output', act: 'Softmax', why: 'probabilities sum to 1', c: 'amber' },
+    { icon: '📈', where: 'Regression output', act: 'Linear (none)', why: 'unbounded real numbers', c: 'emerald' }
+  ];
+  const html = `<div class="lv-cheat-grid">${cards.map(k => `
+      <div class="lv-cheat-card lv-c-${k.c}">
+        <div class="lv-cheat-icon">${k.icon}</div>
+        <div class="lv-cheat-where">${k.where}</div>
+        <div class="lv-cheat-act">${k.act}</div>
+        <div class="lv-cheat-why">${k.why}</div>
+      </div>`).join('')}</div>`;
+  return { html, caption: 'Quick decision guide: where the layer sits determines which activation it should use.' };
+}
+
+/* ==========================================================================
+   QUEST 3 — GRADIENT DESCENT
+   ========================================================================== */
+function q3Loss() {
+  const box = { x: 40, y: 18, w: 400, h: 250 }; // 50px per unit on both axes → true squares
+  const xr = [0, 8], yr = [0, 5];
+  const s = scale(box, xr, yr);
+  const fit = x => 0.5 * x + 0.6;
+  const pts = [[1, 1.7], [2, 1.1], [3, 2.5], [4, 1.9], [5, 3.4], [6, 4.4], [7, 3.7]];
+  let g = axes(box, s, xr, yr, { xTicks: [2, 4, 6], yTicks: [1, 2, 3, 4], xLabel: 'x', yLabel: 'y' });
+  let sse = 0;
+  pts.forEach(([x, y], i) => {
+    const yh = fit(x), r = y - yh, side = Math.abs(r) * 50;
+    sse += r * r;
+    const top = Math.min(s.sy(y), s.sy(yh));
+    g += rect(s.sx(x), top, side, side, { fill: tint(C.rose, 0.16), stroke: tint(C.rose, 0.5), rx: 1, sw: 1, extra: `class="lv-pop" style="animation-delay:${0.3 + i * 0.08}s"` });
+    g += line(s.sx(x), s.sy(y), s.sx(x), s.sy(yh), C.rose, 1.8);
+  });
+  g += path(fnPath(fit, s, xr, 2), { stroke: C.amber, sw: 2.6 });
+  pts.forEach(([x, y]) => { g += circ(s.sx(x), s.sy(y), 5, { fill: C.cyan, stroke: '#0b1222', sw: 1.5 }); });
+  // legend
+  const lx = 470;
+  g += circ(lx + 6, 50, 5, { fill: C.cyan }) + T(lx + 20, 50, 'true value y', { anchor: 'start', size: 11.5 });
+  g += line(lx, 78, lx + 14, 78, C.amber, 3) + T(lx + 20, 78, 'prediction ŷ', { anchor: 'start', size: 11.5 });
+  g += line(lx + 7, 98, lx + 7, 116, C.rose, 2) + T(lx + 20, 107, 'error (y − ŷ)', { anchor: 'start', size: 11.5 });
+  g += rect(lx, 128, 14, 14, { fill: tint(C.rose, 0.2), stroke: tint(C.rose, 0.6), rx: 1 }) + T(lx + 20, 135, 'squared error', { anchor: 'start', size: 11.5 });
+  g += rect(lx - 6, 166, 160, 64, { fill: 'rgba(2,6,23,0.6)', stroke: tint(C.amber, 0.5), rx: 10 });
+  g += T(lx + 74, 186, 'MSE = mean area', { size: 11, fill: C.muted });
+  g += T(lx + 74, 210, (sse / pts.length).toFixed(3), { size: 20, fill: C.amber, weight: 800, mono: true });
+  return {
+    html: svg(640, 290, g),
+    caption: 'Mean Squared Error, visualised: each red square\'s area is one squared mistake. Training shrinks the average square.'
+  };
+}
+
+function q3Gradient() {
+  const box = { x: 40, y: 20, w: 560, h: 220 };
+  const xr = [-4, 6], yr = [0, 11];
+  const s = scale(box, xr, yr);
+  const L = w => 0.4 * (w - 1) ** 2;
+  const dL = w => 0.8 * (w - 1);
+  const w0 = -2;
+  let g = axes(box, s, xr, yr, { xTicks: [-3, -1, 1, 3, 5], yTicks: [2, 4, 6, 8, 10], xLabel: 'weight w', yLabel: 'loss L(w)', zeroAxes: false });
+  g += path(fnPath(L, s, xr), { stroke: C.violet, sw: 3 });
+  // tangent
+  const m = dL(w0);
+  g += line(s.sx(w0 - 1.4), s.sy(L(w0) - 1.4 * m), s.sx(w0 + 1.4), s.sy(L(w0) + 1.4 * m), C.amber, 1.6, 'stroke-dasharray="5 4"');
+  g += T(s.sx(w0 + 1.6), s.sy(L(w0) + 1.4 * m) + 2, `slope = ${m.toFixed(1)}`, { anchor: 'start', size: 11, fill: C.amber, mono: true });
+  // arrows
+  const ux = 0.55;
+  g += arrow(s.sx(w0), s.sy(L(w0)), s.sx(w0 - ux * 1.6), s.sy(L(w0) - ux * 1.6 * m), 'rose', 2.6);
+  g += T(s.sx(w0 - 1.2), s.sy(L(w0) - 1.2 * m) - 16, '∇L points uphill', { size: 11, fill: C.rose, weight: 700 });
+  g += arrow(s.sx(w0), s.sy(L(w0)), s.sx(w0 + ux * 1.6), s.sy(L(w0) + ux * 1.6 * m), 'emerald', 2.6);
+  g += T(s.sx(w0 + 1.15), s.sy(L(w0) + 1.15 * m) + 30, '−∇L: step downhill', { size: 11, fill: C.emerald, weight: 700 });
+  g += circ(s.sx(w0), s.sy(L(w0)), 6, { fill: C.amber, stroke: '#0b1222', sw: 2 });
+  // minimum
+  g += line(s.sx(1), s.sy(0), s.sx(1), s.sy(0) - 8, C.emerald, 2);
+  g += T(s.sx(1), s.sy(0) - 18, 'minimum', { size: 10.5, fill: C.emerald, weight: 700 });
+  // rolling ball along descent path
+  let ballPath = '';
+  let w = -3.6;
+  for (let i = 0; i < 26; i++) { ballPath += `${i ? 'L' : 'M'}${s.sx(w).toFixed(1)},${(s.sy(L(w)) - 8).toFixed(1)}`; w -= 0.12 * dL(w); }
+  g += `<circle r="7" fill="${C.cyan}" stroke="#0b1222" stroke-width="2"><animateMotion dur="4s" repeatCount="indefinite" path="${ballPath}" keyPoints="0;1;1" keyTimes="0;0.75;1" calcMode="linear"/></circle>`;
+  return {
+    html: svg(640, 262, g),
+    caption: 'The gradient is the local slope. It points uphill, so gradient descent always steps the opposite way — the ball settles at the minimum.'
+  };
+}
+
+function q3LearningRate() {
+  const cases = [
+    { t: 'Too small (α = 0.03)', lr: 0.03, n: 10, c: C.blue, v: 'crawls… still far away' },
+    { t: 'Just right (α = 0.3)', lr: 0.3, n: 6, c: C.emerald, v: 'converges smoothly ✓' },
+    { t: 'Too large (α = 1.05)', lr: 1.05, n: 6, c: C.rose, v: 'overshoots & explodes ✗' }
+  ];
+  let g = '';
+  cases.forEach((k, i) => {
+    const box = { x: 14 + i * 210, y: 32, w: 192, h: 150 };
+    const xr = [-3.4, 3.4], yr = [0, 11.5];
+    const s = scale(box, xr, yr);
+    const cl = clipBox(box);
+    g += T(box.x + box.w / 2, 14, k.t, { size: 12, weight: 800, fill: k.c });
+    g += cl.def + axes(box, s, xr, yr, { zeroAxes: false });
+    g += `<g ${cl.attr}>`;
+    g += path(fnPath(w => w * w, s, xr), { stroke: tint('#a78bfa', 0.75), sw: 2.2 });
+    let w = -2.6;
+    const ptsArr = [w];
+    for (let j = 0; j < k.n; j++) { w = w - k.lr * 2 * w; ptsArr.push(w); }
+    for (let j = 0; j < ptsArr.length - 1; j++) {
+      const a = ptsArr[j], b = ptsArr[j + 1];
+      g += arrow(s.sx(a), s.sy(a * a), s.sx(b), s.sy(b * b), k.lr > 1 ? 'rose' : (k.lr < 0.1 ? 'blue' : 'emerald'), 1.6, `class="lv-fade-in" style="animation-delay:${j * 0.18}s"`);
+    }
+    ptsArr.forEach((p, j) => { g += circ(s.sx(p), s.sy(p * p), j === 0 ? 5 : 3.5, { fill: j === 0 ? C.amber : k.c, extra: `class="lv-fade-in" style="animation-delay:${j * 0.18}s"` }); });
+    g += '</g>';
+    g += T(box.x + box.w / 2, box.y + box.h + 16, k.v, { size: 10.5, fill: C.muted });
+  });
+  return {
+    html: svg(640, 210, g),
+    caption: 'Same start point (orange), same valley, three learning rates. Step size alone decides between stalling, converging, and diverging.'
+  };
+}
+
+function q3Loop() {
+  const steps = [
+    { code: 'optimizer.zero_grad()', sub: 'clear old gradients', c: C.muted },
+    { code: 'out = model(x)', sub: 'forward pass', c: C.cyan },
+    { code: 'loss = criterion(out, y)', sub: 'measure the mistake', c: C.rose },
+    { code: 'loss.backward()', sub: 'backprop gradients', c: C.violet },
+    { code: 'optimizer.step()', sub: 'update weights', c: C.emerald }
+  ];
+  const cx = 320, cy = 152, R = 108;
+  let g = circ(cx, cy, R, { stroke: 'rgba(148,163,184,0.25)', sw: 2, extra: 'stroke-dasharray="6 6" class="lv-spin-dash"' });
+  g += T(cx, cy - 8, '🔄', { size: 22 });
+  g += T(cx, cy + 16, 'repeat every batch', { size: 11, fill: C.muted });
+  steps.forEach((st, i) => {
+    const a = (-90 + i * 72) * Math.PI / 180;
+    const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+    const w = st.code.length * 6.6 + 34;
+    g += `<g class="lv-cycle-node" style="animation-delay:${i * 1}s">`;
+    g += rect(x - w / 2, y - 21, w, 42, { fill: '#0b1222', stroke: st.c, rx: 10, sw: 1.6 });
+    g += circ(x - w / 2 + 14, y, 9, { fill: st.c });
+    g += T(x - w / 2 + 14, y + 0.5, i + 1, { size: 10, weight: 800, fill: '#0b1222' });
+    g += T(x - w / 2 + 28, y - 6, st.code, { anchor: 'start', size: 11, mono: true, weight: 700 });
+    g += T(x - w / 2 + 28, y + 10, st.sub, { anchor: 'start', size: 9.5, fill: C.muted });
+    g += '</g>';
+  });
+  return {
+    html: svg(640, 305, g),
+    caption: 'The 5-step PyTorch training ritual. The highlighted step cycles around — every batch runs the full loop once.'
+  };
+}
+
+/* ==========================================================================
+   QUEST 4 — CNN CAPSTONE
+   ========================================================================== */
+function q4Flatten() {
+  let g = '';
+  const cs = 26, gx = 30, gy = 40;
+  g += T(gx + 2 * cs, 22, '4×4 image', { size: 12, weight: 700 });
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const idx = r * 4 + c;
+    const hot = idx === 5 || idx === 9;
+    g += rect(gx + c * cs, gy + r * cs, cs - 2, cs - 2, { fill: hot ? tint(C.amber, 0.55) : 'rgba(148,163,184,0.12)', stroke: hot ? C.amber : 'rgba(148,163,184,0.25)', rx: 3, sw: 1 });
+    g += T(gx + c * cs + cs / 2 - 1, gy + r * cs + cs / 2 - 1, idx, { size: 9, fill: hot ? '#0b1222' : C.dim, mono: true, weight: 700 });
+  }
+  g += T(gx + 2 * cs, gy + 4 * cs + 14, 'pixels 5 & 9 are neighbours ↕', { size: 10, fill: C.amber });
+  g += arrow(150, 92, 200, 92, 'amber', 2.2);
+  g += T(175, 78, 'flatten', { size: 10.5, fill: C.amber, weight: 700 });
+  const sx0 = 210, cw = 25;
+  g += T(sx0 + 8 * cw, 22, '1D vector of 16', { size: 12, weight: 700 });
+  for (let i = 0; i < 16; i++) {
+    const hot = i === 5 || i === 9;
+    g += rect(sx0 + i * cw, 80, cw - 2, 26, { fill: hot ? tint(C.amber, 0.55) : 'rgba(148,163,184,0.12)', stroke: hot ? C.amber : 'rgba(148,163,184,0.25)', rx: 3, sw: 1 });
+    g += T(sx0 + i * cw + cw / 2 - 1, 93, i, { size: 9, fill: hot ? '#0b1222' : C.dim, mono: true, weight: 700 });
+  }
+  g += path(`M${sx0 + 5 * cw + 11},112 Q${sx0 + 7 * cw + 11},140 ${sx0 + 9 * cw + 11},112`, { stroke: C.rose, sw: 1.6, extra: 'stroke-dasharray="4 3"' });
+  g += T(sx0 + 7 * cw + 11, 146, 'now 4 slots apart (28 apart in a 28×28 doodle)', { size: 10, fill: C.rose });
+  // parameter comparison (log scale)
+  g += line(20, 182, 620, 182, 'rgba(148,163,184,0.15)', 1);
+  g += T(20, 202, 'Weights needed for a 1000×1000 RGB image (log scale)', { anchor: 'start', size: 11.5, weight: 700 });
+  const maxLog = Math.log10(3e9);
+  const bars = [
+    { l: 'Dense layer (1,000 neurons)', v: 3e9, txt: '3,000,000,000', c: C.rose },
+    { l: 'One 3×3 conv filter', v: 10, txt: '10', c: C.emerald }
+  ];
+  bars.forEach((b, i) => {
+    const y = 222 + i * 30;
+    const w = Math.max(6, (Math.log10(b.v) / maxLog) * 360);
+    g += T(20, y + 9, b.l, { anchor: 'start', size: 11, fill: C.muted });
+    g += rect(200, y, w, 18, { fill: tint(b.c, 0.35), stroke: b.c, rx: 4, sw: 1, extra: 'class="lv-grow"' });
+    g += T(206 + w, y + 9.5, b.txt, { anchor: 'start', size: 11, fill: b.c, weight: 800, mono: true });
+  });
+  return {
+    html: svg(640, 285, g),
+    caption: 'Flattening destroys neighbourhoods, and dense layers explode in size. Convolutions keep 2D structure with a handful of shared weights.'
+  };
+}
+
+function q4Sliding() {
+  const N = 8, cs = 24, gx = 40, gy = 34;
+  // a little "curve" motif drawn twice: top-left and bottom-right
+  const on = new Set(['1,2', '2,1', '2,3', '3,2', '4,5', '5,4', '5,6', '6,5']);
+  let g = T(gx + N * cs / 2, 16, 'Input doodle (8×8)', { size: 12, weight: 700 });
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    g += rect(gx + c * cs, gy + r * cs, cs - 2, cs - 2, { fill: on.has(`${r},${c}`) ? C.text : 'rgba(148,163,184,0.1)', rx: 2 });
+  }
+  // animated window raster scan over 6x6 positions
+  const xs = [], ys = [];
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) { xs.push(gx + c * cs - 2); ys.push(gy + r * cs - 2); }
+  g += `<rect width="${3 * cs + 2}" height="${3 * cs + 2}" rx="4" fill="${tint(C.cyan, 0.12)}" stroke="${C.cyan}" stroke-width="2.4">
+    <animate attributeName="x" dur="9s" repeatCount="indefinite" calcMode="discrete" values="${xs.join(';')}"/>
+    <animate attributeName="y" dur="9s" repeatCount="indefinite" calcMode="discrete" values="${ys.join(';')}"/>
+  </rect>`;
+  // kernel
+  const kx = 290, ky = 80;
+  g += T(kx + 36, 52, 'Same 3×3 filter', { size: 12, weight: 700, fill: C.cyan });
+  const K = [[0, 1, 0], [1, 0, 1], [0, 1, 0]];
+  K.forEach((row, r) => row.forEach((v, c) => {
+    g += rect(kx + c * 24, ky + r * 24, 22, 22, { fill: v ? tint(C.cyan, 0.5) : 'rgba(148,163,184,0.08)', stroke: tint(C.cyan, 0.4), rx: 3, sw: 1 });
+  }));
+  g += T(kx + 36, ky + 92, '9 shared weights', { size: 10.5, fill: C.muted });
+  g += arrow(kx + 90, 116, kx + 130, 116, 'cyan', 2);
+  // feature map (6x6)
+  const fx = 440, fy = 46, fs = 26;
+  g += T(fx + 3 * fs, 22, 'Feature map', { size: 12, weight: 700 });
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
+    const hit = (r === 1 && c === 1) || (r === 4 && c === 4);
+    g += rect(fx + c * fs, fy + r * fs, fs - 3, fs - 3, { fill: hit ? C.amber : 'rgba(148,163,184,0.08)', rx: 3, extra: hit ? 'class="lv-pulse"' : '' });
+  }
+  g += T(fx + 3 * fs, fy + 6 * fs + 14, 'pattern found top-left AND bottom-right', { size: 10, fill: C.amber });
+  return {
+    html: svg(640, 245, g),
+    caption: 'One filter slides everywhere (weight sharing), so the same motif lights up the feature map wherever it appears — translation invariance.'
+  };
+}
+
+function q4Hierarchy() {
+  let g = '';
+  const panels = [
+    { x: 20, t: 'Layer 1 · Edges', c: C.cyan },
+    { x: 232, t: 'Layer 2 · Parts', c: C.violet },
+    { x: 444, t: 'Layer 3 · Objects', c: C.amber }
+  ];
+  panels.forEach((p, i) => {
+    g += rect(p.x, 30, 176, 160, { fill: tint(p.c, 0.06), stroke: tint(p.c, 0.45), rx: 12 });
+    g += T(p.x + 88, 16, p.t, { size: 12.5, weight: 800, fill: p.c });
+    if (i < 2) g += arrow(p.x + 182, 110, p.x + 206, 110, 'muted', 2);
+  });
+  // edges: small oriented strokes
+  const angles = [0, 45, 90, 135, 20, 160, 70, 110, 0];
+  angles.forEach((a, i) => {
+    const cx = 50 + (i % 3) * 58, cy = 62 + Math.floor(i / 3) * 46;
+    const r = 14, rad = a * Math.PI / 180;
+    g += line(cx - r * Math.cos(rad), cy - r * Math.sin(rad), cx + r * Math.cos(rad), cy + r * Math.sin(rad), C.cyan, 3.2, 'stroke-linecap="round"');
+  });
+  // parts
+  const px = 232;
+  g += path(`M${px + 30},90 Q${px + 55},50 ${px + 80},90`, { stroke: C.violet, sw: 3.2 });
+  g += path(`M${px + 110},60 L${px + 110},95 L${px + 145},95`, { stroke: C.violet, sw: 3.2 });
+  g += circ(px + 55, 145, 20, { stroke: C.violet, sw: 3.2 });
+  g += path(`M${px + 110},165 L${px + 128},125 L${px + 146},165 Z`, { stroke: C.violet, sw: 3.2 });
+  g += T(px + 55, 105, 'curve', { size: 9.5, fill: C.muted });
+  g += T(px + 128, 108, 'corner', { size: 9.5, fill: C.muted });
+  // object: cat face
+  const ox = 532, oy = 118;
+  g += path(`M${ox - 38},${oy - 18} L${ox - 30},${oy - 62} L${ox - 8},${oy - 36}`, { stroke: C.amber, sw: 3 });
+  g += path(`M${ox + 38},${oy - 18} L${ox + 30},${oy - 62} L${ox + 8},${oy - 36}`, { stroke: C.amber, sw: 3 });
+  g += circ(ox, oy, 42, { stroke: C.amber, sw: 3, fill: '#0b1222' });
+  g += circ(ox - 15, oy - 8, 4, { fill: C.amber }) + circ(ox + 15, oy - 8, 4, { fill: C.amber });
+  g += path(`M${ox - 5},${oy + 6} L${ox + 5},${oy + 6} L${ox},${oy + 12} Z`, { stroke: C.amber, sw: 2, fill: C.amber });
+  [-1, 1].forEach(d => { [-6, 2, 10].forEach(dy => { g += line(ox + d * 12, oy + 10, ox + d * 52, oy + dy, C.amber, 1.6); }); });
+  g += T(ox, 180, '“Cat 🐱” — 97%', { size: 11, fill: C.amber, weight: 700 });
+  return {
+    html: svg(640, 205, g),
+    caption: 'Each layer composes the previous one: edges → curves & corners → whole objects. Depth = increasingly abstract features.'
+  };
+}
+
+function q4Pool() {
+  const M = [[1, 3, 2, 1], [4, 8, 0, 5], [2, 1, 7, 3], [0, 6, 2, 9]];
+  const qc = [C.cyan, C.violet, C.amber, C.emerald];
+  const quad = (r, c) => (r < 2 ? 0 : 2) + (c < 2 ? 0 : 1);
+  const cs = 44, gx = 60, gy = 40;
+  let g = T(gx + 2 * cs, 20, '4×4 feature map', { size: 12, weight: 700 });
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const q = quad(r, c), col = qc[q];
+    const qv = [];
+    for (let rr = 0; rr < 4; rr++) for (let cc = 0; cc < 4; cc++) if (quad(rr, cc) === q) qv.push(M[rr][cc]);
+    const isMax = M[r][c] === Math.max(...qv);
+    g += rect(gx + c * cs, gy + r * cs, cs - 4, cs - 4, { fill: tint(col, isMax ? 0.45 : 0.12), stroke: isMax ? col : tint(col, 0.35), rx: 6, sw: isMax ? 2.2 : 1 });
+    g += T(gx + c * cs + cs / 2 - 2, gy + r * cs + cs / 2 - 2, M[r][c], { size: 15, weight: isMax ? 800 : 500, fill: isMax ? '#fff' : C.muted, mono: true });
+  }
+  g += arrow(250, 124, 340, 124, 'amber', 2.4);
+  g += T(295, 104, 'MaxPool2d(2, 2)', { size: 11, fill: C.amber, weight: 700, mono: true });
+  g += T(295, 144, 'keep the max of each 2×2', { size: 10, fill: C.muted });
+  const ox = 380, oy = 62, os = 60;
+  g += T(ox + os, 20, '2×2 output', { size: 12, weight: 700 });
+  [[8, 5], [6, 9]].forEach((row, r) => row.forEach((v, c) => {
+    const col = qc[r * 2 + c];
+    g += rect(ox + c * os, oy + r * os, os - 6, os - 6, { fill: tint(col, 0.4), stroke: col, rx: 8, sw: 2, extra: `class="lv-pop" style="animation-delay:${0.2 + (r * 2 + c) * 0.15}s"` });
+    g += T(ox + c * os + os / 2 - 3, oy + r * os + os / 2 - 3, v, { size: 20, weight: 800, fill: '#fff', mono: true });
+  }));
+  g += T(ox + os, oy + 2 * os + 18, '75% fewer values', { size: 10.5, fill: C.emerald, weight: 700 });
+  return {
+    html: svg(640, 230, g),
+    caption: 'Max pooling summarises each 2×2 block by its strongest activation — the image halves in each direction, the important signals survive.'
+  };
+}
+
+function q4Softmax() {
+  const cls = ['Cat 🐱', 'Bicycle 🚲', 'Star ⭐', 'Pizza 🍕', 'Umbrella ☂️'];
+  const z = [2.5, -0.8, 8.1, 1.2, 0.4];
+  const p = softmax(z);
+  let g = '';
+  g += T(160, 16, 'Raw logits z (any real number)', { size: 12, weight: 700, fill: C.violet });
+  g += T(480, 16, 'Softmax probabilities (sum = 1)', { size: 12, weight: 700, fill: C.emerald });
+  const zx0 = 140; // zero line for logits
+  cls.forEach((c, i) => {
+    const y = 40 + i * 34;
+    g += T(70, y + 10, c, { size: 11.5, anchor: 'middle' });
+    const w = z[i] * 18;
+    g += rect(w >= 0 ? zx0 : zx0 + w, y, Math.abs(w), 20, { fill: tint(z[i] >= 0 ? '#a78bfa' : '#fb7185', 0.45), stroke: z[i] >= 0 ? C.violet : C.rose, rx: 3, sw: 1, extra: 'class="lv-grow"' });
+    g += T(w >= 0 ? zx0 + w + 6 : zx0 + w - 6, y + 10.5, z[i].toFixed(1), { size: 10.5, anchor: w >= 0 ? 'start' : 'end', mono: true, fill: C.text });
+    const pw = Math.max(2, p[i] * 190);
+    g += rect(380, y, pw, 20, { fill: tint(C.emerald, i === 2 ? 0.6 : 0.3), stroke: C.emerald, rx: 3, sw: 1, extra: 'class="lv-grow"' });
+    g += T(386 + pw, y + 10.5, `${(p[i] * 100).toFixed(p[i] > 0.1 ? 1 : 2)}%`, { size: 10.5, anchor: 'start', mono: true, weight: i === 2 ? 800 : 500, fill: i === 2 ? C.emerald : C.muted });
+  });
+  g += line(zx0, 34, zx0, 214, C.axis, 1);
+  g += arrow(320, 120, 360, 120, 'amber', 2.2);
+  g += T(340, 102, 'eᶻ / Σeᶻ', { size: 11, fill: C.amber, weight: 700 });
+  return {
+    html: svg(640, 225, g),
+    caption: 'Softmax exponentiates and normalises the logits: the Star score of 8.1 dominates and becomes ~99.5% confidence.'
+  };
+}
+
+/* ==========================================================================
+   QUEST 5 — KERNEL DETECTIVE
+   ========================================================================== */
+function q5Conv() {
+  const X = [[0, 0, 0, 0, 0], [0, 1, 1, 1, 0], [0, 1, 1, 1, 0], [0, 1, 1, 1, 0], [0, 0, 0, 0, 0]];
+  const K = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+  const out = [0, 1, 2].map(i => [0, 1, 2].map(j => {
+    let s = 0; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) s += K[r][c] * X[i + r][j + c]; return s;
+  }));
+  const html = `
+    <div class="lv-conv">
+      <div class="lv-conv-row">
+        <div class="lv-conv-block"><div class="lv-conv-title">Input (5×5)</div>
+          <div class="lv-grid g5">${X.flat().map((v, k) => `<div class="lv-cell ${v ? 'on' : ''}" data-in="${k}">${v}</div>`).join('')}</div></div>
+        <div class="lv-conv-op">⊛</div>
+        <div class="lv-conv-block"><div class="lv-conv-title">Sobel-H kernel</div>
+          <div class="lv-grid g3">${K.flat().map(v => `<div class="lv-cell k ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v}</div>`).join('')}</div></div>
+        <div class="lv-conv-op">=</div>
+        <div class="lv-conv-block"><div class="lv-conv-title">Output (3×3)</div>
+          <div class="lv-grid g3">${out.flat().map((_, k) => `<div class="lv-cell o" data-out="${k}">?</div>`).join('')}</div></div>
+      </div>
+      <div class="lv-conv-math" data-math></div>
+      <div class="lv-controls">
+        <button class="lv-btn" data-play>⏸ Pause</button>
+        <button class="lv-btn" data-step>Step ➜</button>
+        <span class="lv-readout">Top edge → <b style="color:#22d3ee">positive</b>, bottom edge → <b style="color:#fb7185">negative</b>, flat area → 0</span>
+      </div>
+    </div>`;
+  const mount = (root) => {
+    let pos = -1, playing = true;
+    const ins = [...root.querySelectorAll('[data-in]')];
+    const outs = [...root.querySelectorAll('[data-out]')];
+    const math = root.querySelector('[data-math]');
+    const step = () => {
+      pos = (pos + 1) % 9;
+      if (pos === 0) outs.forEach(o => { o.textContent = '?'; o.className = 'lv-cell o'; });
+      const i = Math.floor(pos / 3), j = pos % 3;
+      ins.forEach(c => c.classList.remove('win'));
+      const terms = [];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+        ins[(i + r) * 5 + (j + c)].classList.add('win');
+        const xv = X[i + r][j + c];
+        if (K[r][c] !== 0 && xv !== 0) terms.push(`(${K[r][c]})\\cdot ${xv}`);
+      }
+      const v = out[i][j];
+      outs.forEach(o => o.classList.remove('cur'));
+      const o = outs[pos];
+      o.textContent = v;
+      o.className = `lv-cell o done cur ${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}`;
+      math.innerHTML = tex(`\\text{out}(${i},${j}) = ${terms.length ? terms.join(' + ') : '\\text{all products are } 0'} = \\mathbf{${v}}`);
+    };
+    step();
+    const stop = visibleInterval(root, () => { if (playing) step(); }, 1500);
+    const playBtn = root.querySelector('[data-play]');
+    playBtn.addEventListener('click', () => { playing = !playing; playBtn.textContent = playing ? '⏸ Pause' : '▶ Play'; });
+    root.querySelector('[data-step]').addEventListener('click', () => { playing = false; playBtn.textContent = '▶ Play'; step(); });
+    return stop;
+  };
+  return { html, mount, caption: 'Watch the kernel slide: at each position, multiply overlapping cells, add them up, and write one output pixel. Only non-zero products are shown.' };
+}
+
+function q5Filters() {
+  const F = [
+    { n: 'Sobel Horizontal', k: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], f: 'horizontal edges' },
+    { n: 'Sobel Vertical', k: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], f: 'vertical edges' },
+    { n: 'Laplacian', k: [[0, 1, 0], [1, -4, 1], [0, 1, 0]], f: 'outlines (all directions)' },
+    { n: 'Gaussian Blur', k: [[1, 2, 1], [2, 4, 2], [1, 2, 1]], f: 'smoothing (÷16)', blur: true }
+  ];
+  const cell = (v, blur) => {
+    const a = blur ? 0.15 + v / 4 * 0.6 : Math.min(0.85, 0.2 + Math.abs(v) / 4 * 0.65);
+    const bg = blur ? `rgba(52,211,153,${a})` : v > 0 ? `rgba(34,211,238,${a})` : v < 0 ? `rgba(251,113,133,${a})` : 'rgba(148,163,184,0.08)';
+    return `<div class="lv-cell k" style="background:${bg}">${v}</div>`;
+  };
+  const html = `<div class="lv-filter-grid">${F.map(f => `
+      <div class="lv-filter-card">
+        <div class="lv-filter-name">${f.n}</div>
+        <div class="lv-grid g3 sm">${f.k.flat().map(v => cell(v, f.blur)).join('')}</div>
+        <div class="lv-filter-find">finds: <b>${f.f}</b></div>
+      </div>`).join('')}</div>
+      <div class="lv-legend"><span class="sw pos"></span> positive weight <span class="sw neg"></span> negative weight <span class="sw zero"></span> zero</div>`;
+  return { html, caption: 'Hand-crafted kernels as heatmaps. Edge detectors balance positive against negative weights so flat regions cancel out to zero.' };
+}
+
+function q5Calculator() {
+  const html = `
+    <div class="lv-calc">
+      <div class="lv-calc-controls">
+        <label>Input <b>W</b> <input type="range" min="4" max="14" value="7" data-k="W"><span data-v="W"></span></label>
+        <label>Kernel <b>K</b> <input type="range" min="1" max="7" step="2" value="3" data-k="K"><span data-v="K"></span></label>
+        <label>Padding <b>P</b> <input type="range" min="0" max="3" value="0" data-k="P"><span data-v="P"></span></label>
+        <label>Stride <b>S</b> <input type="range" min="1" max="3" value="1" data-k="S"><span data-v="S"></span></label>
+      </div>
+      <div class="lv-calc-formula" data-formula></div>
+      <div class="lv-calc-strip" data-strip></div>
+    </div>`;
+  const mount = (root) => {
+    const get = k => parseInt(root.querySelector(`[data-k="${k}"]`).value, 10);
+    const update = () => {
+      const W = get('W'), K = get('K'), P = get('P'), S = get('S');
+      ['W', 'K', 'P', 'S'].forEach(k => { root.querySelector(`[data-v="${k}"]`).textContent = get(k); });
+      const raw = (W - K + 2 * P) / S;
+      const O = Math.floor(raw) + 1;
+      const valid = W + 2 * P >= K;
+      root.querySelector('[data-formula]').innerHTML = valid
+        ? tex(`O = \\left\\lfloor \\frac{${W} - ${K} + 2\\cdot ${P}}{${S}} \\right\\rfloor + 1 = \\left\\lfloor ${+raw.toFixed(2)} \\right\\rfloor + 1 = \\mathbf{${O}}`, true)
+        : `<span class="lv-warn">Kernel is larger than the padded input — no valid output.</span>`;
+      // strip: padded input with kernel windows
+      const total = W + 2 * P;
+      const cw = Math.min(34, Math.floor(600 / total));
+      const x0 = (640 - total * cw) / 2;
+      let g = T(x0, 12, 'one row of the input (padding shown hatched)', { anchor: 'start', size: 10.5, fill: C.muted });
+      for (let i = 0; i < total; i++) {
+        const pad = i < P || i >= P + W;
+        g += rect(x0 + i * cw, 24, cw - 3, 28, { fill: pad ? 'url(#lv-hatch)' : tint(C.cyan, 0.18), stroke: pad ? C.dim : tint(C.cyan, 0.5), rx: 3, sw: 1 });
+        if (pad) g += T(x0 + i * cw + (cw - 3) / 2, 38, '0', { size: 10, fill: C.muted, mono: true });
+      }
+      const colors = [C.amber, C.violet, C.emerald];
+      if (valid) {
+        for (let o = 0; o < O; o++) {
+          const start = o * S;
+          const lvl = o % 3, y = 62 + lvl * 14;
+          g += rect(x0 + start * cw, y, K * cw - 3, 9, { fill: tint(colors[lvl], 0.45), stroke: colors[lvl], rx: 4, sw: 1, extra: `class="lv-pop" style="animation-delay:${o * 0.05}s"` });
+          g += T(x0 + start * cw - 4, y + 5, o + 1, { size: 8.5, anchor: 'end', fill: colors[lvl], mono: true, weight: 700 });
+        }
+      }
+      g += T(320, 118, valid ? `${O} kernel position${O > 1 ? 's' : ''} per row → output is ${O}×${O}` : '', { size: 12, fill: C.amber, weight: 700 });
+      const hatch = `<pattern id="lv-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="rgba(148,163,184,0.06)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(148,163,184,0.35)" stroke-width="2"/></pattern>`;
+      root.querySelector('[data-strip]').innerHTML = svg(640, 130, `<defs>${hatch}</defs>${g}`);
+    };
+    root.querySelectorAll('input').forEach(i => i.addEventListener('input', update));
+    update();
+  };
+  return { html, mount, caption: '<b>Try it:</b> change W, K, P and S. Each coloured bar is one place the kernel can sit — count them and you get the output size.' };
+}
+
+function q5PadStride() {
+  let g = '';
+  const cs = 22;
+  // Left: same padding
+  const lx = 40, ly = 40;
+  g += T(lx + 3.5 * cs, 18, 'Padding = 1 (“same”)', { size: 12.5, weight: 800, fill: C.cyan });
+  for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+    const pad = r === 0 || c === 0 || r === 6 || c === 6;
+    g += rect(lx + c * cs, ly + r * cs, cs - 2, cs - 2, { fill: pad ? 'rgba(148,163,184,0.05)' : tint(C.cyan, 0.2), stroke: pad ? 'rgba(148,163,184,0.35)' : tint(C.cyan, 0.45), rx: 2, sw: 1, extra: pad ? 'stroke-dasharray="2 2"' : '' });
+    if (pad) g += T(lx + c * cs + 10, ly + r * cs + 10, '0', { size: 8.5, fill: C.dim, mono: true });
+  }
+  g += rect(lx - 2, ly - 2, 3 * cs + 2, 3 * cs + 2, { stroke: C.amber, sw: 2.4, rx: 4, extra: 'class="lv-pulse"' });
+  g += T(lx + 3.5 * cs, ly + 7 * cs + 16, 'kernel can centre on corner pixels', { size: 10, fill: C.muted });
+  g += T(lx + 3.5 * cs, ly + 7 * cs + 32, '5×5 in → 5×5 out', { size: 12, fill: C.emerald, weight: 800, mono: true });
+  // Right: stride 2
+  const rx0 = 360, ry = 40;
+  g += T(rx0 + 3.5 * cs, 18, 'Stride = 2 (skip pixels)', { size: 12.5, weight: 800, fill: C.violet });
+  for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+    g += rect(rx0 + c * cs, ry + r * cs, cs - 2, cs - 2, { fill: tint(C.violet, 0.14), stroke: tint(C.violet, 0.35), rx: 2, sw: 1 });
+  }
+  const cols = [C.amber, C.emerald, C.rose];
+  [0, 2, 4].forEach((c, i) => {
+    g += rect(rx0 + c * cs - 2 + i * 1.5, ry - 2 + i * 1.5, 3 * cs + 2 - i * 3, 3 * cs + 2 - i * 3, { stroke: cols[i], sw: 2, rx: 4, extra: `class="lv-blink" style="animation-delay:${i * 0.6}s"` });
+  });
+  g += path(`M${rx0 + cs},${ry - 8} Q${rx0 + 2 * cs},${ry - 22} ${rx0 + 3 * cs},${ry - 8}`, { stroke: C.amber, sw: 1.5, extra: 'marker-end="url(#lv-ar-amber)"' });
+  g += path(`M${rx0 + 3 * cs},${ry - 8} Q${rx0 + 4 * cs},${ry - 22} ${rx0 + 5 * cs},${ry - 8}`, { stroke: C.emerald, sw: 1.5, extra: 'marker-end="url(#lv-ar-emerald)"' });
+  g += T(rx0 + 7 * cs + 10, ry - 12, 'jump 2', { size: 10, fill: C.muted, anchor: 'start' });
+  g += T(rx0 + 3.5 * cs, ry + 7 * cs + 16, 'only 3 positions fit per row', { size: 10, fill: C.muted });
+  g += T(rx0 + 3.5 * cs, ry + 7 * cs + 32, '7×7 in → 3×3 out', { size: 12, fill: C.emerald, weight: 800, mono: true });
+  return {
+    html: svg(640, 240, g),
+    caption: 'Padding adds a border of zeros so output size is preserved; stride makes the kernel hop, shrinking the output.'
+  };
+}
+
+/* ==========================================================================
+   QUEST 6 — OVERFITTING
+   ========================================================================== */
+function q6BiasVariance() {
+  const xs = [0, 1, 2, 3, 4, 5, 6, 7];
+  const truth = x => Math.sin(x * 0.85) * 1.2;
+  const noise = [0.25, -0.3, 0.35, -0.2, 0.3, -0.35, 0.2, -0.25];
+  const pts = xs.map((x, i) => [x, truth(x) + noise[i]]);
+  const lagrange = x => pts.reduce((acc, [xi, yi], i) => {
+    let t = yi; pts.forEach(([xj], j) => { if (j !== i) t *= (x - xj) / (xi - xj); }); return acc + t;
+  }, 0);
+  const n = pts.length, mx = xs.reduce((a, b) => a + b) / n, my = pts.reduce((a, p) => a + p[1], 0) / n;
+  const slope = pts.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+  const linear = x => my + slope * (x - mx);
+  const panels = [
+    { t: 'Underfitting', sub: 'high bias — too simple', f: linear, c: C.blue },
+    { t: 'Good fit', sub: 'captures the signal', f: truth, c: C.emerald },
+    { t: 'Overfitting', sub: 'high variance — memorises noise', f: lagrange, c: C.rose }
+  ];
+  let g = '';
+  panels.forEach((p, i) => {
+    const box = { x: 14 + i * 210, y: 30, w: 192, h: 150 };
+    const xr = [-0.5, 7.5], yr = [-2.4, 2.4];
+    const s = scale(box, xr, yr);
+    const cl = clipBox(box);
+    g += T(box.x + box.w / 2, 14, p.t, { size: 13, weight: 800, fill: p.c });
+    g += cl.def + axes(box, s, xr, yr, { zeroAxes: false });
+    g += `<g ${cl.attr}>` + path(fnPath(p.f, s, xr, 240), { stroke: p.c, sw: 2.6, extra: `class="lv-draw" style="animation-delay:${i * 0.2}s"` }) + '</g>';
+    pts.forEach(([x, y]) => { g += circ(s.sx(x), s.sy(y), 4, { fill: C.text, stroke: '#0b1222', sw: 1.2 }); });
+    g += T(box.x + box.w / 2, box.y + box.h + 16, p.sub, { size: 10.5, fill: C.muted });
+  });
+  return { html: svg(640, 205, g), caption: 'Same noisy data, three models. The overfit curve hits every point exactly — and would be wildly wrong on any new point.' };
+}
+
+function q6LossCurves() {
+  const box = { x: 50, y: 22, w: 540, h: 200 };
+  const xr = [0, 40], yr = [0, 2.8];
+  const s = scale(box, xr, yr);
+  const train = x => 2.4 * Math.exp(-x / 8) + 0.06;
+  const val = x => 2.1 * Math.exp(-x / 7) + 0.42 + (x > 17 ? 0.0032 * (x - 17) ** 2 : 0);
+  let best = 0, bv = Infinity;
+  for (let x = 0; x <= 40; x += 0.25) if (val(x) < bv) { bv = val(x); best = x; }
+  let g = axes(box, s, xr, yr, { xTicks: [10, 20, 30, 40], yTicks: [0.5, 1, 1.5, 2, 2.5], xLabel: 'epoch', yLabel: 'loss', zeroAxes: false });
+  g += rect(s.sx(best), box.y, s.sx(40) - s.sx(best), box.h, { fill: tint(C.rose, 0.07), rx: 0 });
+  g += T(s.sx(33), box.y + 16, 'overfitting zone', { size: 11, fill: C.rose, weight: 700 });
+  g += path(fnPath(train, s, xr), { stroke: C.cyan, sw: 2.8, extra: 'class="lv-draw"' });
+  g += path(fnPath(val, s, xr), { stroke: C.amber, sw: 2.8, extra: 'class="lv-draw" style="animation-delay:.2s"' });
+  g += line(s.sx(best), box.y, s.sx(best), box.y + box.h, C.emerald, 1.8, 'stroke-dasharray="6 4"');
+  g += circ(s.sx(best), s.sy(bv), 6, { fill: C.emerald, stroke: '#0b1222', sw: 2, extra: 'class="lv-pulse"' });
+  g += T(s.sx(best) - 8, s.sy(bv) + 22, `⏱ early stop (epoch ${Math.round(best)})`, { size: 11, fill: C.emerald, weight: 700, anchor: 'end' });
+  g += line(box.x + 330, 60, box.x + 352, 60, C.cyan, 3) + T(box.x + 358, 60, 'training loss', { anchor: 'start', size: 11.5 });
+  g += line(box.x + 330, 80, box.x + 352, 80, C.amber, 3) + T(box.x + 358, 80, 'validation loss', { anchor: 'start', size: 11.5 });
+  return { html: svg(640, 255, g), caption: 'The tell-tale split: training loss keeps falling while validation loss turns upward. Stop at the green line.' };
+}
+
+function q6Dropout() {
+  const layers = [3, 5, 5, 2];
+  const X = [70, 230, 390, 550];
+  const nodes = [];
+  layers.forEach((n, li) => {
+    for (let k = 0; k < n; k++) nodes.push({ id: `${li}-${k}`, li, x: X[li], y: 120 + (k - (n - 1) / 2) * 42 });
+  });
+  let edges = '';
+  nodes.forEach(a => nodes.forEach(b => {
+    if (b.li === a.li + 1) edges += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${C.cyan}" stroke-opacity="0.35" stroke-width="1.3" data-a="${a.id}" data-b="${b.id}" class="lv-edge"/>`;
+  }));
+  let ns = '';
+  nodes.forEach(n => {
+    const col = n.li === 0 ? C.cyan : n.li === 3 ? C.emerald : C.violet;
+    ns += `<g class="lv-node" data-n="${n.id}" data-hidden="${n.li === 1 || n.li === 2}">
+      ${circ(n.x, n.y, 15, { fill: tint(col, 0.2), stroke: col, sw: 2 })}
+      <text x="${n.x}" y="${n.y + 1}" class="lv-x" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="800" fill="${C.rose}">✕</text>
+    </g>`;
+  });
+  let labels = ['input', 'hidden 1 (p = 0.5)', 'hidden 2 (p = 0.5)', 'output'].map((l, i) => T(X[i], 236, l, { size: 10.5, fill: C.muted })).join('');
+  const html = `
+    <div class="lv-interactive lv-dropout" data-mode="train">
+      ${svg(640, 250, edges + ns + labels)}
+      <div class="lv-controls">
+        <button class="lv-btn active" data-mode-btn="train">🎲 model.train()</button>
+        <button class="lv-btn" data-mode-btn="eval">🔒 model.eval()</button>
+        <span class="lv-readout" data-msg>Every step, a fresh random half of the hidden neurons is silenced.</span>
+      </div>
+    </div>`;
+  const mount = (root) => {
+    let mode = 'train';
+    const hidden = [...root.querySelectorAll('.lv-node[data-hidden="true"]')];
+    const edgesEl = [...root.querySelectorAll('.lv-edge')];
+    const shuffle = () => {
+      const dropped = new Set();
+      if (mode === 'train') hidden.forEach(h => { if (Math.random() < 0.5) dropped.add(h.dataset.n); });
+      hidden.forEach(h => h.classList.toggle('dropped', dropped.has(h.dataset.n)));
+      edgesEl.forEach(e => e.classList.toggle('faded', dropped.has(e.dataset.a) || dropped.has(e.dataset.b)));
+    };
+    root.querySelectorAll('[data-mode-btn]').forEach(btn => btn.addEventListener('click', () => {
+      mode = btn.dataset.modeBtn;
+      root.querySelectorAll('[data-mode-btn]').forEach(b => b.classList.toggle('active', b === btn));
+      root.querySelector('[data-msg]').textContent = mode === 'train'
+        ? 'Every step, a fresh random half of the hidden neurons is silenced.'
+        : 'Inference: all neurons active, outputs scaled — fully deterministic.';
+      shuffle();
+    }));
+    shuffle();
+    return visibleInterval(root, shuffle, 1300);
+  };
+  return { html, mount, caption: 'Dropout in action. No neuron can rely on a specific neighbour, so each one learns robust, independent features.' };
+}
+
+function q6WeightDecay() {
+  const before = [3.8, -4.2, 2.9, -3.5, 4.4, -2.6, 3.2];
+  const after = before.map(w => w * 0.28);
+  let g = '';
+  const zeroY = 120;
+  const drawBars = (x0, ws, title, col) => {
+    let s = T(x0 + 70, 16, title, { size: 12, weight: 800, fill: col });
+    s += line(x0 - 4, zeroY, x0 + 146, zeroY, C.axis, 1);
+    ws.forEach((w, i) => {
+      const h = w * 20;
+      s += rect(x0 + i * 21, h >= 0 ? zeroY - h : zeroY, 15, Math.abs(h), { fill: tint(w >= 0 ? '#22d3ee' : '#fb7185', 0.5), stroke: w >= 0 ? C.cyan : C.rose, rx: 2, sw: 1, extra: 'class="lv-grow-y"' });
+    });
+    return s;
+  };
+  g += drawBars(30, before, 'Weights without L2', C.rose);
+  g += arrow(196, zeroY, 240, zeroY, 'amber', 2.2);
+  g += T(218, zeroY - 16, '× (1 − αλ)', { size: 10.5, fill: C.amber, weight: 700, mono: true });
+  g += T(218, zeroY + 18, 'every step', { size: 9.5, fill: C.muted });
+  g += drawBars(256, after, 'Weights with L2', C.emerald);
+  // curves
+  const box = { x: 440, y: 30, w: 180, h: 170 };
+  const xr = [0, 6], yr = [-2, 2];
+  const s = scale(box, xr, yr);
+  const cl = clipBox(box);
+  g += T(box.x + box.w / 2, 16, 'Resulting decision curve', { size: 12, weight: 800 });
+  g += cl.def + axes(box, s, xr, yr, { zeroAxes: false });
+  g += `<g ${cl.attr}>`;
+  g += path(fnPath(x => Math.sin(x * 1.2) * 0.8 + Math.sin(x * 7.3) * 0.6 + Math.sin(x * 13) * 0.3, s, xr, 300), { stroke: C.rose, sw: 1.8, extra: 'opacity="0.85"' });
+  g += path(fnPath(x => Math.sin(x * 1.2) * 0.9, s, xr), { stroke: C.emerald, sw: 3 });
+  g += '</g>';
+  g += line(box.x + 6, box.y + box.h + 14, box.x + 22, box.y + box.h + 14, C.rose, 2.4) + T(box.x + 26, box.y + box.h + 14, 'big weights', { anchor: 'start', size: 10, fill: C.muted });
+  g += line(box.x + 96, box.y + box.h + 14, box.x + 112, box.y + box.h + 14, C.emerald, 3) + T(box.x + 116, box.y + box.h + 14, 'decayed', { anchor: 'start', size: 10, fill: C.muted });
+  return { html: svg(640, 225, g), caption: 'Weight decay continuously shrinks every weight toward zero. Smaller weights → smoother, more general decision curves.' };
+}
+
+function q6Augment() {
+  const umbrella = `<path d="M-30,0 Q-30,-30 0,-30 Q30,-30 30,0 Q22.5,-7 15,0 Q7.5,-7 0,0 Q-7.5,-7 -15,0 Q-22.5,-7 -30,0 Z" fill="${tint(C.cyan, 0.25)}" stroke="${C.cyan}" stroke-width="2.4" stroke-linejoin="round"/><path d="M0,0 L0,26 Q0,32 -6,32 Q-11,32 -11,27" fill="none" stroke="${C.cyan}" stroke-width="2.4" stroke-linecap="round"/>`;
+  const tiles = [
+    { l: 'Original', tr: '' },
+    { l: 'Flip ↔', tr: 'scale(-1,1) rotate(-12)' },
+    { l: 'Rotate 15°', tr: 'rotate(15)' },
+    { l: 'Scale 0.7', tr: 'scale(0.7)' },
+    { l: 'Noise + dim', tr: '', noise: true }
+  ];
+  let g = '';
+  // seeded noise
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  tiles.forEach((t, i) => {
+    const x = 18 + i * 124, cx = x + 52, cy = 78;
+    g += rect(x, 24, 104, 104, { fill: i === 0 ? tint(C.amber, 0.06) : 'rgba(2,6,23,0.45)', stroke: i === 0 ? C.amber : 'rgba(148,163,184,0.25)', rx: 10 });
+    g += `<g transform="translate(${cx},${cy - 2}) ${t.tr}" ${t.noise ? 'opacity="0.6"' : ''}>${umbrella}</g>`;
+    if (t.noise) for (let k = 0; k < 40; k++) g += circ(x + 6 + rnd() * 92, 30 + rnd() * 92, 1.2, { fill: C.text, extra: 'opacity="0.55"' });
+    g += T(cx, 144, t.l, { size: 11.5, weight: 700, fill: i === 0 ? C.amber : C.text });
+    g += T(cx, 160, 'label: Umbrella ☂️', { size: 9.5, fill: C.muted });
+  });
+  return { html: svg(640, 175, g), caption: 'One real drawing becomes many training examples. The label never changes, so the network learns to ignore orientation, size and noise.' };
+}
+
+/* ==========================================================================
+   QUEST 7 — ATTENTION
+   ========================================================================== */
+function q7Sequential() {
+  const toks = ['The', 'animal', "didn't", 'cross', 'the', 'street'];
+  const bx = i => 30 + i * 100;
+  let g = T(20, 16, 'RNN — one word at a time', { anchor: 'start', size: 12, weight: 800, fill: C.rose });
+  toks.forEach((t, i) => {
+    g += rect(bx(i), 32, 80, 30, { fill: tint(C.rose, 0.1), stroke: tint(C.rose, 0.5), rx: 7 });
+    g += T(bx(i) + 40, 47, t, { size: 12, weight: 600 });
+    if (i < toks.length - 1) g += arrow(bx(i) + 82, 47, bx(i) + 98, 47, 'rose', 1.6);
+    const mem = 1 - i * 0.17;
+    g += rect(bx(i) + 6, 70, 68 * mem, 7, { fill: C.amber, rx: 3, extra: `opacity="${0.25 + mem * 0.7}"` });
+  });
+  g += T(bx(5) + 84, 74, 'memory of “The”', { anchor: 'start', size: 9.5, fill: C.amber });
+  g += T(320, 98, '⏳ step 6 must wait for steps 1–5 · early words fade', { size: 10.5, fill: C.muted });
+
+  g += T(20, 128, 'Transformer — every word sees every word, in parallel', { anchor: 'start', size: 12, weight: 800, fill: C.emerald });
+  const by = 250;
+  let arcs = '';
+  for (let i = 0; i < toks.length; i++) for (let j = i + 1; j < toks.length; j++) {
+    const x1 = bx(i) + 40, x2 = bx(j) + 40, h = 14 + (j - i) * 19;
+    arcs += path(`M${x1},${by - 16} Q${(x1 + x2) / 2},${by - 16 - h * 1.6} ${x2},${by - 16}`, { stroke: C.emerald, sw: 1.2, extra: `opacity="0.4" class="lv-fade-in" style="animation-delay:${(i + j) * 0.05}s"` });
+  }
+  g += arcs;
+  toks.forEach((t, i) => {
+    g += rect(bx(i), by - 15, 80, 30, { fill: tint(C.emerald, 0.12), stroke: tint(C.emerald, 0.55), rx: 7 });
+    g += T(bx(i) + 40, by, t, { size: 12, weight: 600 });
+  });
+  return { html: svg(640, 280, g), caption: 'RNNs pass a single memory along a chain; Transformers connect all token pairs at once with one matrix multiply.' };
+}
+
+function q7QKV() {
+  let g = '';
+  const vec = (x, y, vals, col) => vals.map((v, i) => rect(x + i * 18, y - 8, 16, 16, { fill: tint(col, 0.15 + v * 0.7), stroke: tint(col, 0.6), rx: 3, sw: 1 })).join('');
+  g += rect(20, 118, 70, 40, { fill: tint(C.blue, 0.15), stroke: C.blue, rx: 8 });
+  g += T(55, 138, '“it”', { size: 14, weight: 700 });
+  g += vec(22, 178, [0.9, 0.3, 0.6, 0.2], C.blue);
+  g += T(55, 198, 'embedding xᵢ', { size: 9.5, fill: C.muted });
+  const rows = [
+    { y: 58, n: 'Q', m: 'W_Q', c: C.amber, cn: 'amber', q: 'Query: “what am I looking for?”', v: [0.8, 0.2, 0.9, 0.4] },
+    { y: 138, n: 'K', m: 'W_K', c: C.cyan, cn: 'cyan', q: 'Key: “what do I offer?”', v: [0.3, 0.7, 0.4, 0.8] },
+    { y: 218, n: 'V', m: 'W_V', c: C.emerald, cn: 'emerald', q: 'Value: “my actual content”', v: [0.6, 0.5, 0.2, 0.9] }
+  ];
+  rows.forEach(r => {
+    g += path(`M92,138 C130,138 120,${r.y} 160,${r.y}`, { stroke: r.c, sw: 1.8, extra: `marker-end="url(#lv-ar-${r.cn})"` });
+    g += rect(164, r.y - 16, 60, 32, { fill: '#0b1222', stroke: r.c, rx: 6 });
+    g += T(194, r.y, `× ${r.m.replace('_', '')}`, { size: 11, mono: true, weight: 700, fill: r.c });
+    g += arrow(226, r.y, 252, r.y, r.cn, 1.6);
+    g += vec(258, r.y, r.v, r.c);
+    g += T(338, r.y, r.n, { size: 15, weight: 800, fill: r.c, italic: true });
+    g += T(258, r.y + 20, r.q, { size: 9.5, fill: C.muted, anchor: 'start' });
+  });
+  // scores
+  const sx0 = 420;
+  g += rect(sx0 - 10, 24, 220, 230, { fill: 'rgba(2,6,23,0.45)', stroke: 'rgba(148,163,184,0.2)', rx: 10 });
+  g += T(sx0 + 100, 44, 'scores  q(it) · k(j)', { size: 12, weight: 800, fill: C.amber });
+  const sc = [['The', 0.12], ['animal', 0.92], ["didn't", 0.18], ['cross', 0.22], ['street', 0.35], ['tired', 0.58]];
+  sc.forEach(([t, v], i) => {
+    const y = 68 + i * 30;
+    g += T(sx0 + 46, y + 8, t, { size: 11, anchor: 'end', fill: v > 0.8 ? C.amber : C.text, weight: v > 0.8 ? 800 : 500 });
+    g += rect(sx0 + 54, y, v * 130, 16, { fill: tint(C.amber, 0.2 + v * 0.5), stroke: C.amber, rx: 3, sw: 1, extra: 'class="lv-grow"' });
+    g += T(sx0 + 60 + v * 130, y + 8.5, v.toFixed(2), { size: 9.5, anchor: 'start', mono: true, fill: C.muted });
+  });
+  return { html: svg(640, 270, g), caption: 'Each token is projected three ways. Its Query is compared against every Key — “it” matches “animal” best, so it will absorb that Value.' };
+}
+
+function q7Scale() {
+  const toks = ['animal', 'tired', 'street', 'the'];
+  const raw = [24, 16, 8, 4];
+  const scaled = raw.map(v => v / 8);
+  const pr = softmax(raw), ps = softmax(scaled);
+  let g = '';
+  const chart = (x0, probs, title, sub, col) => {
+    let s = T(x0 + 125, 16, title, { size: 12.5, weight: 800, fill: col });
+    s += T(x0 + 125, 34, sub, { size: 10, fill: C.muted, mono: true });
+    const base = 190;
+    s += line(x0, base, x0 + 250, base, C.axis, 1);
+    probs.forEach((p, i) => {
+      const h = Math.max(1.5, p * 130);
+      s += rect(x0 + 14 + i * 60, base - h, 40, h, { fill: tint(col, 0.45), stroke: col, rx: 4, sw: 1, extra: 'class="lv-grow-y"' });
+      s += T(x0 + 34 + i * 60, base - h - 10, `${(p * 100).toFixed(p > 0.01 ? 0 : 2)}%`, { size: 10.5, mono: true, weight: 700, fill: col });
+      s += T(x0 + 34 + i * 60, base + 13, toks[i], { size: 10.5, fill: C.text });
+    });
+    return s;
+  };
+  g += chart(20, pr, 'Without scaling', 'softmax([24, 16, 8, 4])', C.rose);
+  g += chart(360, ps, 'Divided by √dₖ = 8', 'softmax([3, 2, 1, 0.5])', C.emerald);
+  g += T(145, 226, 'saturated spike → gradient ≈ 0', { size: 10.5, fill: C.rose, weight: 700 });
+  g += T(485, 226, 'smooth distribution → healthy gradients', { size: 10.5, fill: C.emerald, weight: 700 });
+  return { html: svg(640, 240, g), caption: 'With dₖ = 64, raw dot products are large and softmax collapses into a one-hot spike. Dividing by √dₖ keeps it soft and trainable.' };
+}
+
+function q7Bank() {
+  const sents = [
+    { toks: ['The', 'river', 'bank', 'was', 'muddy'], w: [0.05, 0.55, 0, 0.1, 0.3], c: C.cyan, cn: 'cyan', tag: '🌊 water meaning', y: 70 },
+    { toks: ['The', 'investment', 'bank', 'approved', 'the', 'loan'], w: [0.04, 0.45, 0, 0.16, 0.05, 0.3], c: C.amber, cn: 'amber', tag: '💰 finance meaning', y: 190 }
+  ];
+  let g = '';
+  sents.forEach(S => {
+    const widths = S.toks.map(t => t.length * 8 + 22);
+    let x = 20; const xs = widths.map(w => { const c = x + w / 2; x += w + 10; return c; });
+    const bi = S.toks.indexOf('bank');
+    S.toks.forEach((t, i) => {
+      if (i === bi) return;
+      const wv = S.w[i];
+      const h = 22 + Math.abs(i - bi) * 9;
+      g += path(`M${xs[bi]},${S.y - 15} Q${(xs[bi] + xs[i]) / 2},${S.y - 15 - h * 1.5} ${xs[i]},${S.y - 15}`, { stroke: S.c, sw: (1 + wv * 12).toFixed(1), extra: `opacity="${0.25 + wv * 1.3}" class="lv-draw"` });
+      g += T((xs[bi] + xs[i]) / 2, S.y - 15 - h * 0.78 - 6, wv.toFixed(2), { size: 9, mono: true, fill: S.c, opacity: 0.9 });
+    });
+    S.toks.forEach((t, i) => {
+      const isB = i === bi;
+      g += rect(xs[i] - widths[i] / 2, S.y - 15, widths[i], 30, { fill: isB ? tint(S.c, 0.35) : 'rgba(2,6,23,0.5)', stroke: isB ? S.c : 'rgba(148,163,184,0.3)', rx: 7, sw: isB ? 2 : 1 });
+      g += T(xs[i], S.y, t, { size: 12, weight: isB ? 800 : 500, fill: isB ? '#fff' : C.text });
+    });
+    g += arrow(x + 4, S.y, x + 36, S.y, S.cn, 2);
+    g += rect(x + 40, S.y - 15, 130, 30, { fill: tint(S.c, 0.12), stroke: S.c, rx: 15 });
+    g += T(x + 105, S.y, S.tag, { size: 11.5, weight: 700, fill: S.c });
+  });
+  return { html: svg(640, 220, g), caption: 'Arc thickness = attention weight from “bank”. The same word pulls in different neighbours, so its output vector carries a different meaning.' };
+}
+
+function q7MultiHead() {
+  const toks = ['The', 'animal', 'was', 'tired', 'because', 'it'];
+  const n = toks.length;
+  const mk = (fn) => {
+    const M = [];
+    for (let i = 0; i < n; i++) { const row = []; for (let j = 0; j < n; j++) row.push(0.04 + fn(i, j)); const s = row.reduce((a, b) => a + b); M.push(row.map(v => v / s)); }
+    return M;
+  };
+  const heads = [
+    { t: 'Head 1 · syntax', c: '#22d3ee', M: mk((i, j) => ((i === 1 && j === 2) || (i === 2 && j === 1) || (i === 3 && j === 2) || (i === 2 && j === 3)) ? 0.9 : 0) },
+    { t: 'Head 2 · coreference', c: '#fbbf24', M: mk((i, j) => (i === 5 && j === 1) ? 1.6 : (i === 1 && j === 5) ? 0.8 : (i === j ? 0.3 : 0)) },
+    { t: 'Head 3 · local order', c: '#a78bfa', M: mk((i, j) => (i === j ? 0.6 : (j === i - 1 ? 0.5 : 0))) }
+  ];
+  let g = '';
+  const cs = 22;
+  heads.forEach((h, k) => {
+    const x0 = 70 + k * 195, y0 = 40;
+    g += T(x0 + n * cs / 2, 16, h.t, { size: 12, weight: 800, fill: h.c });
+    h.M.forEach((row, i) => row.forEach((v, j) => {
+      g += rect(x0 + j * cs, y0 + i * cs, cs - 2, cs - 2, { fill: tint(h.c, Math.min(0.95, 0.05 + v * 1.6)), rx: 3 });
+    }));
+    toks.forEach((t, j) => {
+      g += T(x0 + j * cs + cs / 2 - 1, y0 + n * cs + 6, t, { size: 8.5, anchor: 'end', fill: C.muted, extra: `transform="rotate(-50 ${x0 + j * cs + cs / 2 - 1} ${y0 + n * cs + 6})"` });
+      if (k === 0) g += T(x0 - 6, y0 + j * cs + cs / 2 - 1, t, { size: 9, anchor: 'end', fill: C.muted });
+    });
+  });
+  g += T(320, 236, 'rows = query token · columns = key token · brighter = more attention', { size: 10.5, fill: C.muted, italic: true });
+  g += T(70 + 195 + n * cs + 6, 40 + 5 * cs + 10, '← “it” → “animal”', { size: 9.5, anchor: 'start', fill: '#fbbf24', weight: 700 });
+  return { html: svg(640, 250, g), caption: 'Three heads, three specialisations. Concatenating them gives the model several complementary views of the same sentence.' };
+}
+
+// ---------- Registry ----------
+const VISUALS = {
+  'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
+  'quest-2': [q2Collapse, q2Xor, q2Activations, q2Cheatsheet],
+  'quest-3': [q3Loss, q3Gradient, q3LearningRate, q3Loop],
+  'quest-4': [q4Flatten, q4Sliding, q4Hierarchy, q4Pool, q4Softmax],
+  'quest-5': [q5Conv, q5Filters, q5Calculator, q5PadStride],
+  'quest-6': [q6BiasVariance, q6LossCurves, q6Dropout, q6WeightDecay, q6Augment],
+  'quest-7': [q7Sequential, q7QKV, q7Scale, q7Bank, q7MultiHead]
+};
+
+let activeCleanups = [];
+
+/** Returns { html, caption, mount? } for a lesson section, or null if none exists. */
+export function getSectionVisual(questId, sectionIdx) {
+  const factory = VISUALS[questId] && VISUALS[questId][sectionIdx];
+  if (!factory) return null;
+  try { return factory(); } catch (err) { console.warn('Lesson visual failed:', questId, sectionIdx, err); return null; }
+}
+
+/** Run a visual's mount function and remember its cleanup. */
+export function mountVisual(visual, el) {
+  if (!visual || typeof visual.mount !== 'function') return;
+  try {
+    const cleanup = visual.mount(el);
+    if (typeof cleanup === 'function') activeCleanups.push(cleanup);
+  } catch (err) { console.warn('Lesson visual mount failed:', err); }
+}
+
+/** Stop timers from previously rendered visuals. */
+export function disposeVisuals() {
+  activeCleanups.forEach(fn => { try { fn(); } catch { /* noop */ } });
+  activeCleanups = [];
+}

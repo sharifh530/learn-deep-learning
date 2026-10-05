@@ -36,7 +36,7 @@
               60,
               1
             ],
-            "target": 7.0,
+            "target": 7,
             "tolerance": 0.5,
             "hint": "Sugar and milk are top priority!"
           },
@@ -47,7 +47,7 @@
               0,
               4
             ],
-            "target": 9.0,
+            "target": 9,
             "tolerance": 0.5,
             "hint": "Zero sugar and zero milk. Pure caffeine weight!"
           }
@@ -223,11 +223,11 @@
               "meaning": "The linear weighted sum: z = W*x + b"
             },
             {
-              "symbol": "max(0, z)",
+              "symbol": "\\max(0,\\, z)",
               "meaning": "ReLU: outputs z if positive, 0 if negative"
             },
             {
-              "symbol": "1 / (1 + e^-z)",
+              "symbol": "\\dfrac{1}{1 + e^{-z}}",
               "meaning": "Sigmoid: S-shaped smooth probability curve bounded between (0, 1)"
             },
             {
@@ -321,11 +321,11 @@
               "meaning": "Current weight parameters at training step t"
             },
             {
-              "symbol": "α (alpha)",
+              "symbol": "\\alpha",
               "meaning": "Learning rate (step size multiplier, e.g. 0.001)"
             },
             {
-              "symbol": "∇_W L",
+              "symbol": "\\nabla_W \\mathcal{L}",
               "meaning": "Gradient vector: partial derivatives of loss with respect to each weight"
             },
             {
@@ -413,7 +413,7 @@
           },
           {
             "heading": "4. Max Pooling: Spatial Downsampling",
-            "content": "After convolutions detect features, we apply **Max Pooling** (typically 2×2 with stride 2). It divides the feature map into 2×2 grids and keeps only the maximum value from each block:\n$$\\text{28×28} \\xrightarrow{\\text{MaxPool2d(2, 2)}} \\text{14×14} \\xrightarrow{\\text{MaxPool2d(2, 2)}} \\text{7×7}$$\nThis reduces spatial dimensions by 75%, slashing computational cost while preserving the most prominent activations and providing tolerance against slight drawing shifts.",
+            "content": "After convolutions detect features, we apply **Max Pooling** (typically 2×2 with stride 2). It divides the feature map into 2×2 grids and keeps only the maximum value from each block:\n$$\\text{28} \\times \\text{28} \\xrightarrow{\\text{MaxPool2d(2, 2)}} \\text{14} \\times \\text{14} \\xrightarrow{\\text{MaxPool2d(2, 2)}} \\text{7} \\times \\text{7}$$\nThis reduces spatial dimensions by 75%, slashing computational cost while preserving the most prominent activations and providing tolerance against slight drawing shifts.",
             "callout": "🏊 Pooling Power: Max Pooling keeps the strongest signal in each neighborhood, making the network insensitive to minor hand-tremors in user sketches."
           },
           {
@@ -435,7 +435,7 @@
               "meaning": "Natural exponential scaling, ensuring positive non-zero values"
             },
             {
-              "symbol": "∑ e^{z_k}",
+              "symbol": "\\textstyle\\sum_k e^{z_k}",
               "meaning": "Sum of exponentials across all candidate classes"
             },
             {
@@ -849,19 +849,19 @@
           "equation": "\\mathcal{L}_{\\text{total}} = \\mathcal{L}_{\\text{task}} + \\frac{\\lambda}{2} \\sum_{j=1}^{M} w_j^2",
           "breakdown": [
             {
-              "symbol": "L_task",
+              "symbol": "\\mathcal{L}_{\\text{task}}",
               "meaning": "Standard prediction error (e.g. Cross-Entropy or Mean Squared Error)"
             },
             {
-              "symbol": "λ (lambda)",
+              "symbol": "\\lambda",
               "meaning": "Regularization strength hyperparameter (weight decay coefficient, e.g. 1e-4)"
             },
             {
-              "symbol": "∑ w_j^2",
+              "symbol": "\\textstyle\\sum_j w_j^2",
               "meaning": "Sum of squared weight magnitudes (L2 norm ||W||_2^2)"
             },
             {
-              "symbol": "L_total",
+              "symbol": "\\mathcal{L}_{\\text{total}}",
               "meaning": "Combined loss minimized by the optimizer, balancing fit vs simplicity"
             }
           ]
@@ -1044,27 +1044,27 @@
           "equation": "\\mathrm{Attention}(Q, K, V) = \\mathrm{softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right) V",
           "breakdown": [
             {
-              "symbol": "Q (Queries)",
+              "symbol": "Q",
               "meaning": "Matrix of search vectors representing what information each token is seeking"
             },
             {
-              "symbol": "K^T (Keys Transposed)",
+              "symbol": "K^{T}",
               "meaning": "Matrix of identity/feature vectors offered by every token in the sequence"
             },
             {
-              "symbol": "Q K^T",
+              "symbol": "QK^{T}",
               "meaning": "N x N raw affinity matrix measuring dot-product compatibility for every token pair"
             },
             {
-              "symbol": "√d_k",
+              "symbol": "\\sqrt{d_k}",
               "meaning": "Scaling factor normalizing variance to prevent softmax saturation and vanishing gradients"
             },
             {
-              "symbol": "softmax(...)",
+              "symbol": "\\mathrm{softmax}(\\cdot)",
               "meaning": "Row-wise normalized attention weights summing to 1.0 (probabilities)"
             },
             {
-              "symbol": "V (Values)",
+              "symbol": "V",
               "meaning": "Semantic content vectors blended proportionally by attention weights to produce contextual output"
             }
           ]

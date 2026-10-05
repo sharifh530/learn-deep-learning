@@ -3,6 +3,9 @@ import curriculumData from './curriculum.json';
 import { AITutorService } from './ai_tutor.js';
 import confetti from 'canvas-confetti';
 import { marked } from 'marked';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import { getSectionVisual, mountVisual, disposeVisuals } from './lesson_visuals.js';
 
 // --- State Management ---
 const state = {
@@ -276,19 +279,80 @@ function renderActiveQuest() {
   }
 }
 
-// --- FORMAT LESSON TEXT HELPER ---
-function formatLessonText(text) {
+// --- FORMAT LESSON TEXT HELPERS ---
+function renderTex(src, displayMode = false) {
+  try {
+    return katex.renderToString(src, { displayMode, throwOnError: false, strict: 'ignore' });
+  } catch {
+    return `<code class="math-inline">${escapeHtml(src)}</code>`;
+  }
+}
+
+/**
+ * Converts lesson markup (subset of Markdown + LaTeX) into HTML.
+ * Supports $$display$$ / $inline$ math, `code`, **bold**, *italic*,
+ * "• " bullet lists and "1. " numbered lists.
+ * When `inline` is true, block structure (lists/paragraphs) is skipped.
+ */
+function formatLessonText(text, { inline = false } = {}) {
   if (!text) return '';
-  return text
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\$(.*?)\$/g, '<code class="math-inline">$1</code>');
+  const store = [];
+  const hold = (html) => `\uE000${store.push(html) - 1}\uE001`;
+
+  let t = String(text)
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => hold(`<div class="math-display">${renderTex(m.trim(), true)}</div>`))
+    .replace(/\$([^$\n]+?)\$/g, (_, m) => hold(renderTex(m.trim())))
+    .replace(/`([^`\n]+)`/g, (_, m) => hold(`<code class="code-inline">${escapeHtml(m)}</code>`));
+
+  t = escapeHtml(t)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/gm, '$1<em>$2</em>');
+
+  const restore = (s) => s.replace(/\uE000(\d+)\uE001/g, (_, i) => store[+i]);
+  if (inline) return restore(t.replace(/\n/g, ' '));
+
+  // Block structure: paragraphs, bullet lists, ordered lists, display math
+  const out = [];
+  let list = null; // { type: 'ul' | 'ol', items: [] }
+  const flush = () => {
+    if (list) {
+      out.push(`<${list.type} class="lesson-list ${list.type}">${list.items.map(i => `<li>${i}</li>`).join('')}</${list.type}>`);
+      list = null;
+    }
+  };
+  t.split('\n').forEach(raw => {
+    const ln = raw.trim();
+    if (!ln) { flush(); return; }
+    const bullet = ln.match(/^[•\-]\s+(.*)$/);
+    const ordered = ln.match(/^\d+\.\s+(.*)$/);
+    if (bullet || ordered) {
+      const type = bullet ? 'ul' : 'ol';
+      if (!list || list.type !== type) { flush(); list = { type, items: [] }; }
+      list.items.push((bullet || ordered)[1]);
+      return;
+    }
+    flush();
+    if (/^\uE000\d+\uE001$/.test(ln) && store[+ln.slice(1, -1)].startsWith('<div class="math-display"')) {
+      out.push(ln);
+    } else {
+      out.push(`<p>${ln}</p>`);
+    }
+  });
+  flush();
+  return restore(out.join(''));
+}
+
+/** Splits "🎯 Title: body" callouts into icon / title / body parts. */
+function parseCallout(text) {
+  const m = String(text).match(/^(\p{Extended_Pictographic}\uFE0F?)\s*(?:([^:]{2,48}):\s*)?([\s\S]*)$/u);
+  if (!m) return { icon: '💡', title: '', body: text };
+  return { icon: m[1], title: m[2] || '', body: m[3] };
 }
 
 // --- LESSON COMPONENT ---
 function renderLesson(quest) {
   if (!dom.lessonContainer) return;
+  disposeVisuals();
   dom.lessonContainer.innerHTML = '';
 
   const lesson = quest.lesson;
@@ -304,27 +368,46 @@ function renderLesson(quest) {
   const card = document.createElement('div');
   card.className = 'lesson-article';
 
-  const sectionsHtml = (lesson.sections || []).map(sec => `
-    <div class="lesson-section-card">
-      <h3 class="lesson-section-title">${sec.heading}</h3>
+  const sectionsHtml = (lesson.sections || []).map((sec, secIdx) => {
+    const visual = getSectionVisual(quest.id, secIdx);
+    const callout = sec.callout ? parseCallout(sec.callout) : null;
+    return `
+    <div class="lesson-section-card" data-section-idx="${secIdx}">
+      <h3 class="lesson-section-title">${escapeHtml(sec.heading)}</h3>
       <div class="lesson-section-body">
-        <p>${formatLessonText(sec.content)}</p>
+        ${formatLessonText(sec.content)}
       </div>
-      ${sec.callout ? `
+      ${visual ? `
+        <figure class="lesson-visual-figure" data-visual-idx="${secIdx}">
+          <div class="lesson-visual-canvas">
+            ${visual.html}
+          </div>
+          ${visual.caption ? `
+            <figcaption class="lesson-visual-caption">
+              <span class="visual-tag">ILLUSTRATION</span>
+              <span class="caption-text">${visual.caption}</span>
+            </figcaption>` : ''}
+        </figure>
+      ` : ''}
+      ${callout ? `
         <div class="lesson-callout-box">
-          <span class="callout-icon">💡</span>
-          <div class="callout-text">${sec.callout}</div>
+          <span class="callout-icon">${callout.icon}</span>
+          <div class="callout-content">
+            ${callout.title ? `<strong class="callout-title">${escapeHtml(callout.title)}:</strong> ` : ''}
+            <span class="callout-text">${formatLessonText(callout.body, { inline: true })}</span>
+          </div>
         </div>
       ` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   const formulaBreakdownHtml = lesson.formulaCard && lesson.formulaCard.breakdown ? `
     <div class="formula-breakdown-grid">
       ${lesson.formulaCard.breakdown.map(item => `
         <div class="formula-param-item">
-          <code class="param-symbol">${item.symbol}</code>
-          <span class="param-meaning">${item.meaning}</span>
+          <div class="param-symbol-badge">${renderTex(item.symbol)}</div>
+          <span class="param-meaning">${formatLessonText(item.meaning, { inline: true })}</span>
         </div>
       `).join('')}
     </div>
@@ -333,14 +416,14 @@ function renderLesson(quest) {
   const takeawaysHtml = (lesson.takeaways || []).map(t => `
     <li class="takeaway-item">
       <span class="takeaway-check">✓</span>
-      <span>${t}</span>
+      <span>${formatLessonText(t, { inline: true })}</span>
     </li>
   `).join('');
 
   const pitfallsHtml = (lesson.commonPitfalls || []).map(p => `
     <li class="pitfall-item">
       <span class="pitfall-icon">⚠️</span>
-      <span>${p}</span>
+      <span>${formatLessonText(p, { inline: true })}</span>
     </li>
   `).join('');
 
@@ -348,12 +431,12 @@ function renderLesson(quest) {
     <!-- Lesson Meta Header -->
     <div class="lesson-meta-bar">
       <div class="lesson-badges">
-        <span class="lesson-badge difficulty">${lesson.difficulty || 'Core Theory'}</span>
-        <span class="lesson-badge time">⏱️ ${lesson.readTime || '3 min read'}</span>
+        <span class="lesson-badge difficulty">${escapeHtml(lesson.difficulty || 'Core Theory')}</span>
+        <span class="lesson-badge time">⏱️ ${escapeHtml(lesson.readTime || '3 min read')}</span>
         <span class="lesson-badge xp">⭐ +${quest.xp} XP Available</span>
       </div>
       <div class="lesson-hook-text">
-        <em>${lesson.hook || ''}</em>
+        <em>${formatLessonText(lesson.hook || '', { inline: true })}</em>
       </div>
     </div>
 
@@ -362,26 +445,26 @@ function renderLesson(quest) {
       <div class="lesson-analogy-card">
         <div class="analogy-header">
           <span class="analogy-tag">CORE MENTAL MODEL</span>
-          <h4 class="analogy-title">${lesson.analogy.title}</h4>
+          <h4 class="analogy-title">${escapeHtml(lesson.analogy.title)}</h4>
         </div>
-        <p class="analogy-desc">${lesson.analogy.description}</p>
+        <div class="analogy-desc">${formatLessonText(lesson.analogy.description)}</div>
       </div>
     ` : ''}
 
-    <!-- Structured Lesson Sections -->
+    <!-- Structured Lesson Sections with Visuals -->
     <div class="lesson-sections-container">
       ${sectionsHtml}
     </div>
 
-    <!-- Formula Card -->
+    <!-- Formula Card with KaTeX Math Engine -->
     ${lesson.formulaCard ? `
       <div class="lesson-formula-card">
         <div class="formula-card-header">
-          <span>📐</span>
-          <h4>${lesson.formulaCard.title || 'Mathematical Engine'}</h4>
+          <span class="formula-header-icon">📐</span>
+          <h4>${escapeHtml(lesson.formulaCard.title || 'Mathematical Engine')}</h4>
         </div>
         <div class="formula-display-box">
-          <code>${lesson.formulaCard.equation}</code>
+          ${renderTex(lesson.formulaCard.equation, true)}
         </div>
         ${formulaBreakdownHtml}
       </div>
@@ -428,6 +511,15 @@ function renderLesson(quest) {
   `;
 
   dom.lessonContainer.appendChild(card);
+
+  // Mount interactive visuals
+  card.querySelectorAll('.lesson-visual-figure').forEach(fig => {
+    const sIdx = parseInt(fig.dataset.visualIdx, 10);
+    const v = getSectionVisual(quest.id, sIdx);
+    if (v) {
+      mountVisual(v, fig);
+    }
+  });
 
   // Wire buttons
   const btnJump = card.querySelector('#btn-lesson-jump-sandbox');
