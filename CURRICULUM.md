@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 13)
+## ⚡ Phase 3: The LLM Odyssey & Agentic AI (Quests 7 - 14)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -405,9 +405,32 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🛠️ Quest 14: Agentic Tool Use & Function Calling (JSON Schemas, ReAct Loops & Multi-Tool Orchestration)
+- **Tagline:** ReAct & Tool Dispatch
+- **The Core Problem:**
+  LLMs are static next-token predictors. Left alone, they suffer from:
+  1. **Knowledge Cutoffs & Hallucinations:** Inability to retrieve fresh external facts.
+  2. **Arithmetic Incompetence:** Performing float exponentiation in text tokens instead of exact ALUs.
+  3. **Inability to Act:** Incapable of taking actions in the real world (e.g. running code, querying databases, booking flights).
+- **The Solution:**
+  Transform the model into an **Agent** by exposing tool definitions via strict JSON Schemas, executing an iterative **ReAct** (Thought ➔ Action ➔ Observation) loop, and guaranteeing structural compliance through **Constrained Decoding** logit masks.
+- **Key Concepts:**
+  - **The ReAct Loop:** Interleaving internal monologue reasoning steps with structured tool calls and environment observations to self-correct before presenting a final answer.
+  - **Constrained Decoding & CFGs:** Using Context-Free Grammars at inference time to set invalid token logits to $-\infty$, ensuring 100% syntactically valid JSON function arguments.
+  - **Sandbox Security & Ephemeral Execution:** Docker container isolation, read-only guards, strict rate limits, and human-in-the-loop approvals for destructive operations.
+  - **Hierarchical Multi-Agent Swarms:** A Supervisor orchestrator delegating sub-problems across specialized workers (Researcher, Coder, Verifier) via DAG execution.
+- **Interactive Playground:** 3-tab Agentic Tool Lab:
+  - *Tab 1: ReAct Loop Simulator:* Step-by-step player through 4 real-world scenarios (Financial CAGR, Python Latency Profiler, Multi-City Travel Orchestrator, SQL Log Patching) showing internal thoughts, JSON tool calls, and environment observations.
+  - *Tab 2: JSON Schema & Grammar Inspector:* Live schema browser for 8 registered tools, interactive argument form, and logit mask visualizer.
+  - *Tab 3: Multi-Agent Swarm Arena:* Animated execution pipeline demonstrating Supervisor decomposition, Researcher discovery, Coder sandbox patching, and Critic verification.
+- **Python Lab Snippet:**
+  Runnable Python script implementing tool dispatching with dictionary routing and mock execution.
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 14: Agentic Tool Use & Function Calling:** JSON schemas, function dispatching, ReAct loops, and multi-agent coordination.
 - **Quest 15: Multimodal Vision-Language Models (VLMs):** Cross-attention patch projections, CLIP visual embeddings, and multimodal reasoning.
+- **Quest 16: Mixture-of-Experts (MoE) & Dynamic Routing:** Sparse top-$k$ routing, expert load balancing, and switch transformers.
 
 
 ---

@@ -571,6 +571,60 @@ print(f"GRPO Loss: {loss.item():.4f} (0 Critic VRAM overhead!)")
         answer: "A",
         explanation: "Osu! In traditional PPO, a Critic network estimates state value V(s). GRPO samples G rollouts for the same question and uses the group average as the baseline, saving over 50% GPU memory!"
       }
+    },
+
+    'quest-14': {
+      title: 'Agentic Tool Use & Function Calling: ReAct Loops & JSON Schemas',
+      eli10: `🛠️ **The Swiss Army Cyborg & The Construction Dispatcher (AI Agents & Tools):**\n\nWhy does an AI model that passed the bar exam fail to multiply two 6-digit numbers unless given a 20-line Python calculator tool?\n\n1. **The Limitations of Pure LLMs:** Transformers predict tokens using statistical probability, not deterministic arithmetic. A pure model cannot query live stock prices, execute SQL databases, or run unit tests on its own code.\n2. **The ReAct Loop (Reasoning + Acting):** Instead of guessing blindly, an agent follows a continuous loop:\n   $$\\text{Goal} \\to \\text{Thought}_t \\to \\text{Action}_t \\to \\text{Observation}_t \\to \\text{Reflection}$$
+   - **Thought:** Breaks down the problem and chooses a tool.\n   - **Action:** Formulates a structured JSON tool call (e.g. \`calculator(expr="(28.7/12.4)**0.2 - 1")\`).\n   - **Observation:** Environment executes the tool and returns the exact result back into the prompt!\n3. **JSON Schema & Constrained Decoding:** Tools are defined with strict JSON schemas. Grammar masking forces token logits of invalid tokens to $-\\infty$ during sampling, guaranteeing 100% syntactically valid JSON tool calls.\n4. **Security Sandboxing:** All tool executions run in ephemeral containers to protect against indirect prompt injections and unauthorized commands!`,
+
+      snippet: `\`\`\`python
+import json
+
+# 1. Define Tool Schema
+TOOLS = [{
+    "type": "function",
+    "function": {
+        "name": "calculator",
+        "description": "Evaluates math expressions with high floating-point precision",
+        "parameters": {
+            "type": "object",
+            "properties": {"expr": {"type": "string"}},
+            "required": ["expr"]
+        }
+    }
+}]
+
+# 2. Tool Dispatcher
+def dispatch_tool(name, args):
+    if name == "calculator":
+        return str(eval(args["expr"], {"__builtins__": {}}, {}))
+    return f"Error: Tool '{name}' not found"
+
+# 3. ReAct Step Simulation
+goal = "Calculate 5-year CAGR: $12.4M (2019) -> $28.7M (2024)"
+thought = "Formula: (Ending / Beginning)**(1/5) - 1"
+action = {"name": "calculator", "args": {"expr": "(28.7 / 12.4)**0.2 - 1"}}
+
+obs = dispatch_tool(action["name"], action["args"])
+print(f"Goal: {goal}")
+print(f"💭 Thought: {thought}")
+print(f"⚡ Action: {action['name']}({json.dumps(action['args'])})")
+print(f"🔍 Observation: {obs}")
+print(f"🏁 Final Answer: 5-year CAGR is {float(obs)*100:.2f}%")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: The ReAct Paradigm**\n\nWhy does the ReAct (Reasoning + Acting) loop outperform direct, unreflective tool execution in autonomous agents?",
+        options: [
+            "A) It makes the GPU run at cryogenic temperatures",
+            "B) By interleaving internal reasoning (Thought) with tool execution (Action) and environment feedback (Observation), it enables the agent to evaluate progress, diagnose errors, and dynamically adapt its trajectory",
+            "C) It replaces Python with assembly code",
+            "D) It only works on 8-bit computers"
+        ],
+        answer: "B",
+        explanation: "Osu! Without reasoning, an agent blindly executes tools without understanding intermediate results. ReAct pairs cognitive deliberation with empirical environment feedback, allowing the model to self-heal and chain multi-step tools together."
+      }
     }
   },
 
@@ -713,6 +767,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('reasoning') || hasPhrase('deepseek') || hasPhrase('r1') || hasPhrase('grpo') || hasPhrase('prm') || hasPhrase('orm') || hasPhrase('scratchpad') || hasPhrase('test-time') || hasPhrase('mcts') || hasPhrase('quest 13')) {
     return DOJO_KNOWLEDGE.quests['quest-13'].eli10;
+  }
+  if (hasPhrase('agent') || hasPhrase('react') || hasPhrase('tool') || hasPhrase('function call') || hasPhrase('json schema') || hasPhrase('observation') || hasPhrase('action') || hasPhrase('sandbox') || hasPhrase('quest 14')) {
+    return DOJO_KNOWLEDGE.quests['quest-14'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

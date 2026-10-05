@@ -103,7 +103,16 @@ const state = {
   reasoningActiveTab: 'scratchpad', // 'scratchpad' | 'prm_tree' | 'grpo_arena'
   reasoningActiveStep: 0,
   reasoningRolloutGroupIdx: 0,
-  reasoningIsPlaying: false
+  reasoningIsPlaying: false,
+  // Quest 14: Agentic Tool Use & Function Calling state
+  agentScenarioIdx: 0,
+  agentActiveTab: 'react_loop', // 'react_loop' | 'schema_inspector' | 'swarm_arena'
+  agentActiveStep: 1,
+  agentAutoPlay: false,
+  agentSelectedToolIdx: 0,
+  agentCustomArgs: {},
+  agentSwarmRunning: false,
+  agentSwarmStep: 0
 };
 
 const tutorService = new AITutorService();
@@ -715,6 +724,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'reasoning_model_lab':
       renderReasoningModelLabWidget(quest);
+      break;
+    case 'agentic_tool_lab':
+      renderAgenticToolLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -9089,6 +9101,766 @@ function renderReasoningModelLabWidget(quest) {
   renderScratchpadSteps();
 }
 
+// --- WIDGET 14: Agentic Tool Use & Function Calling Lab ---
+function renderAgenticToolLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'agentic-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [];
+  const toolsRegistry = config.toolsRegistry || [];
+
+  let scenarioIdx = state.agentScenarioIdx || 0;
+  if (scenarioIdx >= scenarios.length) scenarioIdx = 0;
+  let activeTab = state.agentActiveTab || 'react_loop';
+  let activeStep = state.agentActiveStep || 1;
+  let autoPlayInterval = null;
+  let selectedToolIdx = state.agentSelectedToolIdx || 0;
+  if (selectedToolIdx >= toolsRegistry.length) selectedToolIdx = 0;
+  let swarmInterval = null;
+  let swarmRunning = false;
+  let xpClaimed = false;
+  let swarmXpClaimed = false;
+
+  const currentScenario = () => scenarios[scenarioIdx] || {
+    id: 'financial_cagr',
+    title: 'Financial CAGR & Inflation Adjustment',
+    category: 'Quantitative Finance & Market Research',
+    userPrompt: 'Calculate 5-year CAGR and inflation-adjusted real return.',
+    tools: ['calculator', 'currency_converter'],
+    reactSteps: [],
+    finalAnswer: 'Computed successfully.'
+  };
+
+  container.innerHTML = `
+    <div class="agentic-lab-header">
+      <div class="agentic-title-row">
+        <div class="agentic-title-badge">
+          <span class="agentic-icon">🛠️</span>
+          <div>
+            <h3>Agentic Tool Use & Function Calling Lab</h3>
+            <p class="agentic-subtitle">Explore ReAct Thought-Action-Observation loops, JSON Schema constrained decoding, and Multi-Agent Swarms.</p>
+          </div>
+        </div>
+        <div class="agentic-tab-nav">
+          <button class="agentic-tab-btn ${activeTab === 'react_loop' ? 'active' : ''}" data-tab="react_loop">🔄 ReAct Loop</button>
+          <button class="agentic-tab-btn ${activeTab === 'schema_inspector' ? 'active' : ''}" data-tab="schema_inspector">📋 JSON Schema & Grammar</button>
+          <button class="agentic-tab-btn ${activeTab === 'swarm_arena' ? 'active' : ''}" data-tab="swarm_arena">🐝 Multi-Agent Swarm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: ReAct Loop Simulator -->
+    <div class="agentic-tab-panel" id="panel-react-loop" style="display: ${activeTab === 'react_loop' ? 'block' : 'none'};">
+      <div class="agentic-scenario-bar">
+        <span class="scenario-bar-label">🎯 Select Challenge:</span>
+        <div class="scenario-chips" id="scenario-chips-container">
+          ${scenarios.map((sc, idx) => `
+            <button class="scenario-chip ${idx === scenarioIdx ? 'active' : ''}" data-sc-idx="${idx}">
+              <span class="sc-icon">${idx === 0 ? '📈' : idx === 1 ? '🐍' : idx === 2 ? '✈️' : '🔍'}</span>
+              <span class="sc-title">${sc.title}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="agentic-mission-card">
+        <div class="mission-header">
+          <div class="mission-tag">USER QUERY & AGENT OBJECTIVE</div>
+          <div class="mission-category" id="mission-category-badge">${currentScenario().category}</div>
+        </div>
+        <div class="mission-prompt" id="mission-prompt-display">
+          <span class="prompt-user-badge">User:</span> "${currentScenario().userPrompt}"
+        </div>
+        <div class="mission-tools-row" id="mission-tools-display">
+          <span class="tools-label">Allowed Tools in Sandbox:</span>
+          ${(currentScenario().tools || []).map(t => `<span class="tool-pill"><span class="tool-pill-icon">🔧</span> ${t}</span>`).join('')}
+        </div>
+      </div>
+
+      <!-- Stepper Controls -->
+      <div class="react-stepper-controls">
+        <div class="stepper-actions">
+          <button class="react-ctrl-btn" id="btn-react-reset" title="Rewind to Step 1">⏮ Reset</button>
+          <button class="react-ctrl-btn" id="btn-react-prev" title="Step Back">◀ Previous</button>
+          <button class="react-ctrl-btn primary" id="btn-react-toggle" title="Auto Play Loop">▶ Auto-Play</button>
+          <button class="react-ctrl-btn" id="btn-react-next" title="Step Forward">Next Step ▶</button>
+        </div>
+        <div class="stepper-status">
+          <span class="step-count-badge" id="react-step-counter">Step ${Math.min(activeStep, currentScenario().reactSteps.length)} / ${currentScenario().reactSteps.length}</span>
+          <span class="status-indicator-pill"><span class="pulse-dot"></span> ReAct Loop Active</span>
+        </div>
+      </div>
+
+      <!-- Stream of Thought-Action-Observation Cards -->
+      <div class="react-stream-container" id="react-stream-container">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Final Answer Card -->
+      <div class="react-final-answer-card" id="react-final-answer-card" style="display: none;">
+        <div class="final-answer-header">
+          <div class="final-badge">
+            <span class="final-icon">🏆</span>
+            <div>
+              <h4>Final Synthesized Output</h4>
+              <p class="final-sub">All observations grounded and verified. Autonomous loop terminated.</p>
+            </div>
+          </div>
+          <button class="claim-xp-btn" id="btn-claim-react-xp">✨ Claim Master XP (+25 XP)</button>
+        </div>
+        <div class="final-answer-content" id="react-final-answer-text">
+          <!-- Final answer injected -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: JSON Schema & Grammar Inspector -->
+    <div class="agentic-tab-panel" id="panel-schema-inspector" style="display: ${activeTab === 'schema_inspector' ? 'block' : 'none'};">
+      <div class="schema-lab-grid">
+        <!-- Left: Tool Selector & Schema Definition -->
+        <div class="schema-card">
+          <div class="schema-card-header">
+            <h4>1. Tool Registry & JSON Schema</h4>
+            <span class="info-badge">OpenAI / Anthropic Spec</span>
+          </div>
+          <div class="tool-selector-row">
+            <label for="agent-tool-select">Select Registered Tool:</label>
+            <select id="agent-tool-select" class="agent-tool-dropdown">
+              ${toolsRegistry.map((t, idx) => `<option value="${idx}" ${idx === selectedToolIdx ? 'selected' : ''}>🛠️ ${t.name}</option>`).join('')}
+            </select>
+          </div>
+          <p class="tool-desc-text" id="tool-desc-display">${toolsRegistry[selectedToolIdx]?.description || ''}</p>
+          
+          <div class="schema-code-box">
+            <div class="code-box-header">
+              <span>JSON Schema Contract</span>
+              <button class="mini-copy-btn" id="btn-copy-tool-schema">📋 Copy Schema</button>
+            </div>
+            <pre class="schema-json" id="schema-json-display"><code></code></pre>
+          </div>
+
+          <!-- Constrained Grammar Visualizer -->
+          <div class="grammar-mask-box">
+            <div class="grammar-header">
+              <span class="grammar-title">⚡ Constrained Logit Masking (CFG)</span>
+              <span class="status-tag">Deterministic Grammar</span>
+            </div>
+            <p class="grammar-desc">At each token generation step, the engine evaluates the Context-Free Grammar. Any token that would violate valid JSON syntax or schema types receives a <code class="math-code">logit = -∞</code> mask.</p>
+            <div class="vocab-mask-demo">
+              <div class="vocab-row"><span class="v-token valid">"expr"</span> <span class="v-status">Allowed (Schema Key)</span> <span class="v-logit">+8.42</span></div>
+              <div class="vocab-row"><span class="v-token valid">":"</span> <span class="v-status">Allowed (Colon Sep)</span> <span class="v-logit">+12.10</span></div>
+              <div class="vocab-row"><span class="v-token masked">def</span> <span class="v-status">MASKED (-∞)</span> <span class="v-logit">-99999</span></div>
+              <div class="vocab-row"><span class="v-token masked">&lt;html&gt;</span> <span class="v-status">MASKED (-∞)</span> <span class="v-logit">-99999</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Interactive Tool Argument Playground -->
+        <div class="schema-card">
+          <div class="schema-card-header">
+            <h4>2. Live Function Call Dispatcher</h4>
+            <span class="info-badge">Client Validation</span>
+          </div>
+          <p class="schema-hint">Fill in arguments according to the strict JSON Schema. Click <strong>Validate & Dispatch</strong> to verify schema compliance against the logit mask.</p>
+          
+          <div class="tool-form-container" id="tool-form-container">
+            <!-- Form inputs generated dynamically -->
+          </div>
+
+          <div class="dispatch-actions">
+            <button class="dispatch-btn" id="btn-validate-dispatch">🚀 Validate & Dispatch Tool Call</button>
+            <button class="reset-args-btn" id="btn-load-sample-args">⚡ Load Sample Args</button>
+          </div>
+
+          <div class="validation-result-box" id="validation-result-box" style="display: none;">
+            <!-- Validation status message -->
+          </div>
+
+          <div class="dispatched-payload-box">
+            <div class="code-box-header">
+              <span>Dispatched Tool Call Payload (JSON)</span>
+            </div>
+            <pre class="schema-json" id="dispatched-payload-display"><code>// Awaiting tool call dispatch...</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Multi-Agent Swarm Arena -->
+    <div class="agentic-tab-panel" id="panel-swarm-arena" style="display: ${activeTab === 'swarm_arena' ? 'block' : 'none'};">
+      <div class="swarm-arena-card">
+        <div class="swarm-header">
+          <div class="swarm-info">
+            <h4>Hierarchical Supervisor-Worker Swarm</h4>
+            <p>Orchestrate specialized sub-agents with distinct system prompts and tool access to tackle complex multi-step objectives.</p>
+          </div>
+          <button class="swarm-run-btn" id="btn-run-swarm">🚀 Launch Multi-Agent Swarm</button>
+        </div>
+
+        <!-- Architecture Flow Diagram -->
+        <div class="swarm-topology-diagram">
+          <div class="agent-node supervisor" id="node-supervisor">
+            <div class="node-icon">👑</div>
+            <div class="node-role">SUPERVISOR AGENT</div>
+            <div class="node-desc">Task Decomposition & State Machine Orchestrator</div>
+            <div class="node-status" id="supervisor-status">Standby</div>
+          </div>
+          <div class="swarm-arrows-down">
+            <span>↓ Task A</span>
+            <span>↓ Task B</span>
+            <span>↓ Task C</span>
+          </div>
+          <div class="swarm-workers-row">
+            <div class="agent-node worker" id="worker-researcher">
+              <div class="node-icon">🔎</div>
+              <div class="node-role">RESEARCHER AGENT</div>
+              <div class="node-desc">Tools: <code>log_analyzer</code>, <code>weather_api</code></div>
+              <div class="node-status" id="researcher-status">Idle</div>
+            </div>
+            <div class="agent-node worker" id="worker-coder">
+              <div class="node-icon">💻</div>
+              <div class="node-role">CODER AGENT</div>
+              <div class="node-desc">Tools: <code>python_interpreter</code>, <code>calculator</code></div>
+              <div class="node-status" id="coder-status">Idle</div>
+            </div>
+            <div class="agent-node worker" id="worker-verifier">
+              <div class="node-icon">🛡️</div>
+              <div class="node-role">VERIFIER / CRITIC</div>
+              <div class="node-desc">Tools: <code>git_patcher</code>, Unit Test Suite</div>
+              <div class="node-status" id="verifier-status">Idle</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Swarm Execution Log -->
+        <div class="swarm-log-box">
+          <div class="swarm-log-header">
+            <span>Swarm Event Timeline</span>
+            <span class="swarm-progress-text" id="swarm-progress-text">Ready to run</span>
+          </div>
+          <div class="swarm-log-entries" id="swarm-log-entries">
+            <div class="log-entry system"><span class="log-time">[00:00.00]</span> Swarm nodes initialized. Awaiting objective trigger.</div>
+          </div>
+        </div>
+
+        <div class="swarm-claim-row" id="swarm-claim-row" style="display: none;">
+          <button class="claim-xp-btn" id="btn-claim-swarm-xp">🌟 Claim Multi-Agent Architect XP (+30 XP)</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach to DOM
+  dom.interactiveContainer.appendChild(container);
+
+  // --- TAB NAVIGATION ---
+  const tabBtns = container.querySelectorAll('.agentic-tab-btn');
+  const panels = {
+    react_loop: container.querySelector('#panel-react-loop'),
+    schema_inspector: container.querySelector('#panel-schema-inspector'),
+    swarm_arena: container.querySelector('#panel-swarm-arena')
+  };
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      activeTab = target;
+      state.agentActiveTab = target;
+
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === target));
+      Object.keys(panels).forEach(k => {
+        if (panels[k]) panels[k].style.display = (k === target) ? 'block' : 'none';
+      });
+
+      soundFx.playBlip(520, 0.05);
+
+      if (target === 'schema_inspector') {
+        updateSchemaDisplay();
+      }
+    });
+  });
+
+  // --- TAB 1: REACT LOOP LOGIC ---
+  const streamContainer = container.querySelector('#react-stream-container');
+  const stepCounterEl = container.querySelector('#react-step-counter');
+  const finalAnswerCard = container.querySelector('#react-final-answer-card');
+  const finalAnswerText = container.querySelector('#react-final-answer-text');
+  const btnReset = container.querySelector('#btn-react-reset');
+  const btnPrev = container.querySelector('#btn-react-prev');
+  const btnNext = container.querySelector('#btn-react-next');
+  const btnToggle = container.querySelector('#btn-react-toggle');
+  const btnClaimReactXp = container.querySelector('#btn-claim-react-xp');
+
+  function renderReActStream() {
+    if (!streamContainer) return;
+    streamContainer.innerHTML = '';
+
+    const sc = currentScenario();
+    const steps = sc.reactSteps || [];
+    const revealedSteps = steps.slice(0, activeStep);
+
+    revealedSteps.forEach((st) => {
+      const card = document.createElement('div');
+      card.className = 'react-cycle-card';
+      
+      const argsFormatted = escapeHtml(JSON.stringify(st.action.arguments, null, 2));
+
+      card.innerHTML = `
+        <div class="cycle-card-header">
+          <div class="cycle-title">
+            <span class="cycle-badge">Step ${st.stepNum}</span>
+            <span class="cycle-flow-pill">Thought ➔ Action ➔ Observation</span>
+          </div>
+          <span class="cycle-time-tag">Iteration ${st.stepNum}</span>
+        </div>
+
+        <div class="react-blocks-grid">
+          <!-- Thought Box -->
+          <div class="react-block thought-box">
+            <div class="block-label"><span class="block-icon">💭</span> Internal Reasoning (Thought)</div>
+            <div class="block-content">${escapeHtml(st.thought)}</div>
+          </div>
+
+          <!-- Action Box -->
+          <div class="react-block action-box">
+            <div class="block-label">
+              <span class="block-icon">🛠️</span> Dispatched Tool Call (Action)
+              <code class="action-tool-badge">${escapeHtml(st.action.tool)}</code>
+            </div>
+            <pre class="json-code-view"><code>${argsFormatted}</code></pre>
+          </div>
+
+          <!-- Observation Box -->
+          <div class="react-block observation-box">
+            <div class="block-label"><span class="block-icon">📡</span> Environment Response (Observation)</div>
+            <div class="obs-output-text">${escapeHtml(st.observation)}</div>
+          </div>
+        </div>
+      `;
+
+      streamContainer.appendChild(card);
+    });
+
+    if (stepCounterEl) {
+      stepCounterEl.textContent = `Step ${Math.min(activeStep, steps.length)} / ${steps.length}`;
+    }
+
+    const isFinished = activeStep >= steps.length;
+    if (finalAnswerCard) {
+      finalAnswerCard.style.display = isFinished ? 'block' : 'none';
+      if (isFinished && finalAnswerText) {
+        finalAnswerText.innerHTML = marked.parse(sc.finalAnswer || '');
+      }
+    }
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayInterval) {
+      clearInterval(autoPlayInterval);
+      autoPlayInterval = null;
+    }
+    if (btnToggle) btnToggle.textContent = '▶ Auto-Play';
+  }
+
+  function startAutoPlay() {
+    stopAutoPlay();
+    const sc = currentScenario();
+    const steps = sc.reactSteps || [];
+
+    if (activeStep >= steps.length) {
+      activeStep = 1;
+      state.agentActiveStep = activeStep;
+      renderReActStream();
+    }
+
+    if (btnToggle) btnToggle.textContent = '⏸ Pause';
+
+    autoPlayInterval = setInterval(() => {
+      if (activeStep < steps.length) {
+        activeStep++;
+        state.agentActiveStep = activeStep;
+        soundFx.playBlip(720 + activeStep * 60, 0.04);
+        renderReActStream();
+      } else {
+        stopAutoPlay();
+        soundFx.playLevelUp();
+      }
+    }, 1500);
+  }
+
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      stopAutoPlay();
+      activeStep = 1;
+      state.agentActiveStep = activeStep;
+      soundFx.playBlip(440, 0.05);
+      renderReActStream();
+    });
+  }
+
+  if (btnPrev) {
+    btnPrev.addEventListener('click', () => {
+      stopAutoPlay();
+      if (activeStep > 1) {
+        activeStep--;
+        state.agentActiveStep = activeStep;
+        soundFx.playBlip(550, 0.05);
+        renderReActStream();
+      }
+    });
+  }
+
+  if (btnNext) {
+    btnNext.addEventListener('click', () => {
+      stopAutoPlay();
+      const steps = currentScenario().reactSteps || [];
+      if (activeStep < steps.length) {
+        activeStep++;
+        state.agentActiveStep = activeStep;
+        soundFx.playBlip(750, 0.05);
+        renderReActStream();
+        if (activeStep >= steps.length) {
+          soundFx.playLevelUp();
+        }
+      }
+    });
+  }
+
+  if (btnToggle) {
+    btnToggle.addEventListener('click', () => {
+      if (autoPlayInterval) {
+        stopAutoPlay();
+        soundFx.playBlip(480, 0.05);
+      } else {
+        startAutoPlay();
+        soundFx.playBlip(800, 0.05);
+      }
+    });
+  }
+
+  if (btnClaimReactXp) {
+    btnClaimReactXp.addEventListener('click', () => {
+      if (!xpClaimed) {
+        xpClaimed = true;
+        awardXp(25, 'ReAct Autonomous Loop Conquered');
+        btnClaimReactXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimReactXp.disabled = true;
+        btnClaimReactXp.style.opacity = '0.6';
+      }
+    });
+  }
+
+  // Scenario chips click handling
+  const scenarioChips = container.querySelectorAll('.scenario-chip');
+  scenarioChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      stopAutoPlay();
+      scenarioIdx = parseInt(chip.dataset.scIdx, 10);
+      state.agentScenarioIdx = scenarioIdx;
+      activeStep = 1;
+      state.agentActiveStep = 1;
+
+      scenarioChips.forEach(c => c.classList.toggle('active', c === chip));
+
+      const sc = currentScenario();
+      const promptEl = container.querySelector('#mission-prompt-display');
+      const catEl = container.querySelector('#mission-category-badge');
+      const toolsEl = container.querySelector('#mission-tools-display');
+
+      if (promptEl) promptEl.innerHTML = `<span class="prompt-user-badge">User:</span> "${escapeHtml(sc.userPrompt)}"`;
+      if (catEl) catEl.textContent = sc.category;
+      if (toolsEl) {
+        toolsEl.innerHTML = `<span class="tools-label">Allowed Tools in Sandbox:</span>` +
+          (sc.tools || []).map(t => `<span class="tool-pill"><span class="tool-pill-icon">🔧</span> ${t}</span>`).join('');
+      }
+
+      soundFx.playBlip(600, 0.05);
+      renderReActStream();
+    });
+  });
+
+  // --- TAB 2: SCHEMA & GRAMMAR INSPECTOR ---
+  const toolSelect = container.querySelector('#agent-tool-select');
+  const toolDescDisplay = container.querySelector('#tool-desc-display');
+  const schemaJsonDisplay = container.querySelector('#schema-json-display');
+  const toolFormContainer = container.querySelector('#tool-form-container');
+  const btnCopySchema = container.querySelector('#btn-copy-tool-schema');
+  const btnValidateDispatch = container.querySelector('#btn-validate-dispatch');
+  const btnLoadSampleArgs = container.querySelector('#btn-load-sample-args');
+  const validationResultBox = container.querySelector('#validation-result-box');
+  const dispatchedPayloadDisplay = container.querySelector('#dispatched-payload-display');
+
+  function getSampleArgsForTool(name) {
+    switch (name) {
+      case 'calculator':
+        return { expr: '(14500 * 1.08)**3 - 14500' };
+      case 'python_interpreter':
+        return { code: 'import math\ndef is_prime(n):\n    return n > 1 and all(n % i != 0 for i in range(2, int(math.isqrt(n)) + 1))\nprint([x for x in range(20, 50) if is_prime(x)])' };
+      case 'currency_converter':
+        return { amount: 2500, from_currency: 'USD', to_currency: 'EUR' };
+      case 'weather_api':
+        return { location: 'Zurich, Switzerland', units: 'metric' };
+      case 'flight_search':
+        return { origin: 'SFO', destination: 'NRT', departure_date: '2026-11-15' };
+      case 'hotel_finder':
+        return { city: 'Tokyo', max_price_per_night: 220 };
+      case 'log_analyzer':
+        return { service: 'checkout-service', query: 'ERROR connection pool exhausted' };
+      case 'git_patcher':
+        return { repository: 'deep-learning-core', commit_message: 'fix: eliminate circular buffer leak in session cache' };
+      default:
+        return {};
+    }
+  }
+
+  function updateSchemaDisplay() {
+    const curTool = toolsRegistry[selectedToolIdx] || toolsRegistry[0];
+    if (!curTool) return;
+
+    if (toolDescDisplay) toolDescDisplay.textContent = curTool.description;
+    if (schemaJsonDisplay) {
+      schemaJsonDisplay.innerHTML = `<code>${escapeHtml(JSON.stringify(curTool.schema, null, 2))}</code>`;
+    }
+
+    if (toolFormContainer) {
+      toolFormContainer.innerHTML = '';
+      const properties = curTool.schema.properties || {};
+      const requiredList = curTool.schema.required || [];
+
+      Object.entries(properties).forEach(([key, prop]) => {
+        const isRequired = requiredList.includes(key);
+        const group = document.createElement('div');
+        group.className = 'tool-arg-group';
+
+        const sample = getSampleArgsForTool(curTool.name)[key] ?? '';
+
+        group.innerHTML = `
+          <div class="arg-header-row">
+            <span class="arg-name"><code>${key}</code></span>
+            <span class="arg-type">${prop.type}</span>
+            ${isRequired ? '<span class="arg-req-pill">required</span>' : '<span class="arg-opt-pill">optional</span>'}
+          </div>
+          <div class="arg-desc">${prop.description || ''}</div>
+          ${prop.type === 'string' && key === 'code' 
+            ? `<textarea class="arg-input-field" id="field-${key}" data-key="${key}" data-type="${prop.type}" rows="4">${escapeHtml(String(sample))}</textarea>`
+            : `<input class="arg-input-field" id="field-${key}" data-key="${key}" data-type="${prop.type}" value="${escapeHtml(String(sample))}" />`
+          }
+        `;
+        toolFormContainer.appendChild(group);
+      });
+    }
+
+    if (validationResultBox) validationResultBox.style.display = 'none';
+    if (dispatchedPayloadDisplay) dispatchedPayloadDisplay.innerHTML = `<code>// Fill arguments above and click Validate & Dispatch</code>`;
+  }
+
+  if (toolSelect) {
+    toolSelect.addEventListener('change', () => {
+      selectedToolIdx = parseInt(toolSelect.value, 10);
+      state.agentSelectedToolIdx = selectedToolIdx;
+      soundFx.playBlip(640, 0.05);
+      updateSchemaDisplay();
+    });
+  }
+
+  if (btnCopySchema) {
+    btnCopySchema.addEventListener('click', () => {
+      const curTool = toolsRegistry[selectedToolIdx] || toolsRegistry[0];
+      if (curTool) {
+        navigator.clipboard.writeText(JSON.stringify(curTool.schema, null, 2)).then(() => {
+          btnCopySchema.textContent = '✓ Copied Schema!';
+          setTimeout(() => { btnCopySchema.textContent = '📋 Copy Schema'; }, 1800);
+        });
+        soundFx.playBlip(880, 0.05);
+      }
+    });
+  }
+
+  if (btnLoadSampleArgs) {
+    btnLoadSampleArgs.addEventListener('click', () => {
+      const curTool = toolsRegistry[selectedToolIdx] || toolsRegistry[0];
+      if (curTool) {
+        const samples = getSampleArgsForTool(curTool.name);
+        Object.entries(samples).forEach(([k, v]) => {
+          const el = toolFormContainer.querySelector(`#field-${k}`);
+          if (el) el.value = v;
+        });
+        soundFx.playBlip(700, 0.05);
+      }
+    });
+  }
+
+  if (btnValidateDispatch) {
+    btnValidateDispatch.addEventListener('click', () => {
+      const curTool = toolsRegistry[selectedToolIdx] || toolsRegistry[0];
+      if (!curTool) return;
+
+      const properties = curTool.schema.properties || {};
+      const requiredList = curTool.schema.required || [];
+      const collectedArgs = {};
+      let missingField = null;
+
+      for (const [key, prop] of Object.entries(properties)) {
+        const el = toolFormContainer.querySelector(`#field-${key}`);
+        const rawVal = el ? el.value.trim() : '';
+
+        if (requiredList.includes(key) && !rawVal) {
+          missingField = key;
+          break;
+        }
+
+        if (rawVal) {
+          if (prop.type === 'number') {
+            const num = parseFloat(rawVal);
+            collectedArgs[key] = isNaN(num) ? rawVal : num;
+          } else if (prop.type === 'boolean') {
+            collectedArgs[key] = (rawVal === 'true');
+          } else {
+            collectedArgs[key] = rawVal;
+          }
+        }
+      }
+
+      if (missingField) {
+        validationResultBox.style.display = 'block';
+        validationResultBox.className = 'validation-result-box error';
+        validationResultBox.innerHTML = `
+          <strong>❌ Schema Validation Failed</strong>: Missing required property <code>${missingField}</code>.<br>
+          <small>Under constrained decoding, the LLM logit mask prevents generating closing braces <code>}</code> until all required fields are satisfied.</small>
+        `;
+        soundFx.playBlip(280, 0.1);
+        return;
+      }
+
+      // Valid!
+      validationResultBox.style.display = 'block';
+      validationResultBox.className = 'validation-result-box success';
+      validationResultBox.innerHTML = `
+        <strong>✅ Schema Validated Successfully!</strong><br>
+        100% conforming JSON payload. CFG Logit mask permitted token generation with zero syntax errors.
+      `;
+      soundFx.playBlip(880, 0.08);
+
+      const payload = {
+        name: curTool.name,
+        arguments: collectedArgs
+      };
+
+      if (dispatchedPayloadDisplay) {
+        dispatchedPayloadDisplay.innerHTML = `<code>${escapeHtml(JSON.stringify(payload, null, 2))}</code>`;
+      }
+    });
+  }
+
+  // --- TAB 3: MULTI-AGENT SWARM LOGIC ---
+  const btnRunSwarm = container.querySelector('#btn-run-swarm');
+  const swarmEntriesEl = container.querySelector('#swarm-log-entries');
+  const swarmProgressText = container.querySelector('#swarm-progress-text');
+  const supervisorStatus = container.querySelector('#supervisor-status');
+  const researcherStatus = container.querySelector('#researcher-status');
+  const coderStatus = container.querySelector('#coder-status');
+  const verifierStatus = container.querySelector('#verifier-status');
+  const swarmClaimRow = container.querySelector('#swarm-claim-row');
+  const btnClaimSwarmXp = container.querySelector('#btn-claim-swarm-xp');
+
+  const supervisorNode = container.querySelector('#node-supervisor');
+  const researcherNode = container.querySelector('#worker-researcher');
+  const coderNode = container.querySelector('#worker-coder');
+  const verifierNode = container.querySelector('#worker-verifier');
+
+  function appendSwarmLog(type, time, message) {
+    if (!swarmEntriesEl) return;
+    const div = document.createElement('div');
+    div.className = `log-entry ${type}`;
+    div.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+    swarmEntriesEl.appendChild(div);
+    swarmEntriesEl.scrollTop = swarmEntriesEl.scrollHeight;
+  }
+
+  if (btnRunSwarm) {
+    btnRunSwarm.addEventListener('click', () => {
+      if (swarmRunning) return;
+      swarmRunning = true;
+      btnRunSwarm.disabled = true;
+      btnRunSwarm.textContent = '⚡ Swarm Executing...';
+      if (swarmEntriesEl) swarmEntriesEl.innerHTML = '';
+
+      if (swarmProgressText) swarmProgressText.textContent = 'Phase 1: Task Decomposition';
+      supervisorNode?.classList.add('pulse-active');
+      if (supervisorStatus) supervisorStatus.textContent = 'Decomposing Task DAG...';
+
+      appendSwarmLog('supervisor', '00:00.10', '👑 <strong>Supervisor</strong> received objective: <em>"Audit checkout microservice and patch circular memory leak."</em> Decomposing into parallel subtasks.');
+      soundFx.playBlip(550, 0.05);
+
+      setTimeout(() => {
+        if (swarmProgressText) swarmProgressText.textContent = 'Phase 2: Log Analysis & Diagnostics';
+        supervisorNode?.classList.remove('pulse-active');
+        researcherNode?.classList.add('pulse-active');
+        if (supervisorStatus) supervisorStatus.textContent = 'Supervising Pipeline';
+        if (researcherStatus) researcherStatus.textContent = 'Invoking log_analyzer...';
+
+        appendSwarmLog('researcher', '00:01.35', '🔎 <strong>Researcher Agent</strong> invoked <code>log_analyzer(service="checkout", query="Out of Memory")</code>. Identified leak in <code>session_cache.py</code>: 104MB buffer accumulation.');
+        soundFx.playBlip(680, 0.05);
+      }, 1200);
+
+      setTimeout(() => {
+        if (swarmProgressText) swarmProgressText.textContent = 'Phase 3: Sandbox Code Patching';
+        researcherNode?.classList.remove('pulse-active');
+        coderNode?.classList.add('pulse-active');
+        if (researcherStatus) researcherStatus.textContent = 'Findings Dispatched';
+        if (coderStatus) coderStatus.textContent = 'Invoking python_interpreter...';
+
+        appendSwarmLog('coder', '00:02.60', '💻 <strong>Coder Agent</strong> executed <code>python_interpreter</code> in isolated sandbox. Replaced unbounded dictionary with <code>weakref.WeakValueDictionary</code>. Memory stabilized at 14MB baseline.');
+        soundFx.playBlip(780, 0.05);
+      }, 2500);
+
+      setTimeout(() => {
+        if (swarmProgressText) swarmProgressText.textContent = 'Phase 4: Regression & Fact Verification';
+        coderNode?.classList.remove('pulse-active');
+        verifierNode?.classList.add('pulse-active');
+        if (coderStatus) coderStatus.textContent = 'Patch Generated';
+        if (verifierStatus) verifierStatus.textContent = 'Invoking git_patcher & test runner...';
+
+        appendSwarmLog('verifier', '00:03.85', '🛡️ <strong>Verifier / Critic</strong> executed unit test suite: <strong>48/48 tests passed</strong>. Verified memory footprint under synthetic load. Reflection confidence: 100%.');
+        soundFx.playBlip(880, 0.05);
+      }, 3800);
+
+      setTimeout(() => {
+        if (swarmProgressText) swarmProgressText.textContent = 'Phase 5: Resolution & Synthesis';
+        verifierNode?.classList.remove('pulse-active');
+        supervisorNode?.classList.add('pulse-active');
+        if (verifierStatus) verifierStatus.textContent = 'Verified (100% Pass)';
+        if (supervisorStatus) supervisorStatus.textContent = 'Objective Fulfilled';
+
+        appendSwarmLog('supervisor', '00:05.10', '👑 <strong>Supervisor</strong> synthesized verified PR artifact: <code>pr-1402-fix-leak.patch</code> ready for merge. Multi-agent swarm cycle terminated cleanly.');
+        soundFx.playLevelUp();
+
+        if (swarmClaimRow) swarmClaimRow.style.display = 'block';
+        swarmRunning = false;
+        btnRunSwarm.disabled = false;
+        btnRunSwarm.textContent = '🚀 Re-run Swarm Simulation';
+      }, 5100);
+    });
+  }
+
+  if (btnClaimSwarmXp) {
+    btnClaimSwarmXp.addEventListener('click', () => {
+      if (!swarmXpClaimed) {
+        swarmXpClaimed = true;
+        awardXp(30, 'Multi-Agent Swarm Architect Conquered');
+        btnClaimSwarmXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimSwarmXp.disabled = true;
+        btnClaimSwarmXp.style.opacity = '0.6';
+      }
+    });
+  }
+
+  // Initial stream render & schema setup
+  renderReActStream();
+  updateSchemaDisplay();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -9291,6 +10063,13 @@ const questPrompts = {
     { label: '🚀 How does DeepSeek-R1 GRPO eliminate the Critic?', prompt: 'Walk through the mathematical details of GRPO: how does group relative reward normalization replace the value network V(s) in VRAM?' },
     { label: '📈 Test-Time Compute Scaling Laws', prompt: 'Explain test-time compute scaling: why does spending more tokens or searching wider trees at inference time dramatically boost benchmark accuracy?' },
     { label: '🎯 Quiz me on Reasoning & Test-Time Compute', prompt: 'Give me a challenging question about DeepSeek-R1, GRPO loss, PRMs, or test-time compute scaling!' }
+  ],
+  'quest-14': [
+    { label: '🔄 What is the ReAct loop cycle?', prompt: 'Explain the Thought -> Action -> Observation cycle in autonomous agentic loops and why it prevents premature hallucination.' },
+    { label: '🛡️ How do Logit Masks enforce JSON schemas?', prompt: 'Explain how constrained decoding works under the hood: how context-free grammars (CFGs) mask invalid token logits to -inf to ensure 100% valid JSON.' },
+    { label: '🔒 Agent Sandbox & Security Best Practices', prompt: 'What security boundaries are required when giving LLMs tools like bash execution, SQL queries, or file writes (human-in-the-loop, ephemeral containers, read-only)?' },
+    { label: '🐝 Multi-Agent Swarm Orchestration', prompt: 'Explain the difference between Hierarchical Supervisor-Worker patterns and Peer-to-Peer agent communication topologies.' },
+    { label: '🎯 Quiz me on Agentic Tool Use & ReAct', prompt: 'Give me a challenging question about function calling JSON schemas, ReAct loop convergence, or multi-agent delegation!' }
   ]
 };
 
