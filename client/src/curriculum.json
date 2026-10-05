@@ -1901,38 +1901,39 @@
           "explanation": "In DPO, beta controls the strength of the KL divergence penalty against the frozen reference model (pi_ref). If beta is excessively large, the model is penalized heavily for any divergence from pi_ref, making it stubborn and incapable of adapting to human preferences."
         }
       ],
-      "lessonContent": {
-        "title": "Post-Training: SFT, ChatML, and Direct Preference Optimization",
+      "lesson": {
+        "readTime": "6 min read",
+        "difficulty": "Advanced • Post-Training & DPO",
+        "hook": "Why does a base language model trained on trillions of web tokens talk like an eccentric internet commenter rather than a polite, helpful assistant?",
+        "analogy": {
+          "title": "The Wild Stallion & The Polite Diplomat 🐎🥋",
+          "description": "Pre-training captures the raw, encyclopedic power of a wild horse roaming the internet prairie. Supervised Fine-Tuning (SFT) puts a saddle and reins on the horse, teaching conversational etiquette. Alignment (DPO) gives the rider steering precision: whenever the horse faces a helpful trail ($y_w$) versus a toxic or deceitful cliff ($y_l$), DPO mathematically tilts the policy ratio without requiring unstable reinforcement learning reward models!"
+        },
         "sections": [
           {
-            "id": "sec-1",
-            "title": "1. From Raw Predictor to Conversational Partner: Pre-Training vs Post-Training",
+            "heading": "1. From Raw Predictor to Conversational Partner: Pre-Training vs Post-Training",
             "content": "A foundation model (such as Llama 3 Base or GPT-4 Base) is trained on trillions of raw web tokens with a single objective: Next-Token Prediction. It has swallowed the entire internet—encyclopedias, code repositories, novels, and forum arguments. However, a base model possesses zero concept of being an 'AI Assistant'. If you type: 'What is the capital of France?', a base model might complete it as: '...and what is the capital of Germany? Please answer for tomorrow's geography homework.' Post-training is the critical second phase of modern AI engineering. It takes the frozen encyclopedic knowledge of the base model and shapes it into an obedient, conversational, and safe assistant through two consecutive stages: Supervised Fine-Tuning (SFT) and Human Alignment (RLHF / DPO).",
-            "visualKey": "q11PretrainVsSFT"
+            "callout": "💡 Key Insight: Pre-training imparts world knowledge; Post-training unlocks conversational agency, instruction-following fidelity, and safety guardrails."
           },
           {
-            "id": "sec-2",
-            "title": "2. The Grammar of Dialogue: ChatML, Roles & Loss Masking",
-            "content": "How does an LLM know who is speaking? Natural text is serialized with distinct ChatML delimiters: <|im_start|>system, <|im_start|>user, and <|im_start|>assistant, terminated by <|im_end|>. The system prompt establishes persona and guardrails. Crucially, during SFT training, we do not want the model to learn to generate user questions; we only want it to learn how to respond. Therefore, PyTorch uses Loss Masking: labels for system and user tokens are set to -100 (ignored by Cross-Entropy Loss), and gradients are only computed on the assistant's token sequence.",
-            "visualKey": "q11ChatMLTemplate"
+            "heading": "2. The Grammar of Dialogue: ChatML, Roles & Loss Masking",
+            "content": "How does an LLM know who is speaking? Natural text is serialized with distinct ChatML delimiters: `<|im_start|>system`, `<|im_start|>user`, and `<|im_start|>assistant`, terminated by `<|im_end|>`. The system prompt establishes persona and guardrails. Crucially, during SFT training, we do not want the model to learn to generate user questions; we only want it to learn how to respond. Therefore, PyTorch uses Loss Masking: labels for system and user tokens are set to -100 (ignored by Cross-Entropy Loss), and gradients are only computed on the assistant's token sequence.",
+            "callout": "⚠️ Critical Practice: Always mask prompt tokens with label -100 in PyTorch. Training on user prompts causes catastrophic imitation of user errors!"
           },
           {
-            "id": "sec-3",
-            "title": "3. The Alignment Pipeline: Traditional RLHF vs Direct Preference Optimization",
-            "content": "While SFT teaches formatting and tone, human preferences are nuanced. An answer can be grammatically flawless but dangerously unhelpful or subtly biased. The pioneering solution was Reinforcement Learning from Human Feedback (RLHF), pioneered by InstructGPT. RLHF collected human comparison pairs (Winner y_w vs Loser y_l), trained a separate neural network called a Reward Model, and then used Proximal Policy Optimization (PPO) to steer the LLM. However, PPO was notoriously unstable: it required 4 large models in GPU memory simultaneously (Actor, Critic, Reward Model, Reference Model) and suffered from reward hacking. Enter Direct Preference Optimization (DPO) in 2023: Rafailov et al. proved mathematically that the exact optimal policy could be expressed in closed form through the reference model, completely bypassing the reward model!",
-            "visualKey": "q11RlhfPipeline"
+            "heading": "3. The Alignment Pipeline: Traditional RLHF vs Direct Preference Optimization",
+            "content": "While SFT teaches formatting and tone, human preferences are nuanced. An answer can be grammatically flawless but dangerously unhelpful or subtly biased. The pioneering solution was Reinforcement Learning from Human Feedback (RLHF), pioneered by InstructGPT. RLHF collected human comparison pairs (Winner $y_w$ vs Loser $y_l$), trained a separate neural network called a Reward Model, and then used Proximal Policy Optimization (PPO) to steer the LLM. However, PPO was notoriously unstable: it required 4 large models in GPU memory simultaneously (Actor, Critic, Reward Model, Reference Model) and suffered from reward hacking. Enter Direct Preference Optimization (DPO) in 2023: Rafailov et al. proved mathematically that the exact optimal policy could be expressed in closed form through the reference model, completely bypassing the reward model!",
+            "callout": "🚀 DPO Breakthrough: Replaces the unstable 4-model RLHF PPO training loop with a single closed-form binary cross-entropy loss over policy log-probabilities!"
           },
           {
-            "id": "sec-4",
-            "title": "4. The Mathematics of DPO: Implicit Rewards & KL Regularization",
-            "content": "DPO reparameterizes the Bradley-Terry preference model P(y_w > y_l | x) = sigma(r(x, y_w) - r(x, y_l)) by expressing the reward function r(x, y) implicitly through the policy itself: r_hat(x, y) = beta * (log pi_theta(y|x) - log pi_ref(y|x)). The DPO loss function maximizes the margin between the chosen log-likelihood ratio and the rejected log-likelihood ratio, weighted by the sigmoid derivative: L_DPO = -E [ log sigma(beta * log(pi_theta(y_w)/pi_ref(y_w)) - beta * log(pi_theta(y_l)/pi_ref(y_l))) ]. The hyperparameter beta acts as an implicit KL divergence anchor: it prevents the aligned model from drifting too far from pi_ref, protecting against model collapse and catastrophic forgetting.",
-            "visualKey": "q11DpoLossDynamics"
+            "heading": "4. The Mathematics of DPO: Implicit Rewards & KL Regularization",
+            "content": "DPO reparameterizes the Bradley-Terry preference model $P(y_w > y_l \\mid x) = \\sigma(r(x, y_w) - r(x, y_l))$ by expressing the reward function $r(x, y)$ implicitly through the policy itself: $\\hat{r}(x, y) = \\beta \\left( \\log \\pi_\\theta(y \\mid x) - \\log \\pi_{\\text{ref}}(y \\mid x) \\right)$. The DPO loss function maximizes the margin between the chosen log-likelihood ratio and the rejected log-likelihood ratio, weighted by the sigmoid derivative:\n$$\\mathcal{L}_{\\text{DPO}} = -\\mathbb{E} \\left[ \\log \\sigma\\left(\\beta \\log \\frac{\\pi_\\theta(y_w)}{\\pi_{\\text{ref}}(y_w)} - \\beta \\log \\frac{\\pi_\\theta(y_l)}{\\pi_{\\text{ref}}(y_l)}\\right) \\right]$$\nThe hyperparameter $\\beta$ acts as an implicit KL divergence anchor: it prevents the aligned model from drifting too far from $\\pi_{\\text{ref}}$, protecting against model collapse and catastrophic forgetting.",
+            "callout": "📐 The Beta Balance: If $\\beta$ is too small, the policy drifts and hallucinates; if $\\beta$ is too high, the model refuses to learn from preference feedback."
           },
           {
-            "id": "sec-5",
-            "title": "5. The Alignment Tax, Refusals & Jailbreaks: Finding Equilibrium",
+            "heading": "5. The Alignment Tax, Refusals & Jailbreaks: Finding Equilibrium",
             "content": "Aligning an AI introduces delicate tradeoffs known as the Alignment Tax. If an alignment dataset over-indexes on safety refusals, the model becomes hypersensitive ('lazy refusal syndrome'), refusing benign requests like 'How do I kill a zombie process in Linux?' or 'Explain the plot of Romeo and Juliet'. Conversely, if alignment is too weak, the model is vulnerable to adversarial jailbreaks (DAN, cipher encoding, fictional roleplay). Modern state-of-the-art alignment balances three complementary objectives (HHH): Helpful (accurate, comprehensive), Honest (calibrated uncertainty, acknowledging knowledge limits), and Harmless (refusing malicious harm while offering educational context).",
-            "visualKey": "q11SafetyTaxTradeoff"
+            "callout": "🎯 HHH Triad: True alignment is not mindless refusal—it is maximizing helpfulness while adhering strictly to safety boundaries."
           }
         ],
         "formulaCard": {
@@ -2065,38 +2066,39 @@
           "explanation": "Pre-trained neural weights follow a normal (Gaussian) distribution. Standard integer quantization wastes bins on empty tails. NF4 allocates equal probability mass to each of the 16 quant bins, preserving information density and matching 16-bit performance."
         }
       ],
-      "lessonContent": {
-        "title": "Parameter-Efficient Fine-Tuning: LoRA, Matrix Decomposition & QLoRA",
+      "lesson": {
+        "readTime": "6 min read",
+        "difficulty": "Advanced • PEFT & Parameter Efficiency",
+        "hook": "How can you fine-tune a 70-billion parameter Large Language Model on a single consumer GPU when full training would require a $30,000 datacenter cluster?",
+        "analogy": {
+          "title": "The Masterpiece Canvas & The Transparent Acetate Overlay 🎨🖼️",
+          "description": "Imagine a priceless oil painting created by an old master (the base LLM $W_0$). If a client asks for customized calligraphy on top, you don't scrape off the original paint and repaint the entire 70-billion-brushstroke canvas (Full Fine-Tuning). Instead, you place a microscopic transparent acetate sheet over the painting and paint only the subtle additions onto that tiny overlay (LoRA adapters $B \\times A$). The masterpiece remains 100% untouched and frozen. In production, you can switch overlays in milliseconds or fuse them seamlessly into a new print with zero lag!"
+        },
         "sections": [
           {
-            "id": "sec-1",
-            "title": "1. The VRAM Wall: Why Full Fine-Tuning is Mathematically Prohibitive",
+            "heading": "1. The VRAM Wall: Why Full Fine-Tuning is Mathematically Prohibitive",
             "content": "When fine-tuning a Large Language Model with standard backpropagation, the GPU memory (VRAM) required is vastly higher than the model weights alone. Consider a 70-billion-parameter model in 16-bit precision (FP16): the weights occupy 140 GB. However, during training, the optimizer must store: 1) Model weights (2 bytes/param), 2) Gradients (2 bytes/param), 3) Adam first moment momentum (4 bytes/param), and 4) Adam second moment variance (4 bytes/param), plus activations. This totals 16 to 20 bytes per parameter—exploding to over 1.2 Terabytes of VRAM! Full fine-tuning of frontier models requires multi-node clusters costing hundreds of thousands of dollars. We need a way to adapt models without modifying all 70 billion parameters.",
-            "visualKey": "q12VramExplosion"
+            "callout": "⚠️ The Optimizer Burden: 75% of fine-tuning VRAM is consumed not by model weights, but by Adam optimizer states ($m_t, v_t$) and gradients!"
           },
           {
-            "id": "sec-2",
-            "title": "2. The Intrinsic Rank Hypothesis: Decomposing ΔW = B × A",
-            "content": "In 2021, Edward Hu and researchers at Microsoft made a startling discovery: when an LLM adapts to a specific downstream task (like coding, legal analysis, or medical dialogue), the weight update matrix ΔW does not explore all d dimensions. Instead, it has a very low 'intrinsic rank' (often r = 4, 8, or 16). Low-Rank Adaptation (LoRA) freezes the original pre-trained weight matrix W_0 in R^{d x k} and factorizes the update into two tiny low-rank matrices: ΔW = B x A, where B in R^{d x r} and A in R^{r x k}. For a 4096 x 4096 attention projection, full tuning requires 16,777,216 parameters; with rank r = 8, LoRA requires only (4096 x 8) + (8 x 4096) = 65,536 parameters—a 99.6% parameter reduction!",
-            "visualKey": "q12MatrixDecomposition"
+            "heading": "2. The Intrinsic Rank Hypothesis: Decomposing ΔW = B × A",
+            "content": "In 2021, Edward Hu and researchers at Microsoft made a startling discovery: when an LLM adapts to a specific downstream task (like coding, legal analysis, or medical dialogue), the weight update matrix $\\Delta W$ does not explore all $d$ dimensions. Instead, it has a very low 'intrinsic rank' (often $r = 4, 8$, or $16$). Low-Rank Adaptation (LoRA) freezes the original pre-trained weight matrix $W_0 \\in \\mathbb{R}^{d \\times k}$ and factorizes the update into two tiny low-rank matrices: $\\Delta W = B \\times A$, where $B \\in \\mathbb{R}^{d \\times r}$ and $A \\in \\mathbb{R}^{r \\times k}$. For a $4096 \\times 4096$ attention projection, full tuning requires 16,777,216 parameters; with rank $r = 8$, LoRA requires only $(4096 \\times 8) + (8 \\times 4096) = 65,536$ parameters—a 99.6% parameter reduction!",
+            "callout": "💡 Low-Rank Magic: Factorizing a $4096 \\times 4096$ matrix into two $r=8$ matrices slashes trainable parameters by over 99.6% with zero loss in task adaptation capability."
           },
           {
-            "id": "sec-3",
-            "title": "3. LoRA Hyperparameters: Rank (r), Alpha (α), and Dropout",
-            "content": "Configuring LoRA involves three key hyperparameters: 1) Rank (r): The bottleneck dimension. For standard tasks, r = 8 to 16 captures 95%+ of full fine-tuning performance; for complex reasoning, r = 32 or 64 is used. 2) Alpha (α): The scaling constant in h = W_0 x + (α/r) BAx. Alpha acts like an effective learning rate multiplier. When tuning r, keeping the ratio α/r constant ensures you do not need to re-tune learning rates. 3) Target Modules: In early LoRA, only attention Query and Value matrices (q_proj, v_proj) were adapted. Modern research shows that applying LoRA to all linear layers (including MLP up/down projections) yields superior accuracy.",
-            "visualKey": "q12AdapterSwitching"
+            "heading": "3. LoRA Hyperparameters: Rank (r), Alpha (α), and Dropout",
+            "content": "Configuring LoRA involves three key hyperparameters: 1) Rank ($r$): The bottleneck dimension. For standard tasks, $r = 8$ to $16$ captures 95%+ of full fine-tuning performance; for complex reasoning, $r = 32$ or $64$ is used. 2) Alpha ($\\alpha$): The scaling constant in $h = W_0 x + \\frac{\\alpha}{r} B A x$. Alpha acts like an effective learning rate multiplier. When tuning $r$, keeping the ratio $\\alpha / r$ constant ensures you do not need to re-tune learning rates. 3) Target Modules: In early LoRA, only attention Query and Value matrices (`q_proj`, `v_proj`) were adapted. Modern research shows that applying LoRA to all linear layers (including MLP up/down projections) yields superior accuracy.",
+            "callout": "📐 The Alpha Scaling Rule: Always scale LoRA updates by $\\alpha / r$. This stabilizes learning dynamics when experimenting across different rank bottlenecks."
           },
           {
-            "id": "sec-4",
-            "title": "4. Zero-Inference Latency: Production Weight Merging",
-            "content": "A major operational benefit of LoRA is that it introduces zero additional inference latency. Because matrix multiplication is distributive: h = W_0 x + (α/r) BAx = (W_0 + (α/r) BA) x. When fine-tuning finishes, we can compute W_merged = W_0 + (α/r) BA once and overwrite the base weights in memory. The deployed model has the exact same architecture, tensor shapes, and inference latency as the base model! Furthermore, for multi-tenant SaaS serving, a single frozen base model can sit in GPU VRAM while switching between hundreds of lightweight 20 MB adapter files on the fly for different customers.",
-            "visualKey": "q12WeightMerging"
+            "heading": "4. Zero-Inference Latency: Production Weight Merging",
+            "content": "A major operational benefit of LoRA is that it introduces zero additional inference latency. Because matrix multiplication is distributive: $h = W_0 x + \\frac{\\alpha}{r} B A x = \\left(W_0 + \\frac{\\alpha}{r} B A\\right) x$. When fine-tuning finishes, we can compute $W_{\\text{merged}} = W_0 + \\frac{\\alpha}{r} B A$ once and overwrite the base weights in memory. The deployed model has the exact same architecture, tensor shapes, and inference latency as the base model! Furthermore, for multi-tenant SaaS serving, a single frozen base model can sit in GPU VRAM while switching between hundreds of lightweight 20 MB adapter files on the fly for different customers.",
+            "callout": "🏎️ Production Superpower: Fold $W_0 + \\frac{\\alpha}{r}BA$ before deployment to eliminate runtime latency completely, or hot-swap 20MB adapters in <2ms."
           },
           {
-            "id": "sec-5",
-            "title": "5. QLoRA: 4-Bit NormalFloat (NF4), Double Quantization & Paged Optimizers",
+            "heading": "5. QLoRA: 4-Bit NormalFloat (NF4), Double Quantization & Paged Optimizers",
             "content": "In 2023, Tim Dettmers et al. introduced QLoRA, pushing parameter efficiency to the extreme. QLoRA compresses the frozen base model from 16-bit down to 4-bit precision using NormalFloat4 (NF4)—an information-theoretically optimal quantizer for normally distributed weights. During the forward pass, 4-bit weights are de-quantized to 16-bit on the fly for computation with the 16-bit LoRA adapter. Paired with Double Quantization (which quantizes the quantization constants) and Paged Optimizers (which page optimizer memory to CPU RAM during memory spikes), QLoRA reduced the VRAM requirement to fine-tune a 70B model from 780 GB down to just 48 GB—fitting onto two consumer RTX 3090/4090 GPUs!",
-            "visualKey": "q12QloraQuantization"
+            "callout": "💾 The QLoRA Triad: NF4 quantization + Double Quantization (saving 0.37 bits/param) + Paged Optimizers unlocks 70B model tuning on consumer hardware."
           }
         ],
         "formulaCard": {
@@ -2371,55 +2373,74 @@
           "explanation": "Osu! In addition to pre-training scaling laws, reasoning models exhibit test-time scaling: allocating more tokens to deliberate and self-correct during inference unlocks superhuman performance on math and coding without retraining weights!"
         }
       ],
-      "lessonContent": {
-        "formula": "\\mathcal{J}_{\\text{GRPO}}(\\theta) = \\mathbb{E} \\left[ \\frac{1}{G} \\sum_{i=1}^G \\min\\left( \\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)} A_i, \\text{clip}\\left(\\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)}, 1 \\pm \\epsilon\\right) A_i \\right) - \\beta D_{\\text{KL}}(\\pi_\\theta \\parallel \\pi_{\\text{ref}}) \\right]",
-        "formulaExplanation": "GRPO samples a group of G candidate reasoning completions for the same prompt, grades them, and normalizes advantages A_i = (R_i - \\mu)/\\sigma across the group. This eliminates the multi-gigabyte Critic/Value model entirely, allowing massive reasoning models to be trained via pure reinforcement learning!",
+      "lesson": {
+        "readTime": "6 min read",
+        "difficulty": "Cutting-Edge • System 2 Reasoning & GRPO",
+        "hook": "Why does Daniel Kahneman's framework of System 1 (fast/instinctive) vs System 2 (slow/deliberate) explain why AI models fail at simple math unless we give them a scratchpad?",
+        "analogy": {
+          "title": "The Chess Grandmaster's Scratchpad ♟️🧠",
+          "description": "A novice chess player moves the moment their eye catches an open piece (System 1: fast, instinctive, error-prone). A grandmaster sits in silence, mentally branching through candidate moves: 'If I sacrifice the bishop on h7, Black takes with King, then I check with Queen on h5... wait, Black has Nf6 covering h5! That refutes my hypothesis. Let me backtrack and examine Nc3 instead.' This internal monologue is the Chain-of-Thought (<think> ... </think>). By allocating test-time compute to exploring and verifying candidate reasoning steps before speaking, the model achieves superhuman problem solving without changing pre-trained parameters!"
+        },
         "sections": [
           {
-            "title": "1. The Reasoning Revolution: System 1 vs. System 2 Deliberation",
-            "paragraphs": [
-              "Until recently, Large Language Models operated entirely in System 1 mode (Daniel Kahneman's framework): fast, automatic, subconscious, and instinctive. An auto-regressive transformer emits tokens at constant compute per token, without pausing to evaluate whether an intermediate deduction is sound.",
-              "For complex multi-step reasoning (e.g. mathematical Olympiad problems, subtle pointer manipulation in C, or formal logic puzzles), this causes catastrophic error accumulation. If a model has a 95% accuracy per deduction step, across a 15-step proof its chance of success is (0.95)^15 ≈ 46.3%!",
-              "System 2 reasoning introduces deliberate, conscious, and slow thinking. By generating a private Chain-of-Thought (<think> ... </think>) before committing to an answer, the model can formulate hypotheses, test edge cases, and self-correct before presenting its solution."
-            ],
-            "keyTakeaway": "System 1 predictors guess the next token instantly; System 2 reasoning models spend test-time compute exploring and verifying logic before answering."
+            "heading": "1. The Reasoning Revolution: System 1 vs. System 2 Deliberation",
+            "content": "Until recently, Large Language Models operated entirely in System 1 mode (Daniel Kahneman's cognitive framework): fast, automatic, subconscious, and instinctive. An auto-regressive transformer emits tokens at constant compute per token, without pausing to evaluate whether an intermediate deduction is sound.\n\nFor complex multi-step reasoning (e.g. mathematical Olympiad problems, subtle pointer manipulation in C, or formal logic puzzles), this causes catastrophic error accumulation. If a model has a 95% accuracy per deduction step, across a 15-step proof its chance of success is $(0.95)^{15} \\approx 46.3\\%$.\n\nSystem 2 reasoning introduces deliberate, conscious, and slow thinking. By generating a private Chain-of-Thought (`<think> ... </think>`) before committing to an answer, the model can formulate hypotheses, test edge cases, and self-correct before presenting its solution.",
+            "callout": "💡 Key Insight: System 1 predictors guess the next token instantly; System 2 reasoning models spend test-time compute exploring, verifying, and backtracking before answering."
           },
           {
-            "title": "2. Chain-of-Thought Scratchpads & Self-Correction Mechanisms",
-            "paragraphs": [
-              "The foundational breakthrough of reasoning models is the internal scratchpad. Within the <think> tokens, the model acts as both generator and critic. It emits reflection markers: 'Wait, let me double check that assumption...', 'Alternatively, what if x is negative?', or 'Let me test this with small numbers.'",
-              "During pre-training or standard SFT, models are heavily penalized for backtracking because standard training datasets only contain clean, polished solutions. In reasoning models, RL incentives encourage active exploration, hypothesis testing, and backtracking.",
-              "When a reasoning model realizes a dead end, it writes: 'Hold on, this yields a contradiction. Let me restart from Step 2...' This self-correction ability allows the model to recover from mistakes that would permanently derail a standard LLM."
-            ],
-            "keyTakeaway": "Self-correction and backtracking turn linear token generation into an adaptive search process capable of error recovery."
+            "heading": "2. Chain-of-Thought Scratchpads & Self-Correction Mechanisms",
+            "content": "The foundational breakthrough of reasoning models is the internal scratchpad. Within the `<think>` tokens, the model acts as both generator and critic. It emits reflection markers: *'Wait, let me double check that assumption...'*, *'Alternatively, what if x is negative?'*, or *'Let me test this with small numbers.'*\n\nDuring pre-training or standard SFT, models are heavily penalized for backtracking because standard training datasets only contain clean, polished solutions. In reasoning models, RL incentives encourage active exploration, hypothesis testing, and backtracking.\n\nWhen a reasoning model realizes a dead end, it writes: *'Hold on, this yields a contradiction. Let me restart from Step 2...'* This self-correction ability allows the model to recover from mistakes that would permanently derail a standard LLM.",
+            "callout": "🔄 Self-Correction Power: Backtracking and error recovery turn linear token generation into an adaptive search process capable of escaping dead ends."
           },
           {
-            "title": "3. Outcome vs. Process Supervision: The Power of PRMs",
-            "paragraphs": [
-              "How do we teach an LLM to reason? Early approaches used Outcome Reward Models (ORMs): the model is given a math problem, writes a solution, and an automated verifier checks whether the final answer is correct (+1) or incorrect (0).",
-              "Outcome supervision suffers from severe credit assignment ambiguity. An ORM provides zero signal on which specific step was brilliant and which was flawed. Worst of all, it rewards lucky guesses arrived at through completely fabricated math (false positives), and harshly punishes a 20-step proof that had a tiny arithmetic typo on the final line.",
-              "Process Reward Models (PRMs), introduced by OpenAI (Lightman et al., 2023), solve this by scoring every individual reasoning step with a reward r_t ∈ [0, 1]. A PRM acts as a step-level mentor, identifying the precise divergence point where logic derailed."
-            ],
-            "keyTakeaway": "PRMs evaluate every intermediate step, providing granular credit assignment and enabling tree-search algorithms (like MCTS and Best-of-N)."
+            "heading": "3. Outcome vs. Process Supervision: The Power of PRMs",
+            "content": "How do we teach an LLM to reason? Early approaches used Outcome Reward Models (ORMs): the model is given a math problem, writes a solution, and an automated verifier checks whether the final answer is correct (+1) or incorrect (0).\n\nOutcome supervision suffers from severe credit assignment ambiguity. An ORM provides zero signal on which specific step was brilliant and which was flawed. Worst of all, it rewards lucky guesses arrived at through completely fabricated math (false positives), and harshly punishes a 20-step proof that had a tiny arithmetic typo on the final line.\n\nProcess Reward Models (PRMs), introduced by OpenAI (Lightman et al., 2023), solve this by scoring every individual reasoning step with a reward $r_t \\in [0, 1]$. A PRM acts as a step-level mentor, identifying the precise divergence point where logic derailed.",
+            "callout": "🎯 Granular Guidance: PRMs evaluate every intermediate deduction step, enabling Monte Carlo Tree Search (MCTS) and early pruning of flawed branches."
           },
           {
-            "title": "4. DeepSeek-R1 & GRPO: Eliminating the Critic Model with Group Normalization",
-            "paragraphs": [
-              "Traditional Actor-Critic Reinforcement Learning (PPO) requires four large models in GPU memory: Actor (policy π_θ), Critic (value network V_ψ), Reward Model (R), and Reference Model (π_ref). For a 70B parameter model, hosting the Critic network requires hundreds of gigabytes of additional VRAM!",
-              "DeepSeek-R1 introduced Group Relative Policy Optimization (GRPO). Instead of training a Critic model to estimate state values, GRPO samples a group of G candidate reasoning paths {o_1, o_2, ..., o_G} for the same prompt q.",
-              "The advantage of each candidate is computed directly by normalizing its reward against the group: A_i = (R_i - mean(R)) / std(R). Candidates that outperform the group average receive positive gradient reinforcement, while worse candidates receive negative updates—with ZERO Critic models stored in VRAM!"
-            ],
-            "keyTakeaway": "GRPO slashes memory requirements by computing baseline advantages directly from group rollout statistics rather than a separate Critic network."
+            "heading": "4. DeepSeek-R1 & GRPO: Eliminating the Critic Model with Group Normalization",
+            "content": "Traditional Actor-Critic Reinforcement Learning (PPO) requires four large models in GPU memory: Actor (policy $\\pi_\\theta$), Critic (value network $V_\\psi$), Reward Model ($R$), and Reference Model ($\\pi_{\\text{ref}}$). For a 70B parameter model, hosting the Critic network requires hundreds of gigabytes of additional VRAM!\n\nDeepSeek-R1 introduced Group Relative Policy Optimization (GRPO). Instead of training a Critic model to estimate state values, GRPO samples a group of $G$ candidate reasoning paths $\\{o_1, o_2, \\dots, o_G\\}$ for the same prompt $q$.\n\nThe advantage of each candidate is computed directly by normalizing its reward against the group: $A_i = (R_i - \\text{mean}(R)) / \\text{std}(R)$. Candidates that outperform the group average receive positive gradient reinforcement, while worse candidates receive negative updates—with ZERO Critic models stored in VRAM!",
+            "callout": "🚀 GRPO VRAM Breakthrough: Normalizing rewards across group rollouts eliminates the multi-gigabyte Critic network, slashing training memory by over 50%!"
           },
           {
-            "title": "5. Test-Time Compute Scaling Laws & Search Trees (MCTS)",
-            "paragraphs": [
-              "For years, AI scaling followed the Kaplan / Chinchilla laws: performance scales with parameter count and pre-training dataset size. Reasoning models introduced a second scaling axis: Test-Time Compute Scaling.",
-              "By spending more compute at inference time—either via longer reasoning chains (sequential scaling) or parallel search trees like Monte Carlo Tree Search (MCTS) and Best-of-N majority voting (parallel scaling)—accuracy on hard STEM and coding benchmarks scales predictably with compute.",
-              "With verification (e.g. Python interpreters or Lean 4 theorem provers), an LLM can generate N candidate solutions, execute tests, and select the verifiable winner, transforming LLMs from probabilistic chatterboxes into reliable deductive engines."
-            ],
-            "keyTakeaway": "Test-time compute scaling unlocks exponential performance gains during inference through search, verification, and self-consistency voting."
+            "heading": "5. Test-Time Compute Scaling Laws & Search Trees (MCTS)",
+            "content": "For years, AI scaling followed the Kaplan / Chinchilla laws: performance scales with parameter count and pre-training dataset size. Reasoning models introduced a second scaling axis: Test-Time Compute Scaling.\n\nBy spending more compute at inference time—either via longer reasoning chains (sequential scaling) or parallel search trees like Monte Carlo Tree Search (MCTS) and Best-of-N majority voting (parallel scaling)—accuracy on hard STEM and coding benchmarks scales predictably with compute.\n\nWith verification (e.g. Python interpreters or Lean 4 theorem provers), an LLM can generate $N$ candidate solutions, execute tests, and select the verifiable winner, transforming LLMs from probabilistic chatterboxes into reliable deductive engines.",
+            "callout": "📈 Scaling Axis 2: Allocating more tokens to deliberate and verify during inference unlocks superhuman STEM performance without retraining base model weights."
           }
+        ],
+        "formulaCard": {
+          "title": "Group Relative Policy Optimization (GRPO) Objective",
+          "equation": "\\mathcal{J}_{\\text{GRPO}}(\\theta) = \\mathbb{E} \\left[ \\frac{1}{G} \\sum_{i=1}^G \\min\\left( \\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)} A_i, \\text{clip}\\left(\\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)}, 1 \\pm \\epsilon\\right) A_i \\right) - \\beta D_{\\text{KL}}(\\pi_\\theta \\parallel \\pi_{\\text{ref}}) \\right]",
+          "breakdown": [
+            {
+              "symbol": "G",
+              "meaning": "Group size of candidate reasoning rollout trajectories sampled for prompt q"
+            },
+            {
+              "symbol": "A_i = \\frac{R_i - \\mu}{\\sigma}",
+              "meaning": "Normalized advantage of rollout i relative to group mean and standard deviation"
+            },
+            {
+              "symbol": "\\epsilon",
+              "meaning": "PPO clipping parameter (typically 0.2) preventing destructive large policy updates"
+            },
+            {
+              "symbol": "\\beta D_{\\text{KL}}",
+              "meaning": "Kullback-Leibler divergence penalty anchoring policy to reference model"
+            }
+          ]
+        },
+        "takeaways": [
+          "System 1 predictors guess the next token instantly; System 2 models spend test-time compute exploring and verifying logic before answering.",
+          "Self-correction and backtracking turn linear token generation into an adaptive search process capable of error recovery.",
+          "Process Reward Models (PRMs) score every intermediate step ($r_t \\in [0, 1]$), providing granular credit assignment and enabling tree search.",
+          "GRPO eliminates the separate Critic/Value network by normalizing advantages across a group of G rollouts, slashing GPU VRAM by over 50%.",
+          "Test-time compute scaling unlocks exponential performance gains during inference through search, verification, and self-consistency voting."
+        ],
+        "commonPitfalls": [
+          "Relying solely on Outcome Reward Models (ORMs) for multi-step reasoning: Causes credit assignment failure and rewards lucky hallucinations.",
+          "Penalizing the model for backtracking: Standard SFT penalizes models for exploring dead ends, which ruins their self-correction ability.",
+          "Omitting KL regularization in GRPO: Without the KL divergence anchor against pi_ref, the policy quickly collapses or learns reward-hacking formatting tricks."
         ]
       }
     }

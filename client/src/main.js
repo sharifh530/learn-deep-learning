@@ -472,7 +472,7 @@ function renderLesson(quest) {
   disposeVisuals();
   dom.lessonContainer.innerHTML = '';
 
-  const lesson = quest.lesson;
+  const lesson = quest.lesson || quest.lessonContent;
   if (!lesson) {
     dom.lessonContainer.innerHTML = `
       <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
@@ -487,12 +487,15 @@ function renderLesson(quest) {
 
   const sectionsHtml = (lesson.sections || []).map((sec, secIdx) => {
     const visual = getSectionVisual(quest.id, secIdx);
-    const callout = sec.callout ? parseCallout(sec.callout) : null;
+    const heading = sec.heading || sec.title || `Section ${secIdx + 1}`;
+    const content = sec.content || (Array.isArray(sec.paragraphs) ? sec.paragraphs.join('\n\n') : '');
+    const rawCallout = sec.callout || (sec.keyTakeaway ? `💡 Key Takeaway: ${sec.keyTakeaway}` : null);
+    const callout = rawCallout ? parseCallout(rawCallout) : null;
     return `
     <div class="lesson-section-card" data-section-idx="${secIdx}">
-      <h3 class="lesson-section-title">${escapeHtml(sec.heading)}</h3>
+      <h3 class="lesson-section-title">${escapeHtml(heading)}</h3>
       <div class="lesson-section-body">
-        ${formatLessonText(sec.content)}
+        ${formatLessonText(content)}
       </div>
       ${visual ? `
         <figure class="lesson-visual-figure" data-visual-idx="${secIdx}">
@@ -519,9 +522,15 @@ function renderLesson(quest) {
   `;
   }).join('');
 
-  const formulaBreakdownHtml = lesson.formulaCard && lesson.formulaCard.breakdown ? `
+  const formulaCard = lesson.formulaCard || (lesson.formula ? {
+    title: 'Mathematical Engine',
+    equation: lesson.formula,
+    breakdown: lesson.formulaExplanation ? [{ symbol: '\\mathcal{J}(\\theta)', meaning: lesson.formulaExplanation }] : []
+  } : null);
+
+  const formulaBreakdownHtml = formulaCard && formulaCard.breakdown ? `
     <div class="formula-breakdown-grid">
-      ${lesson.formulaCard.breakdown.map(item => `
+      ${formulaCard.breakdown.map(item => `
         <div class="formula-param-item">
           <div class="param-symbol-badge">${renderTex(item.symbol)}</div>
           <span class="param-meaning">${formatLessonText(item.meaning, { inline: true })}</span>
@@ -544,27 +553,35 @@ function renderLesson(quest) {
     </li>
   `).join('');
 
+  const analogy = lesson.analogy || (quest.mentalModel ? (typeof quest.mentalModel === 'object' ? {
+    title: quest.mentalModel.analogy || 'Core Mental Model',
+    description: quest.mentalModel.explanation || ''
+  } : {
+    title: 'Core Mental Model',
+    description: quest.mentalModel
+  }) : null);
+
   card.innerHTML = `
     <!-- Lesson Meta Header -->
     <div class="lesson-meta-bar">
       <div class="lesson-badges">
-        <span class="lesson-badge difficulty">${escapeHtml(lesson.difficulty || 'Core Theory')}</span>
-        <span class="lesson-badge time">⏱️ ${escapeHtml(lesson.readTime || '3 min read')}</span>
+        <span class="lesson-badge difficulty">${escapeHtml(lesson.difficulty || 'Advanced Theory')}</span>
+        <span class="lesson-badge time">⏱️ ${escapeHtml(lesson.readTime || '5 min read')}</span>
         <span class="lesson-badge xp">⭐ +${quest.xp} XP Available</span>
       </div>
       <div class="lesson-hook-text">
-        <em>${formatLessonText(lesson.hook || '', { inline: true })}</em>
+        <em>${formatLessonText(lesson.hook || quest.story || '', { inline: true })}</em>
       </div>
     </div>
 
     <!-- Analogy Card -->
-    ${lesson.analogy ? `
+    ${analogy ? `
       <div class="lesson-analogy-card">
         <div class="analogy-header">
           <span class="analogy-tag">CORE MENTAL MODEL</span>
-          <h4 class="analogy-title">${escapeHtml(lesson.analogy.title)}</h4>
+          <h4 class="analogy-title">${escapeHtml(analogy.title)}</h4>
         </div>
-        <div class="analogy-desc">${formatLessonText(lesson.analogy.description)}</div>
+        <div class="analogy-desc">${formatLessonText(analogy.description)}</div>
       </div>
     ` : ''}
 
@@ -574,14 +591,14 @@ function renderLesson(quest) {
     </div>
 
     <!-- Formula Card with KaTeX Math Engine -->
-    ${lesson.formulaCard ? `
+    ${formulaCard ? `
       <div class="lesson-formula-card">
         <div class="formula-card-header">
           <span class="formula-header-icon">📐</span>
-          <h4>${escapeHtml(lesson.formulaCard.title || 'Mathematical Engine')}</h4>
+          <h4>${escapeHtml(formulaCard.title || 'Mathematical Engine')}</h4>
         </div>
         <div class="formula-display-box">
-          ${renderTex(lesson.formulaCard.equation, true)}
+          ${renderTex(formulaCard.equation, true)}
         </div>
         ${formulaBreakdownHtml}
       </div>
