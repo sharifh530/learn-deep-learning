@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 10)
+## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 11)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -256,9 +256,47 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🛡️ Quest 11: Post-Training & Alignment (SFT, ChatML & DPO)
+- **The Concept**:
+  How to turn a raw text predictor into an obedient, conversational, and aligned assistant:
+  - **Pre-Training vs Post-Training:** Base models only know internet completion. SFT and Alignment teach turn-taking and goal orientation.
+  - **ChatML Templates:** Formatting multi-turn dialogue with `<|im_start|>system`, `<|im_start|>user`, and `<|im_start|>assistant` role delimiters.
+  - **Loss Masking:** Setting labels = -100 on prompt tokens so the model only computes Cross-Entropy gradients on the assistant's helpful answers!
+  - **Direct Preference Optimization (DPO):** Eliminating complex PPO Reinforcement Learning and separate Reward Models by optimizing policy likelihood ratios directly against a frozen reference model:
+    $$\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l)} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right) \right]$$
+  - **The KL Anchor ($\beta$):** Enforces a mathematical anchor preventing the policy from collapsing away from its pre-trained common sense.
+- **The Interactive Sandbox**:
+  - **The Alignment Arena:** 4-tier model evolution display (Raw Base vs SFT vs DPO Aligned vs Rejected) across Coding, Cybersecurity, and Healthcare queries.
+  - **Live DPO Telemetry & Gradient Steps:** Adjust $\beta$ and trigger gradient updates to observe reward margins widen.
+  - **ChatML Token Inspector:** Interactive loss mask switcher (-100 vs active targets).
+  - **RLHF vs DPO Architecture Showdown:** VRAM & GPU cluster calculator comparing 4-model PPO vs 2-model DPO.
+- **Hands-On Python (PyTorch)**:
+  ```python
+  import torch
+  import torch.nn.functional as F
+
+  def compute_dpo_loss(pol_win, pol_lose, ref_win, ref_lose, beta=0.1):
+      # Log-ratios: log pi(y) - log ref(y)
+      pi_ratios = pol_win - pol_lose
+      ref_ratios = ref_win - ref_lose
+
+      # Implicit reward margin between winner (y_w) and loser (y_l)
+      logits = beta * (pi_ratios - ref_ratios)
+
+      # DPO Loss = -log(sigmoid(logits))
+      loss = -F.logsigmoid(logits).mean()
+
+      # Telemetry: Implicit rewards
+      r_win = (beta * (pol_win - ref_win)).mean().item()
+      r_lose = (beta * (pol_lose - ref_lose)).mean().item()
+      return loss, r_win, r_lose
+  ```
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 11: Post-Training & Alignment:** Pretraining vs SFT, ChatML templates, RLHF, and Direct Preference Optimization (DPO).
 - **Quest 12: Parameter-Efficient Fine-Tuning (PEFT & LoRA):** Low-Rank decomposition ($W_0 + B \times A$) and 4-bit quantization (QLoRA).
+- **Quest 13: Reasoning Models & Test-Time Compute:** DeepSeek-R1, Chain-of-Thought `<think>` scratchpads, and Test-Time Scaling.
 
 
 ---

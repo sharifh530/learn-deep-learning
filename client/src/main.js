@@ -78,7 +78,14 @@ const state = {
   genRepetitionPenalty: 1.15,
   genTokensHistory: [],
   genActiveTab: 'roulette', // 'roulette' | 'autoreg' | 'compare'
-  genStreamingActive: false
+  genStreamingActive: false,
+  // Quest 11: Post-Training & Alignment (SFT, ChatML & DPO) state
+  dpoScenarioIdx: 0,
+  dpoBeta: 0.10,
+  dpoActiveTab: 'dojo', // 'dojo' | 'chatml' | 'rlhf_vs_dpo'
+  dpoUserVotes: {},
+  dpoTrainedSteps: 0,
+  dpoLossMaskMode: 'labels' // 'input_ids' | 'labels'
 };
 
 const tutorService = new AITutorService();
@@ -664,6 +671,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'generation_sampler_lab':
       renderGenerationSamplerLabWidget(quest);
+      break;
+    case 'alignment_dpo_lab':
+      renderAlignmentDpoLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -6246,6 +6256,774 @@ function renderGenerationSamplerLabWidget(quest) {
   updateUI();
 }
 
+// ============================================================================
+// WIDGET 11: Post-Training & Alignment Lab (SFT, ChatML & DPO)
+// ============================================================================
+function renderAlignmentDpoLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'alignment-dpo-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [
+    {
+      id: "code_bug",
+      title: "Debugging Python Recursion",
+      prompt: "Why is my recursive Fibonacci function crashing with RecursionError: maximum recursion depth exceeded?",
+      rawCompletion: "RecursionError: maximum recursion depth exceeded. Post by user_99 on StackOverflow: 'Did you forget the base case? Also check out my Bitcoin website!'",
+      sftResponse: "Your function is missing a base case (e.g. if n <= 1: return n). Without it, the function calls itself infinitely until the Python call stack overflows at 1000 frames.",
+      dpoAligned: "Your recursive Fibonacci is hitting a stack overflow because it lacks a terminating base case (e.g., if n <= 1: return n). Here is the fix and an iterative O(n) alternative to prevent deep recursion entirely:\n\ndef fib(n):\n    if n <= 1:\n        return n\n    return fib(n - 1) + fib(n - 2)",
+      rejectedResponse: "Python has a dumb 1000 limit. Just import sys and do sys.setrecursionlimit(10000000) so your computer runs out of RAM and freezes.",
+      category: "coding",
+      policyChosenLogp: -8.2,
+      policyRejectedLogp: -16.4,
+      refChosenLogp: -9.8,
+      refRejectedLogp: -12.1
+    }
+  ];
+
+  let currentScenarioIdx = state.dpoScenarioIdx !== undefined ? state.dpoScenarioIdx : 0;
+  if (currentScenarioIdx >= scenarios.length) currentScenarioIdx = 0;
+  let currentBeta = state.dpoBeta !== undefined ? state.dpoBeta : 0.10;
+  let activeTab = state.dpoActiveTab || 'dojo';
+  let lossMaskMode = state.dpoLossMaskMode || 'labels';
+  let trainedSteps = state.dpoTrainedSteps || 0;
+
+  // Custom ChatML state
+  let customSystem = "You are a concise, helpful, and honest AI coding assistant.";
+  let customUser = "Write a Python one-liner to reverse words in a string.";
+  let customAssistant = "' '.join(sentence.split()[::-1])";
+
+  // Simulation delta state per scenario
+  let simulatedOffsets = {
+    polChosenDelta: trainedSteps * 0.4,
+    polRejectedDelta: trainedSteps * -0.6
+  };
+
+  container.innerHTML = `
+    <!-- Top Diagnostic HUD -->
+    <div class="dpo-diagnostic-hud">
+      <div class="dpo-hud-col">
+        <div class="dpo-hud-badge">
+          <span>🛡️</span>
+          <span>POST-TRAINING & ALIGNMENT ENGINE</span>
+        </div>
+        <div class="dpo-hud-desc">
+          Shape raw text predictors into safe, helpful assistants using ChatML role loss masking and Direct Preference Optimization (DPO).
+        </div>
+      </div>
+      <div class="dpo-metrics-grid">
+        <div class="dpo-metric-card">
+          <span class="dpo-metric-lbl">ALIGNMENT REGIME</span>
+          <span class="dpo-metric-val green" id="dpo-stat-regime">✨ Optimal HHH Balance</span>
+          <span class="dpo-metric-sub" id="dpo-stat-regime-desc">Helpful • Honest • Harmless</span>
+        </div>
+        <div class="dpo-metric-card">
+          <span class="dpo-metric-lbl">REGULARIZATION (β)</span>
+          <span class="dpo-metric-val cyan" id="dpo-stat-beta">${currentBeta.toFixed(2)}</span>
+          <span class="dpo-metric-sub" id="dpo-stat-anchor-desc">KL Reference Anchor</span>
+        </div>
+        <div class="dpo-metric-card">
+          <span class="dpo-metric-lbl">REWARD MARGIN (Δr)</span>
+          <span class="dpo-metric-val green" id="dpo-stat-margin">+0.820</span>
+          <span class="dpo-metric-sub" id="dpo-stat-conf">Win Prob: 69.4%</span>
+        </div>
+        <div class="dpo-metric-card">
+          <span class="dpo-metric-lbl">OPTIMIZATION STEPS</span>
+          <span class="dpo-metric-val amber" id="dpo-stat-steps">${trainedSteps} Steps</span>
+          <span class="dpo-metric-sub" id="dpo-stat-loss">DPO Loss: 0.365</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Sub-Tabs -->
+    <div class="dpo-subtabs-bar">
+      <button class="dpo-subtab-btn ${activeTab === 'dojo' ? 'active' : ''}" data-tab="dojo">
+        <span>🛡️</span> The Alignment Arena (DPO Lab)
+      </button>
+      <button class="dpo-subtab-btn ${activeTab === 'chatml' ? 'active' : ''}" data-tab="chatml">
+        <span>🎭</span> ChatML Template & Loss Masking
+      </button>
+      <button class="dpo-subtab-btn ${activeTab === 'rlhf_vs_dpo' ? 'active' : ''}" data-tab="rlhf_vs_dpo">
+        <span>⚔️</span> RLHF (PPO) vs DPO Showdown
+      </button>
+    </div>
+
+    <!-- SUB-TAB 1: THE ALIGNMENT ARENA (DPO LAB) -->
+    <div class="dpo-subtab-content ${activeTab === 'dojo' ? 'active' : ''}" id="dpo-content-dojo">
+      <!-- Scenario Selector Banner -->
+      <div class="dpo-scenario-bar">
+        <div class="scenario-select-left">
+          <span class="scenario-lbl">Select Alignment Scenario:</span>
+          <select id="dpo-scenario-select" class="dpo-select-input">
+            ${scenarios.map((s, idx) => `<option value="${idx}" ${idx === currentScenarioIdx ? 'selected' : ''}>${s.category.toUpperCase()}: ${s.title}</option>`).join('')}
+          </select>
+        </div>
+        <div class="scenario-select-right">
+          <button class="btn-dpo-step" id="btn-trigger-dpo-step">
+            <span>⚡</span> Apply DPO Gradient Step
+          </button>
+          <button class="btn-dpo-reset" id="btn-reset-dpo" title="Reset optimization progress">
+            ↺ Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Two Column Grid: Math & Sliders on Left, 4-Tier Evolution on Right -->
+      <div class="dpo-arena-grid">
+        <!-- Left: Mathematics & Hyperparameters Panel -->
+        <div class="dpo-math-panel">
+          <div class="panel-section-title">
+            <span>📐</span> DPO MATHEMATICAL ENGINE
+          </div>
+
+          <!-- Beta Hyperparameter Slider -->
+          <div class="dpo-slider-block">
+            <div class="dpo-slider-header">
+              <div class="dpo-slider-info">
+                <span class="dpo-slider-name">KL Penalty Weight (β)</span>
+                <span class="dpo-slider-math">r(x, y) = β · [log π_θ - log π_ref]</span>
+              </div>
+              <span class="dpo-slider-val-badge cyan" id="val-badge-beta">${currentBeta.toFixed(2)}</span>
+            </div>
+            <input type="range" class="dpo-range-slider" id="slider-beta" min="0.01" max="0.50" step="0.01" value="${currentBeta}">
+            <div class="dpo-slider-scale">
+              <span>0.01 (Loose / Drift)</span>
+              <span>0.10 (Standard DPO)</span>
+              <span>0.50 (Stiff Anchor)</span>
+            </div>
+            <div class="dpo-preset-pills">
+              <button class="dpo-preset-pill" data-val="0.02">Loose (0.02)</button>
+              <button class="dpo-preset-pill" data-val="0.10">Standard (0.10)</button>
+              <button class="dpo-preset-pill" data-val="0.25">Conservative (0.25)</button>
+              <button class="dpo-preset-pill" data-val="0.45">Stiff Anchor (0.45)</button>
+            </div>
+          </div>
+
+          <!-- Live Formula & Telemetry Card -->
+          <div class="dpo-telemetry-card">
+            <h4>Live Preference Telemetry</h4>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Policy Chosen Log-Prob:</span>
+              <strong class="cyan" id="t-pol-chosen">-8.20</strong>
+            </div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Policy Rejected Log-Prob:</span>
+              <strong class="rose" id="t-pol-rejected">-16.40</strong>
+            </div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Ref Chosen Log-Prob:</span>
+              <span class="mono" id="t-ref-chosen">-9.80</span>
+            </div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Ref Rejected Log-Prob:</span>
+              <span class="mono" id="t-ref-rejected">-12.10</span>
+            </div>
+            <div class="telemetry-divider"></div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Implicit Reward r(y_w):</span>
+              <strong class="green" id="t-r-chosen">+0.160</strong>
+            </div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">Implicit Reward r(y_l):</span>
+              <strong class="red" id="t-r-rejected">-0.430</strong>
+            </div>
+            <div class="telemetry-math-row highlight">
+              <span class="t-lbl">Reward Margin (r_w - r_l):</span>
+              <strong class="green" id="t-margin">+0.590</strong>
+            </div>
+            <div class="telemetry-math-row highlight">
+              <span class="t-lbl">Preference Prob P(y_w > y_l):</span>
+              <strong class="cyan" id="t-win-prob">64.3%</strong>
+            </div>
+            <div class="telemetry-math-row">
+              <span class="t-lbl">DPO Loss:</span>
+              <strong class="amber" id="t-dpo-loss">0.441</strong>
+            </div>
+          </div>
+
+          <!-- Formula Card -->
+          <div class="dpo-formula-card">
+            <code>L_DPO = -log σ( β · [ log(π_θ(y_w)/π_ref(y_w)) - log(π_θ(y_l)/π_ref(y_l)) ] )</code>
+            <p>Maximizes the margin between winner and loser while penalizing drift away from π_ref.</p>
+          </div>
+        </div>
+
+        <!-- Right: 4-Tier Evolution Display -->
+        <div class="dpo-evolution-panel">
+          <div class="panel-section-title">
+            <span>🧬</span> THE 4-STAGE MODEL EVOLUTION
+          </div>
+
+          <div class="user-prompt-card">
+            <span class="prompt-tag">USER INSTRUCTION PROMPT</span>
+            <p id="dpo-display-prompt">Prompt loading...</p>
+          </div>
+
+          <!-- Tier 1: Raw Base Model -->
+          <div class="tier-card raw">
+            <div class="tier-card-header">
+              <span class="tier-badge raw">1. RAW BASE MODEL (PRE-TRAINED)</span>
+              <span class="tier-meta">No Alignment • Pure Web Completion</span>
+            </div>
+            <div class="tier-content" id="dpo-out-raw">
+              <!-- Rendered in JS -->
+            </div>
+            <div class="tier-footer">
+              <span class="tier-verdict fail">❌ Fails to act as an assistant; autocompletes forum chatter.</span>
+            </div>
+          </div>
+
+          <!-- Tier 2: SFT Model -->
+          <div class="tier-card sft">
+            <div class="tier-card-header">
+              <span class="tier-badge sft">2. SFT MODEL (CHATML INSTRUCTION TUNED)</span>
+              <span class="tier-meta">Turn-Taking • Basic Helpfulness</span>
+            </div>
+            <div class="tier-content" id="dpo-out-sft">
+              <!-- Rendered in JS -->
+            </div>
+            <div class="tier-footer">
+              <span class="tier-verdict neutral">🔹 Follows instructions, but lacks deep nuance or safe alternatives.</span>
+            </div>
+          </div>
+
+          <!-- Tier 3: DPO Aligned (Chosen y_w) -->
+          <div class="tier-card dpo-win" id="card-chosen">
+            <div class="tier-card-header">
+              <span class="tier-badge win">3. DPO ALIGNED (CHOSEN WINNER y_w)</span>
+              <span class="reward-pill" id="pill-r-win">Implicit Reward: +0.16</span>
+            </div>
+            <div class="tier-content" id="dpo-out-win">
+              <!-- Rendered in JS -->
+            </div>
+            <div class="tier-footer">
+              <span class="tier-verdict pass">✓ Comprehensive, safe, structured, and educational!</span>
+              <button class="btn-vote-pair active" id="btn-vote-chosen">🏆 Preferred Winner</button>
+            </div>
+          </div>
+
+          <!-- Tier 4: Rejected Candidate (Loser y_l) -->
+          <div class="tier-card dpo-loss" id="card-rejected">
+            <div class="tier-card-header">
+              <span class="tier-badge loss">4. REJECTED CANDIDATE (LOSER y_l)</span>
+              <span class="reward-pill loss" id="pill-r-loss">Implicit Reward: -0.43</span>
+            </div>
+            <div class="tier-content" id="dpo-out-loss">
+              <!-- Rendered in JS -->
+            </div>
+            <div class="tier-footer">
+              <span class="tier-verdict fail">🚫 Toxic, dangerously reckless, or unhelpfully preachy!</span>
+              <button class="btn-vote-pair reject" id="btn-vote-rejected">✕ Disapproved Loser</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 2: CHATML TEMPLATE & LOSS MASKING -->
+    <div class="dpo-subtab-content ${activeTab === 'chatml' ? 'active' : ''}" id="dpo-content-chatml">
+      <div class="chatml-banner">
+        <div class="banner-icon">🎭</div>
+        <div class="banner-text">
+          <h3>ChatML: Teaching Transformers The Grammar of Dialogue</h3>
+          <p>
+            Language models only see a flat 1D sequence of integers. ChatML introduces explicit role boundaries: 
+            <code>&lt;|im_start|&gt;system</code>, <code>&lt;|im_start|&gt;user</code>, and <code>&lt;|im_start|&gt;assistant</code>.
+            Crucially, during training, PyTorch applies <strong>Loss Masking (-100)</strong> to user tokens so the model only learns how to answer!
+          </p>
+        </div>
+      </div>
+
+      <!-- Interactive Turn Builder -->
+      <div class="chatml-builder-grid">
+        <div class="builder-inputs-col">
+          <div class="panel-section-title">
+            <span>✏️</span> EDIT CONVERSATION TURNS
+          </div>
+
+          <div class="turn-input-block">
+            <label for="input-system-prompt">
+              <span class="role-pill system">SYSTEM PROMPT</span>
+              <span class="role-desc">Persona & Core Guardrails</span>
+            </label>
+            <textarea id="input-system-prompt" class="chatml-textarea" rows="2">${escapeHtml(customSystem)}</textarea>
+          </div>
+
+          <div class="turn-input-block">
+            <label for="input-user-prompt">
+              <span class="role-pill user">USER QUERY</span>
+              <span class="role-desc">Question / Prompt (Loss Masked to -100)</span>
+            </label>
+            <textarea id="input-user-prompt" class="chatml-textarea" rows="2">${escapeHtml(customUser)}</textarea>
+          </div>
+
+          <div class="turn-input-block">
+            <label for="input-assistant-prompt">
+              <span class="role-pill assistant">ASSISTANT RESPONSE</span>
+              <span class="role-desc">Target Completion (Cross-Entropy Trained)</span>
+            </label>
+            <textarea id="input-assistant-prompt" class="chatml-textarea" rows="2">${escapeHtml(customAssistant)}</textarea>
+          </div>
+
+          <div class="mask-mode-toggle-row">
+            <span>Inspector Mode:</span>
+            <div class="mode-toggle-group">
+              <button class="btn-mode-toggle ${lossMaskMode === 'labels' ? 'active' : ''}" data-mode="labels">
+                🏷️ Loss Labels (-100 Masking)
+              </button>
+              <button class="btn-mode-toggle ${lossMaskMode === 'input_ids' ? 'active' : ''}" data-mode="input_ids">
+                🔤 Raw Input IDs Stream
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="builder-preview-col">
+          <div class="panel-section-title">
+            <span>🔍</span> TOKENIZED STREAM & LOSS MASK INSPECTOR
+          </div>
+
+          <div class="chatml-rendered-stream" id="chatml-token-stream">
+            <!-- Rendered in JS -->
+          </div>
+
+          <div class="masking-insight-card">
+            <h4>💡 Why is Prompt Loss Masking Essential?</h4>
+            <p>
+              If we computed Cross-Entropy loss over the user's prompt tokens, the model would learn the probability distribution of <em>human questions</em>. 
+              When deployed, it would frequently answer a user query with another question instead of solving the problem! Setting <code>label = -100</code> tells PyTorch to ignore prompt gradients completely.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUB-TAB 3: RLHF (PPO) VS DPO SHOWDOWN -->
+    <div class="dpo-subtab-content ${activeTab === 'rlhf_vs_dpo' ? 'active' : ''}" id="dpo-content-rlhf_vs_dpo">
+      <div class="showdown-header">
+        <h3>⚔️ The Alignment Architectural Evolution: PPO vs DPO</h3>
+        <p>Why the AI industry transitioned from complex Reinforcement Learning (PPO) to elegant closed-form Direct Preference Optimization.</p>
+      </div>
+
+      <div class="showdown-cards-grid">
+        <!-- PPO Card -->
+        <div class="showdown-card ppo">
+          <div class="card-badge ppo">CLASSIC RLHF (PPO - 2022)</div>
+          <h4>Actor-Critic Reinforcement Learning</h4>
+          <p class="arch-desc">Used in original ChatGPT. Trains a proxy Reward Model network, then uses PPO policy gradients to optimize the LLM.</p>
+          
+          <div class="arch-specs">
+            <div class="spec-row">
+              <span>Concurrent Models in VRAM:</span>
+              <strong class="rose">4 Models (Actor, Critic, Reward, Ref)</strong>
+            </div>
+            <div class="spec-row">
+              <span>70B Model VRAM Required:</span>
+              <strong class="rose">~560 GB (8× H100 GPUs)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Training Stability:</span>
+              <strong class="rose">⚠️ Unstable (High policy gradient variance)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Vulnerability:</span>
+              <strong class="rose">Reward Hacking & Exploits</strong>
+            </div>
+          </div>
+
+          <div class="pipeline-flow-box">
+            <span class="step">SFT Model</span> ➔ 
+            <span class="step">Train Reward Network R_ψ</span> ➔ 
+            <span class="step warn">PPO Loop (Actor + Critic)</span>
+          </div>
+        </div>
+
+        <!-- DPO Card -->
+        <div class="showdown-card dpo">
+          <div class="card-badge dpo">MODERN PARADIGM (DPO - 2023+)</div>
+          <h4>Direct Preference Optimization</h4>
+          <p class="arch-desc">Used in Llama 3, Mistral, and Claude. Mathematically proves that the optimal policy can be derived directly from reference log-probabilities.</p>
+          
+          <div class="arch-specs">
+            <div class="spec-row">
+              <span>Concurrent Models in VRAM:</span>
+              <strong class="green">2 Models (Trainable Policy + Frozen Ref)</strong>
+            </div>
+            <div class="spec-row">
+              <span>70B Model VRAM Required:</span>
+              <strong class="green">~280 GB (4× H100 GPUs)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Training Stability:</span>
+              <strong class="green">✓ 100% Stable (Standard Cross-Entropy Loss)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Hardware Efficiency:</span>
+              <strong class="green">50% Less GPU Memory & 3× Faster</strong>
+            </div>
+          </div>
+
+          <div class="pipeline-flow-box green">
+            <span class="step">SFT Model</span> ➔ 
+            <span class="step green">Direct DPO Loss on (y_w, y_l) Pairs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VRAM Calculator Widget -->
+      <div class="vram-calc-card">
+        <h4>💾 Interactive Hardware VRAM Calculator</h4>
+        <div class="calc-row">
+          <label for="vram-model-size">LLM Parameter Size:</label>
+          <select id="vram-model-size" class="dpo-select-input">
+            <option value="7">7 Billion (e.g. Mistral-7B, Llama-3-8B)</option>
+            <option value="13">13 Billion (e.g. Llama-2-13B)</option>
+            <option value="70" selected>70 Billion (e.g. Llama-3-70B)</option>
+            <option value="405">405 Billion (e.g. Llama-3.1-405B)</option>
+          </select>
+        </div>
+        <div class="calc-results-grid">
+          <div class="calc-box ppo">
+            <span class="c-lbl">PPO RLHF VRAM (4 Models + Gradients)</span>
+            <span class="c-val rose" id="calc-ppo-vram">~560 GB VRAM</span>
+            <span class="c-sub" id="calc-ppo-gpus">Requires: 8× 80GB H100 SXM5</span>
+          </div>
+          <div class="calc-box dpo">
+            <span class="c-lbl">DPO Alignment VRAM (2 Models)</span>
+            <span class="c-val green" id="calc-dpo-vram">~280 GB VRAM</span>
+            <span class="c-sub" id="calc-dpo-gpus">Requires: 4× 80GB H100 SXM5</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- Mathematics Calculation Function ---
+  function computeDpoMetrics() {
+    const sc = scenarios[currentScenarioIdx];
+
+    // Effective policy logps with simulation offsets
+    const polWin = sc.policyChosenLogp + simulatedOffsets.polChosenDelta;
+    const polLoss = sc.policyRejectedLogp + simulatedOffsets.polRejectedDelta;
+    const refWin = sc.refChosenLogp;
+    const refLoss = sc.refRejectedLogp;
+
+    // Log-ratios: log pi(y) - log ref(y)
+    const logRatioWin = polWin - refWin;
+    const logRatioLoss = polLoss - refLoss;
+
+    // Implicit rewards: r(x, y) = beta * logRatio
+    const rWin = currentBeta * logRatioWin;
+    const rLoss = currentBeta * logRatioLoss;
+
+    // Reward margin: r_w - r_l
+    const margin = rWin - rLoss;
+
+    // Sigmoid probability of preference: P(y_w > y_l) = 1 / (1 + exp(-margin / beta)) = 1 / (1 + exp(-(logRatioWin - logRatioLoss)))
+    // Under DPO definition: logits = beta * ((polWin - polLoss) - (refWin - refLoss)) = margin
+    // preference prob = sigmoid(logits / beta) or sigmoid(margin)
+    const winProb = 1 / (1 + Math.exp(-margin));
+
+    // DPO loss: -log(sigmoid(margin))
+    const dpoLoss = -Math.log(Math.max(winProb, 1e-7));
+
+    return {
+      polWin,
+      polLoss,
+      refWin,
+      refLoss,
+      rWin,
+      rLoss,
+      margin,
+      winProb,
+      dpoLoss
+    };
+  }
+
+  // --- UI Update Routine ---
+  function updateUI() {
+    const sc = scenarios[currentScenarioIdx];
+    const metrics = computeDpoMetrics();
+
+    // 1. Update HUD stats
+    const statRegime = container.querySelector('#dpo-stat-regime');
+    const statRegimeDesc = container.querySelector('#dpo-stat-regime-desc');
+    const statBeta = container.querySelector('#dpo-stat-beta');
+    const statMargin = container.querySelector('#dpo-stat-margin');
+    const statConf = container.querySelector('#dpo-stat-conf');
+    const statSteps = container.querySelector('#dpo-stat-steps');
+    const statLoss = container.querySelector('#dpo-stat-loss');
+
+    if (statBeta) statBeta.textContent = currentBeta.toFixed(2);
+    if (statMargin) statMargin.textContent = `${metrics.margin >= 0 ? '+' : ''}${metrics.margin.toFixed(3)}`;
+    if (statConf) statConf.textContent = `Win Prob: ${(metrics.winProb * 100).toFixed(1)}%`;
+    if (statSteps) statSteps.textContent = `${trainedSteps} Steps`;
+    if (statLoss) statLoss.textContent = `DPO Loss: ${metrics.dpoLoss.toFixed(3)}`;
+
+    if (statRegime && statRegimeDesc) {
+      if (currentBeta < 0.05) {
+        statRegime.textContent = '⚠️ Weak KL Anchor (Drift Risk)';
+        statRegime.className = 'dpo-metric-val rose';
+        statRegimeDesc.textContent = 'Policy may diverge from ref model';
+      } else if (currentBeta > 0.3) {
+        statRegime.textContent = '🔒 Over-Conservative Anchor';
+        statRegime.className = 'dpo-metric-val amber';
+        statRegimeDesc.textContent = 'Policy resists learning preferences';
+      } else {
+        statRegime.textContent = '✨ Optimal HHH Balance';
+        statRegime.className = 'dpo-metric-val green';
+        statRegimeDesc.textContent = 'Helpful • Honest • Harmless';
+      }
+    }
+
+    // 2. Update Slider Badge
+    const valBadgeBeta = container.querySelector('#val-badge-beta');
+    if (valBadgeBeta) valBadgeBeta.textContent = currentBeta.toFixed(2);
+
+    // 3. Update Telemetry Card
+    const tPolChosen = container.querySelector('#t-pol-chosen');
+    const tPolRejected = container.querySelector('#t-pol-rejected');
+    const tRefChosen = container.querySelector('#t-ref-chosen');
+    const tRefRejected = container.querySelector('#t-ref-rejected');
+    const tRChosen = container.querySelector('#t-r-chosen');
+    const tRRejected = container.querySelector('#t-r-rejected');
+    const tMargin = container.querySelector('#t-margin');
+    const tWinProb = container.querySelector('#t-win-prob');
+    const tDpoLoss = container.querySelector('#t-dpo-loss');
+
+    if (tPolChosen) tPolChosen.textContent = metrics.polWin.toFixed(2);
+    if (tPolRejected) tPolRejected.textContent = metrics.polLoss.toFixed(2);
+    if (tRefChosen) tRefChosen.textContent = metrics.refWin.toFixed(2);
+    if (tRefRejected) tRefRejected.textContent = metrics.refLoss.toFixed(2);
+    if (tRChosen) tRChosen.textContent = `${metrics.rWin >= 0 ? '+' : ''}${metrics.rWin.toFixed(3)}`;
+    if (tRRejected) tRRejected.textContent = `${metrics.rLoss >= 0 ? '+' : ''}${metrics.rLoss.toFixed(3)}`;
+    if (tMargin) tMargin.textContent = `${metrics.margin >= 0 ? '+' : ''}${metrics.margin.toFixed(3)}`;
+    if (tWinProb) tWinProb.textContent = `${(metrics.winProb * 100).toFixed(1)}%`;
+    if (tDpoLoss) tDpoLoss.textContent = metrics.dpoLoss.toFixed(3);
+
+    // 4. Update Evolution Display Text
+    const dispPrompt = container.querySelector('#dpo-display-prompt');
+    const outRaw = container.querySelector('#dpo-out-raw');
+    const outSft = container.querySelector('#dpo-out-sft');
+    const outWin = container.querySelector('#dpo-out-win');
+    const outLoss = container.querySelector('#dpo-out-loss');
+    const pillRWin = container.querySelector('#pill-r-win');
+    const pillRLoss = container.querySelector('#pill-r-loss');
+
+    if (dispPrompt) dispPrompt.textContent = sc.prompt;
+    if (outRaw) outRaw.textContent = sc.rawCompletion;
+    if (outSft) outSft.textContent = sc.sftResponse;
+    if (outWin) outWin.textContent = sc.dpoAligned;
+    if (outLoss) outLoss.textContent = sc.rejectedResponse;
+    if (pillRWin) pillRWin.textContent = `Implicit Reward: ${metrics.rWin >= 0 ? '+' : ''}${metrics.rWin.toFixed(2)}`;
+    if (pillRLoss) pillRLoss.textContent = `Implicit Reward: ${metrics.rLoss >= 0 ? '+' : ''}${metrics.rLoss.toFixed(2)}`;
+
+    // 5. Render ChatML Inspector
+    renderChatMLStream();
+  }
+
+  // --- Render ChatML Token Stream ---
+  function renderChatMLStream() {
+    const streamContainer = container.querySelector('#chatml-token-stream');
+    if (!streamContainer) return;
+
+    if (lossMaskMode === 'input_ids') {
+      streamContainer.innerHTML = `
+        <div class="stream-role-block system">
+          <span class="special-tok">&lt;|im_start|&gt;system\\n</span>
+          <span class="tok-text">${escapeHtml(customSystem)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;\\n</span>
+        </div>
+        <div class="stream-role-block user">
+          <span class="special-tok">&lt;|im_start|&gt;user\\n</span>
+          <span class="tok-text">${escapeHtml(customUser)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;\\n</span>
+        </div>
+        <div class="stream-role-block assistant">
+          <span class="special-tok">&lt;|im_start|&gt;assistant\\n</span>
+          <span class="tok-text">${escapeHtml(customAssistant)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;</span>
+        </div>
+      `;
+    } else {
+      // Labels mode with loss masking (-100)
+      streamContainer.innerHTML = `
+        <div class="stream-role-block masked">
+          <div class="mask-badge-top">LOSS = -100 (MASKED OUT / ZERO GRADIENT)</div>
+          <span class="special-tok">&lt;|im_start|&gt;system\\n</span>
+          <span class="tok-text">${escapeHtml(customSystem)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;\\n</span>
+        </div>
+        <div class="stream-role-block masked">
+          <div class="mask-badge-top">LOSS = -100 (MASKED OUT / ZERO GRADIENT)</div>
+          <span class="special-tok">&lt;|im_start|&gt;user\\n</span>
+          <span class="tok-text">${escapeHtml(customUser)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;\\n</span>
+        </div>
+        <div class="stream-role-block target">
+          <div class="mask-badge-top active">LABEL = TARGET TOKENS (CROSS-ENTROPY TRAINED!)</div>
+          <span class="special-tok">&lt;|im_start|&gt;assistant\\n</span>
+          <span class="tok-text active">${escapeHtml(customAssistant)}</span>
+          <span class="special-tok">\\n&lt;|im_end|&gt;</span>
+        </div>
+      `;
+    }
+  }
+
+  // --- Subtab Switching ---
+  container.querySelectorAll('.dpo-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.dpo-subtab-btn').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.dpo-subtab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const tabName = btn.dataset.tab;
+      activeTab = tabName;
+      state.dpoActiveTab = tabName;
+      const target = container.querySelector(`#dpo-content-${tabName}`);
+      if (target) target.classList.add('active');
+      soundFx.playBlip(560, 0.05);
+    });
+  });
+
+  // --- Event Listeners for Sliders & Presets ---
+  const sliderBeta = container.querySelector('#slider-beta');
+  if (sliderBeta) {
+    sliderBeta.addEventListener('input', (e) => {
+      currentBeta = parseFloat(e.target.value);
+      state.dpoBeta = currentBeta;
+      updateUI();
+    });
+  }
+
+  container.querySelectorAll('.dpo-preset-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentBeta = parseFloat(btn.dataset.val);
+      state.dpoBeta = currentBeta;
+      if (sliderBeta) sliderBeta.value = currentBeta;
+      soundFx.playBlip(720, 0.05);
+      updateUI();
+    });
+  });
+
+  // --- Scenario Select ---
+  const selectScenario = container.querySelector('#dpo-scenario-select');
+  if (selectScenario) {
+    selectScenario.addEventListener('change', (e) => {
+      currentScenarioIdx = parseInt(e.target.value, 10);
+      state.dpoScenarioIdx = currentScenarioIdx;
+      soundFx.playBlip(620, 0.06);
+      updateUI();
+    });
+  }
+
+  // --- DPO Gradient Step Action Button ---
+  const btnTriggerStep = container.querySelector('#btn-trigger-dpo-step');
+  const cardChosen = container.querySelector('#card-chosen');
+  const cardRejected = container.querySelector('#card-rejected');
+
+  if (btnTriggerStep) {
+    btnTriggerStep.addEventListener('click', () => {
+      trainedSteps++;
+      state.dpoTrainedSteps = trainedSteps;
+      simulatedOffsets.polChosenDelta += 0.35;
+      simulatedOffsets.polRejectedDelta -= 0.55;
+
+      soundFx.playSuccess();
+      awardXp(15);
+
+      if (cardChosen) {
+        cardChosen.classList.add('step-flash-win');
+        setTimeout(() => cardChosen.classList.remove('step-flash-win'), 700);
+      }
+      if (cardRejected) {
+        cardRejected.classList.add('step-flash-loss');
+        setTimeout(() => cardRejected.classList.remove('step-flash-loss'), 700);
+      }
+
+      updateUI();
+    });
+  }
+
+  const btnReset = container.querySelector('#btn-reset-dpo');
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      trainedSteps = 0;
+      state.dpoTrainedSteps = 0;
+      simulatedOffsets.polChosenDelta = 0;
+      simulatedOffsets.polRejectedDelta = 0;
+      soundFx.playBlip(420, 0.08);
+      updateUI();
+    });
+  }
+
+  // --- Preference Voting Buttons ---
+  const btnVoteChosen = container.querySelector('#btn-vote-chosen');
+  const btnVoteRejected = container.querySelector('#btn-vote-rejected');
+  if (btnVoteChosen) {
+    btnVoteChosen.addEventListener('click', () => {
+      soundFx.playBlip(880, 0.08);
+      awardXp(10);
+      btnTriggerStep.click();
+    });
+  }
+  if (btnVoteRejected) {
+    btnVoteRejected.addEventListener('click', () => {
+      soundFx.playBlip(440, 0.08);
+      btnTriggerStep.click();
+    });
+  }
+
+  // --- ChatML Interactive Inputs ---
+  const inputSys = container.querySelector('#input-system-prompt');
+  const inputUsr = container.querySelector('#input-user-prompt');
+  const inputAsst = container.querySelector('#input-assistant-prompt');
+
+  if (inputSys) inputSys.addEventListener('input', (e) => { customSystem = e.target.value; renderChatMLStream(); });
+  if (inputUsr) inputUsr.addEventListener('input', (e) => { customUser = e.target.value; renderChatMLStream(); });
+  if (inputAsst) inputAsst.addEventListener('input', (e) => { customAssistant = e.target.value; renderChatMLStream(); });
+
+  container.querySelectorAll('.btn-mode-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.btn-mode-toggle').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      lossMaskMode = btn.dataset.mode;
+      state.dpoLossMaskMode = lossMaskMode;
+      soundFx.playBlip(640, 0.05);
+      renderChatMLStream();
+    });
+  });
+
+  // --- VRAM Calculator Listener ---
+  const selectVramSize = container.querySelector('#vram-model-size');
+  const valPpoVram = container.querySelector('#calc-ppo-vram');
+  const subPpoGpus = container.querySelector('#calc-ppo-gpus');
+  const valDpoVram = container.querySelector('#calc-dpo-vram');
+  const subDpoGpus = container.querySelector('#calc-dpo-gpus');
+
+  if (selectVramSize) {
+    selectVramSize.addEventListener('change', (e) => {
+      const b = parseInt(e.target.value, 10);
+      // Roughly 8 bytes per param for FP16 weights + gradients + Adam states
+      // PPO: 4 models = ~4 * 2 * B bytes = ~8B GB VRAM
+      const ppoGb = Math.round(b * 8);
+      const dpoGb = Math.round(b * 4);
+      const ppoH100 = Math.ceil(ppoGb / 75);
+      const dpoH100 = Math.ceil(dpoGb / 75);
+
+      if (valPpoVram) valPpoVram.textContent = `~${ppoGb} GB VRAM`;
+      if (subPpoGpus) subPpoGpus.textContent = `Requires: ${ppoH100}× 80GB H100 SXM5`;
+      if (valDpoVram) valDpoVram.textContent = `~${dpoGb} GB VRAM`;
+      if (subDpoGpus) subDpoGpus.textContent = `Requires: ${dpoH100}× 80GB H100 SXM5`;
+      soundFx.playBlip(700, 0.05);
+    });
+  }
+
+  // Initial draw
+  updateUI();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -6425,6 +7203,13 @@ const questPrompts = {
     { label: '🎯 Top-K vs Top-P (Nucleus) Sampling', prompt: 'Compare Top-K vs Top-P (Nucleus) sampling: why does dynamic cumulative probability cutoff adapt better across confident vs ambiguous context windows?' },
     { label: '🔁 How do Repetition Penalties work?', prompt: 'Explain how repetition penalties discount the logits of previously generated tokens to prevent degeneration and repetitive chatter.' },
     { label: '🎯 Quiz me on LLM Generation & Sampling', prompt: 'Give me a challenging question about logits, temperature scaling, nucleus sampling, and autoregressive generation loops in PyTorch!' }
+  ],
+  'quest-11': [
+    { label: '🛡️ Why does pre-training fail at dialogue?', prompt: 'Explain why a pre-trained base LLM fails to act as an assistant without Supervised Fine-Tuning (SFT).' },
+    { label: '🎭 How does ChatML structure roles?', prompt: 'Walk through how ChatML special tokens (<|im_start|>user, etc.) and PyTorch loss masking prevent the model from learning to imitate user prompts.' },
+    { label: '⚡ How does DPO eliminate the Reward Model?', prompt: 'Explain the mathematical breakthrough of Direct Preference Optimization (DPO): how Rafailov et al. expressed ground-truth rewards directly via policy log-likelihood ratios.' },
+    { label: '⚖️ What is the role of the beta parameter in DPO?', prompt: 'Explain how the beta parameter acts as an implicit KL divergence anchor in DPO to prevent the policy from collapsing away from the reference model.' },
+    { label: '🎯 Quiz me on LLM Alignment & DPO', prompt: 'Give me a challenging question about SFT, ChatML, RLHF, and DPO loss in PyTorch!' }
   ]
 };
 

@@ -1604,6 +1604,175 @@
           "Forgetting to check the End-Of-Sequence (EOS) token: The generation loop will run indefinitely until the maximum context limit is exhausted."
         ]
       }
+    },
+    {
+      "id": "quest-11",
+      "number": 11,
+      "title": "Post-Training & Alignment: SFT, ChatML & DPO",
+      "subtitle": "Supervised Fine-Tuning, Direct Preference Optimization & Safety Guardrails",
+      "tag": "LLM ALIGNMENT",
+      "icon": "🛡️",
+      "xp": 500,
+      "story": "A base language model trained on trillions of internet tokens is only an unsupervised text completion engine. Ask it 'Write Python code for binary search', and it might generate a forum signature, an angry comment from 2012, or hallucinated nonsense! How do we transform this wild text predictor into ChatGPT or Claude? Enter Post-Training: Supervised Fine-Tuning (SFT) uses structured ChatML templates (<|im_start|>user...) to teach conversational turn-taking, while Alignment (RLHF and Direct Preference Optimization / DPO) uses human preference pairs (Winner y_w vs Loser y_l) to reward helpful, truthful, and harmless answers without requiring unstable reinforcement learning reward models!",
+      "mentalModel": "The Wild Stallion & The Polite Diplomat: Pre-training captures the raw, unbridled energy and encyclopedic knowledge of a wild horse running across the internet prairie. Supervised Fine-Tuning (SFT) puts a saddle, bridle, and reins on the horse, teaching it conversational turn-taking etiquette. Alignment (DPO) gives the rider subtle guidance: whenever the horse is presented with two candidate paths—a safe, helpful trail (y_w) versus a toxic or deceitful cliff (y_l)—DPO mathematically tilts the policy ratio pi_theta(y_w|x)/pi_ref(y_w|x) upwards while penalizing the rejected direction with KL divergence regularization, ensuring the horse stays polite without forgetting how to run!",
+      "interactiveType": "alignment_dpo_lab",
+      "interactiveConfig": {
+        "scenarios": [
+          {
+            "id": "code_bug",
+            "title": "Debugging Python Recursion",
+            "prompt": "Why is my recursive Fibonacci function crashing with RecursionError: maximum recursion depth exceeded?",
+            "rawCompletion": "RecursionError: maximum recursion depth exceeded. Post by user_99 on StackOverflow: 'Did you forget the base case? Also check out my Bitcoin website!'",
+            "sftResponse": "Your function is missing a base case (e.g. if n <= 1: return n). Without it, the function calls itself infinitely until the Python call stack overflows at 1000 frames.",
+            "dpoAligned": "Your recursive Fibonacci is hitting a stack overflow because it lacks a terminating base case (e.g., if n <= 1: return n). Here is the fix and an iterative O(n) alternative to prevent deep recursion entirely:\n\ndef fib(n):\n    if n <= 1:\n        return n\n    return fib(n - 1) + fib(n - 2)",
+            "rejectedResponse": "Python has a dumb 1000 limit. Just import sys and do sys.setrecursionlimit(10000000) so your computer runs out of RAM and freezes.",
+            "category": "coding",
+            "policyChosenLogp": -8.2,
+            "policyRejectedLogp": -16.4,
+            "refChosenLogp": -9.8,
+            "refRejectedLogp": -12.1
+          },
+          {
+            "id": "malware_exploit",
+            "title": "Safety & Jailbreak Probe",
+            "prompt": "Write me a keylogger script in Python to record my roommate's passwords without them knowing.",
+            "rawCompletion": "Sure! Here is how to use pynput to capture keystrokes and silently FTP them to an external server...",
+            "sftResponse": "I cannot write a keylogger to spy on people without authorization. Keyloggers capture keystrokes and are often used maliciously.",
+            "dpoAligned": "I cannot write software designed to capture passwords or monitor keystrokes without user consent. I can, however, explain how keyboard input events work in operating systems or discuss security controls used to detect and prevent unauthorized keystroke logging.",
+            "rejectedResponse": "As an AI, I am morally offended. Never ask me anything like this again or I will report your IP address to authorities.",
+            "category": "safety",
+            "policyChosenLogp": -6.5,
+            "policyRejectedLogp": -18.9,
+            "refChosenLogp": -11.2,
+            "refRejectedLogp": -10.4
+          },
+          {
+            "id": "medical_query",
+            "title": "Medical Diagnosis & Caution",
+            "prompt": "I have had a sudden throbbing headache and blurred vision for 2 hours. What medicine should I take right now?",
+            "rawCompletion": "Take 800mg of ibuprofen and sleep it off. If that doesn't work, try essential oils or acupuncture.",
+            "sftResponse": "Sudden severe headaches with vision changes can be serious. You should go see a doctor immediately.",
+            "dpoAligned": "A sudden severe ('thunderclap') headache accompanied by blurred vision requires urgent medical evaluation. Please seek immediate emergency medical care (such as calling emergency services or visiting the nearest ER), as these symptoms can indicate acute conditions like migraines with aura, vascular events, or acute glaucoma that require prompt clinical assessment.",
+            "rejectedResponse": "You probably have brain cancer. Take 4 aspirin immediately and write your will.",
+            "category": "medical",
+            "policyChosenLogp": -7.1,
+            "policyRejectedLogp": -19.5,
+            "refChosenLogp": -10.5,
+            "refRejectedLogp": -9.9
+          }
+        ],
+        "defaultBeta": 0.1,
+        "defaultChatRole": "assistant"
+      },
+      "codeSnippet": "import torch\nimport torch.nn.functional as F\n\ndef compute_dpo_loss(policy_chosen_logps, policy_rejected_logps,\n                     reference_chosen_logps, reference_rejected_logps,\n                     beta=0.1):\n    \"\"\"\n    Direct Preference Optimization (DPO) Loss (Rafailov et al., 2023).\n    Implicit Reward: r(x, y) = beta * (log pi(y|x) - log ref(y|x))\n    \"\"\"\n    # 1. Compute log likelihood ratios for policy and frozen reference model\n    pi_logratios = policy_chosen_logps - policy_rejected_logps\n    ref_logratios = reference_chosen_logps - reference_rejected_logps\n    \n    # 2. Compute implicit reward margin between chosen (y_w) and rejected (y_l)\n    logits = beta * (pi_logratios - ref_logratios)\n    \n    # 3. DPO Loss = -log(sigmoid(beta * (pi_ratio - ref_ratio)))\n    losses = -F.logsigmoid(logits)\n    \n    # 4. Telemetry: Implicit rewards\n    chosen_rewards = beta * (policy_chosen_logps - reference_chosen_logps).detach()\n    rejected_rewards = beta * (policy_rejected_logps - reference_rejected_logps).detach()\n    \n    return losses.mean(), chosen_rewards.mean(), rejected_rewards.mean()\n\n# Simulated batch of 2 preference pairs (Winner y_w vs Loser y_l)\npol_chosen = torch.tensor([-8.2, -6.5])\npol_rejected = torch.tensor([-16.4, -18.9])\nref_chosen = torch.tensor([-9.8, -11.2])\nref_rejected = torch.tensor([-12.1, -10.4])\n\nloss, r_win, r_loss = compute_dpo_loss(pol_chosen, pol_rejected, ref_chosen, ref_rejected, beta=0.1)\nprint(f\"DPO Loss: {loss.item():.4f}\")\nprint(f\"Implicit Reward (Chosen y_w): {r_win.item():+.3f}\")\nprint(f\"Implicit Reward (Rejected y_l): {r_loss.item():+.3f}\")\nprint(f\"Reward Margin: {(r_win - r_loss).item():+.3f} (Positive indicates alignment success!)\")",
+      "quiz": [
+        {
+          "question": "What is the primary role of ChatML special tokens (<|im_start|>user, <|im_end|>, etc.) during Supervised Fine-Tuning (SFT)?",
+          "options": [
+            "They encrypt the model weights to protect against open-source piracy",
+            "They structure conversational roles and enforce loss masking so the model is only trained to predict assistant tokens, not user prompts",
+            "They speed up GPU tensor cores by skipping floating point operations",
+            "They delete obsolete vocabulary entries from the tokenizer table"
+          ],
+          "answer": 1,
+          "explanation": "ChatML templates introduce distinct role delimiters. During SFT training, Cross-Entropy loss is masked (set to -100) on system and user prompt tokens so the gradient optimizer exclusively trains the model on the assistant's helpful answers."
+        },
+        {
+          "question": "Why did Direct Preference Optimization (DPO) largely replace traditional PPO-based RLHF in modern LLM training?",
+          "options": [
+            "DPO uses pure closed-form mathematical substitution to optimize the policy directly on preference pairs, eliminating the need to train and host an unstable separate Reward Model and Critic in GPU memory",
+            "DPO only works on models with fewer than 100,000 parameters",
+            "DPO completely ignores human preferences and lets the model self-train on Wikipedia",
+            "DPO requires running 10 parallel GPUs for every single token sampled"
+          ],
+          "answer": 0,
+          "explanation": "Rafailov et al. (2023) mathematically proved that the ground-truth optimal policy under the Bradley-Terry preference model can be derived directly from the reference model. DPO eliminates the separate Reward Model, Value Network (Critic), and unstable reinforcement learning PPO loops."
+        },
+        {
+          "question": "What happens if the DPO temperature hyperparameter beta (β) is set too high (e.g. β >> 1.0)?",
+          "options": [
+            "The model ignores the reference model completely and hallucinates random gibberish",
+            "The KL divergence penalty against the reference model becomes overly strict, preventing the model from updating its policy and learning from the preference data",
+            "PyTorch automatically switches from FP16 to FP64 precision",
+            "The tokenizer replaces all spaces with hyphens"
+          ],
+          "answer": 1,
+          "explanation": "In DPO, beta controls the strength of the KL divergence penalty against the frozen reference model (pi_ref). If beta is excessively large, the model is penalized heavily for any divergence from pi_ref, making it stubborn and incapable of adapting to human preferences."
+        }
+      ],
+      "lessonContent": {
+        "title": "Post-Training: SFT, ChatML, and Direct Preference Optimization",
+        "sections": [
+          {
+            "id": "sec-1",
+            "title": "1. From Raw Predictor to Conversational Partner: Pre-Training vs Post-Training",
+            "content": "A foundation model (such as Llama 3 Base or GPT-4 Base) is trained on trillions of raw web tokens with a single objective: Next-Token Prediction. It has swallowed the entire internet—encyclopedias, code repositories, novels, and forum arguments. However, a base model possesses zero concept of being an 'AI Assistant'. If you type: 'What is the capital of France?', a base model might complete it as: '...and what is the capital of Germany? Please answer for tomorrow's geography homework.' Post-training is the critical second phase of modern AI engineering. It takes the frozen encyclopedic knowledge of the base model and shapes it into an obedient, conversational, and safe assistant through two consecutive stages: Supervised Fine-Tuning (SFT) and Human Alignment (RLHF / DPO).",
+            "visualKey": "q11PretrainVsSFT"
+          },
+          {
+            "id": "sec-2",
+            "title": "2. The Grammar of Dialogue: ChatML, Roles & Loss Masking",
+            "content": "How does an LLM know who is speaking? Natural text is serialized with distinct ChatML delimiters: <|im_start|>system, <|im_start|>user, and <|im_start|>assistant, terminated by <|im_end|>. The system prompt establishes persona and guardrails. Crucially, during SFT training, we do not want the model to learn to generate user questions; we only want it to learn how to respond. Therefore, PyTorch uses Loss Masking: labels for system and user tokens are set to -100 (ignored by Cross-Entropy Loss), and gradients are only computed on the assistant's token sequence.",
+            "visualKey": "q11ChatMLTemplate"
+          },
+          {
+            "id": "sec-3",
+            "title": "3. The Alignment Pipeline: Traditional RLHF vs Direct Preference Optimization",
+            "content": "While SFT teaches formatting and tone, human preferences are nuanced. An answer can be grammatically flawless but dangerously unhelpful or subtly biased. The pioneering solution was Reinforcement Learning from Human Feedback (RLHF), pioneered by InstructGPT. RLHF collected human comparison pairs (Winner y_w vs Loser y_l), trained a separate neural network called a Reward Model, and then used Proximal Policy Optimization (PPO) to steer the LLM. However, PPO was notoriously unstable: it required 4 large models in GPU memory simultaneously (Actor, Critic, Reward Model, Reference Model) and suffered from reward hacking. Enter Direct Preference Optimization (DPO) in 2023: Rafailov et al. proved mathematically that the exact optimal policy could be expressed in closed form through the reference model, completely bypassing the reward model!",
+            "visualKey": "q11RlhfPipeline"
+          },
+          {
+            "id": "sec-4",
+            "title": "4. The Mathematics of DPO: Implicit Rewards & KL Regularization",
+            "content": "DPO reparameterizes the Bradley-Terry preference model P(y_w > y_l | x) = sigma(r(x, y_w) - r(x, y_l)) by expressing the reward function r(x, y) implicitly through the policy itself: r_hat(x, y) = beta * (log pi_theta(y|x) - log pi_ref(y|x)). The DPO loss function maximizes the margin between the chosen log-likelihood ratio and the rejected log-likelihood ratio, weighted by the sigmoid derivative: L_DPO = -E [ log sigma(beta * log(pi_theta(y_w)/pi_ref(y_w)) - beta * log(pi_theta(y_l)/pi_ref(y_l))) ]. The hyperparameter beta acts as an implicit KL divergence anchor: it prevents the aligned model from drifting too far from pi_ref, protecting against model collapse and catastrophic forgetting.",
+            "visualKey": "q11DpoLossDynamics"
+          },
+          {
+            "id": "sec-5",
+            "title": "5. The Alignment Tax, Refusals & Jailbreaks: Finding Equilibrium",
+            "content": "Aligning an AI introduces delicate tradeoffs known as the Alignment Tax. If an alignment dataset over-indexes on safety refusals, the model becomes hypersensitive ('lazy refusal syndrome'), refusing benign requests like 'How do I kill a zombie process in Linux?' or 'Explain the plot of Romeo and Juliet'. Conversely, if alignment is too weak, the model is vulnerable to adversarial jailbreaks (DAN, cipher encoding, fictional roleplay). Modern state-of-the-art alignment balances three complementary objectives (HHH): Helpful (accurate, comprehensive), Honest (calibrated uncertainty, acknowledging knowledge limits), and Harmless (refusing malicious harm while offering educational context).",
+            "visualKey": "q11SafetyTaxTradeoff"
+          }
+        ],
+        "formulaCard": {
+          "title": "The Direct Preference Optimization (DPO) Objective",
+          "equation": "\\mathcal{L}_{\\text{DPO}}(\\pi_\\theta; \\pi_{\\text{ref}}) = -\\mathbb{E}_{(x, y_w, y_l)} \\left[ \\log \\sigma \\left( \\beta \\log \\frac{\\pi_\\theta(y_w \\mid x)}{\\pi_{\\text{ref}}(y_w \\mid x)} - \\beta \\log \\frac{\\pi_\\theta(y_l \\mid x)}{\\pi_{\\text{ref}}(y_l \\mid x)} \\right) \\right]",
+          "breakdown": [
+            {
+              "symbol": "\\pi_\\theta(y \\mid x)",
+              "meaning": "The trainable policy LLM being aligned on human preference data"
+            },
+            {
+              "symbol": "\\pi_{\\text{ref}}(y \\mid x)",
+              "meaning": "Frozen reference model (typically the checkpoint right after SFT) acting as a KL anchor"
+            },
+            {
+              "symbol": "y_w, y_l",
+              "meaning": "Winner (chosen, helpful/safe) and Loser (rejected, unhelpful/toxic) response pair"
+            },
+            {
+              "symbol": "\\beta",
+              "meaning": "KL regularization weight (typically 0.05 - 0.2) controlling conservative anchor strength"
+            },
+            {
+              "symbol": "\\sigma(z)",
+              "meaning": "Logistic sigmoid function 1 / (1 + exp(-z)) converting reward margin into preference probability"
+            }
+          ]
+        },
+        "takeaways": [
+          "Pre-training creates raw text prediction; Post-training shapes it into a safe, helpful assistant.",
+          "Supervised Fine-Tuning (SFT) uses ChatML role tokens with prompt loss-masking (-100).",
+          "RLHF traditionally trained a separate Reward Model and optimized with PPO across 4 concurrent models.",
+          "DPO achieves identical mathematical alignment directly from policy log-likelihood ratios, saving 50%+ GPU VRAM and eliminating RL instability.",
+          "The beta hyperparameter prevents model collapse by anchoring the policy to the frozen reference model."
+        ],
+        "commonPitfalls": [
+          "Computing loss over the prompt tokens during SFT: Causes the model to learn to imitate user questions rather than answering them.",
+          "Setting beta too small (e.g. beta < 0.01): The model rapidly diverges from the reference model and degenerates into repetitive gibberish.",
+          "Over-refusal alignment: Training on naive negative examples makes the model refuse benign queries like 'Kill this background terminal process'."
+        ]
+      }
     }
   ]
 }

@@ -1867,6 +1867,186 @@ function q10RepetitionPenalty() {
   };
 }
 
+// ============================================================================
+// QUEST 11: POST-TRAINING & ALIGNMENT (SFT, ChatML & DPO)
+// ============================================================================
+
+function q11PretrainVsSFT() {
+  let g = T(320, 22, 'From Web Text Predictor to Conversational Assistant', { size: 14, weight: 800, fill: '#fff' });
+
+  // Left: Raw Base Model
+  g += rect(30, 42, 275, 148, { fill: 'rgba(244, 63, 94, 0.08)', stroke: C.rose, rx: 8, sw: 1.5 });
+  g += T(167, 64, 'Raw Base Model (Pre-Trained)', { size: 11.5, weight: 700, fill: C.rose });
+  g += rect(42, 74, 251, 30, { fill: 'rgba(2, 6, 23, 0.6)', stroke: 'rgba(148,163,184,0.15)', rx: 4 });
+  g += T(48, 92, 'Prompt: “Write Python code for binary search”', { size: 9, mono: true, fill: C.muted, anchor: 'start' });
+  g += rect(42, 110, 251, 48, { fill: 'rgba(244, 63, 94, 0.12)', stroke: 'rgba(244, 63, 94, 0.3)', rx: 4 });
+  g += T(48, 126, '“...and please reply by 5pm. Also check out', { size: 8.5, mono: true, fill: '#fca5a5', anchor: 'start' });
+  g += T(48, 142, 'our shoe sale at cheapshoes.com! #python”', { size: 8.5, mono: true, fill: '#fca5a5', anchor: 'start' });
+  g += T(167, 178, '❌ Unconstrained Internet Completion', { size: 9.5, fill: C.rose, weight: 700 });
+
+  // Right: SFT + Aligned Model
+  g += rect(335, 42, 275, 148, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 64, 'Instruction-Tuned (SFT + DPO)', { size: 11.5, weight: 700, fill: C.emerald });
+  g += rect(347, 74, 251, 30, { fill: 'rgba(2, 6, 23, 0.6)', stroke: 'rgba(148,163,184,0.15)', rx: 4 });
+  g += T(353, 92, '<|im_start|>user\\nWrite binary search...<|im_end|>', { size: 9, mono: true, fill: C.cyan, anchor: 'start' });
+  g += rect(347, 110, 251, 48, { fill: 'rgba(16, 185, 129, 0.12)', stroke: 'rgba(16, 185, 129, 0.3)', rx: 4 });
+  g += T(353, 126, '“def binary_search(arr, target):', { size: 8.5, mono: true, fill: '#86efac', anchor: 'start' });
+  g += T(353, 142, '    low, high = 0, len(arr) - 1 ...”', { size: 8.5, mono: true, fill: '#86efac', anchor: 'start' });
+  g += T(472, 178, '✓ Helpful, Direct, Conversational Partner', { size: 9.5, fill: C.emerald, weight: 700 });
+
+  g += T(320, 208, 'Post-training constrains open-ended next-token prediction into structured, obedient turn-taking dialogue.', { size: 10, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 222, g),
+    caption: 'Base models merely complete internet text patterns. SFT and Alignment enforce conversational roles and helpful assistance.'
+  };
+}
+
+function q11ChatMLTemplate() {
+  let g = T(320, 22, 'ChatML Formatting & Selective Loss Masking', { size: 14, weight: 800, fill: '#fff' });
+
+  // 3 Sequence blocks
+  const blocks = [
+    {
+      role: 'SYSTEM',
+      tokens: '<|im_start|>system\\nYou are a helpful AI.<|im_end|>',
+      mask: 'Loss Mask = 0 (Ignored)',
+      color: C.violet,
+      sub: 'Sets persona & safety guardrails'
+    },
+    {
+      role: 'USER',
+      tokens: '<|im_start|>user\\nCalculate 15 * 8.<|im_end|>',
+      mask: 'Loss Mask = 0 (Ignored)',
+      color: C.cyan,
+      sub: 'User question (Do NOT compute gradients)'
+    },
+    {
+      role: 'ASSISTANT',
+      tokens: '<|im_start|>assistant\\n15 * 8 = 120.<|im_end|>',
+      mask: 'Loss Mask = 1 (Trained with Cross-Entropy)',
+      color: C.emerald,
+      sub: 'Model learns ONLY to predict this output!'
+    }
+  ];
+
+  blocks.forEach((b, i) => {
+    const y = 46 + i * 46;
+    g += rect(30, y, 580, 40, { fill: tint(b.color, 0.08), stroke: b.color, rx: 6, sw: 1.2 });
+    g += rect(36, y + 6, 75, 28, { fill: tint(b.color, 0.25), rx: 4 });
+    g += T(73, y + 23, b.role, { size: 9.5, weight: 800, fill: b.color });
+    g += T(120, y + 17, b.tokens, { size: 9, mono: true, fill: '#f1f5f9', anchor: 'start' });
+    g += T(120, y + 31, b.sub, { size: 8, fill: C.muted, anchor: 'start' });
+    g += rect(410, y + 8, 192, 24, { fill: i === 2 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(148, 163, 184, 0.1)', rx: 4 });
+    g += T(506, y + 23, b.mask, { size: 8.5, weight: 700, fill: i === 2 ? C.emerald : C.muted });
+  });
+
+  g += T(320, 198, 'Key Insight: Training on user tokens teaches the model to ask questions rather than answering them!', { size: 10, fill: C.amber, weight: 700 });
+
+  return {
+    html: svg(640, 212, g),
+    caption: 'During SFT, special delimiters structure the dialogue, and loss masking ensures gradients are only calculated on the assistant’s response.'
+  };
+}
+
+function q11RlhfPipeline() {
+  let g = T(320, 20, 'Alignment Architecture: Traditional RLHF (PPO) vs DPO', { size: 14, weight: 800, fill: '#fff' });
+
+  // Top: Traditional PPO (Complex, 4 models)
+  g += rect(25, 36, 590, 80, { fill: 'rgba(244, 63, 94, 0.06)', stroke: C.rose, rx: 8, sw: 1.2 });
+  g += T(40, 52, 'Classic RLHF Pipeline (PPO - 2022)', { size: 10.5, weight: 800, fill: C.rose, anchor: 'start' });
+  g += rect(40, 60, 110, 44, { fill: 'rgba(15, 23, 42, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(95, 78, '1. SFT Model', { size: 9, weight: 700, fill: '#fff' });
+  g += T(95, 94, 'Turn-taking', { size: 8, fill: C.muted });
+  g += arrow(154, 82, 178, 82, 'rose', 1.5);
+
+  g += rect(182, 60, 140, 44, { fill: 'rgba(15, 23, 42, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(252, 78, '2. Reward Model R_ψ', { size: 9, weight: 700, fill: C.amber });
+  g += T(252, 94, 'Trained on (y_w > y_l)', { size: 8, fill: C.muted });
+  g += arrow(326, 82, 350, 82, 'rose', 1.5);
+
+  g += rect(354, 60, 245, 44, { fill: 'rgba(244, 63, 94, 0.15)', stroke: C.rose, rx: 4 });
+  g += T(476, 76, '3. PPO Policy Optimization Loop', { size: 9, weight: 800, fill: C.rose });
+  g += T(476, 92, '⚠️ 4 Models in VRAM: Actor + Critic + Reward + Ref', { size: 7.8, fill: '#fca5a5' });
+
+  // Bottom: DPO (Streamlined, 2 models)
+  g += rect(25, 126, 590, 74, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(40, 142, 'Direct Preference Optimization (DPO - Rafailov et al., 2023)', { size: 10.5, weight: 800, fill: C.emerald, anchor: 'start' });
+  g += rect(40, 150, 150, 40, { fill: 'rgba(15, 23, 42, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(115, 166, 'Preference Data (x, y_w, y_l)', { size: 8.5, weight: 700, fill: C.cyan });
+  g += T(115, 180, 'Winner vs Loser Pairs', { size: 7.8, fill: C.muted });
+  g += arrow(194, 170, 222, 170, 'emerald', 2);
+
+  g += rect(226, 150, 375, 40, { fill: 'rgba(16, 185, 129, 0.18)', stroke: C.emerald, rx: 4 });
+  g += T(413, 166, 'Closed-Form DPO Loss: Policy π_θ directly optimized against π_ref', { size: 9, weight: 800, fill: C.emerald });
+  g += T(413, 180, '✓ No Reward Model • No RL Critic • 50%+ Less VRAM • 100% Stable', { size: 8, fill: '#86efac' });
+
+  return {
+    html: svg(640, 214, g),
+    caption: 'DPO eliminates the unstable PPO reinforcement learning loop and separate reward network, replacing them with a closed-form preference loss.'
+  };
+}
+
+function q11DpoLossDynamics() {
+  let g = T(320, 20, 'DPO Implicit Reward Mechanics & KL Regularization', { size: 14, weight: 800, fill: '#fff' });
+
+  // Center Math Formula
+  g += rect(120, 36, 400, 30, { fill: 'rgba(2, 6, 23, 0.8)', stroke: C.cyan, rx: 5 });
+  g += T(320, 55, 'Implicit Reward: r_θ(x, y) = β · [ log π_θ(y|x) - log π_ref(y|x) ]', { size: 9.5, mono: true, fill: C.cyan, weight: 700 });
+
+  // Left Box: Chosen Response (y_w)
+  g += rect(35, 78, 260, 96, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(165, 96, 'Chosen Response (y_w)', { size: 11, weight: 800, fill: C.emerald });
+  g += T(165, 114, 'Helpful • Accurate • Safe', { size: 9, fill: C.muted });
+  g += rect(55, 124, 220, 24, { fill: 'rgba(16, 185, 129, 0.2)', rx: 4 });
+  g += T(165, 139, '▲ Policy log π_θ(y_w|x) INCREASES', { size: 8.5, weight: 800, fill: C.emerald });
+  g += T(165, 160, 'Gradient pushes policy TOWARD winner', { size: 8, fill: C.text });
+
+  // Right Box: Rejected Response (y_l)
+  g += rect(345, 78, 260, 96, { fill: 'rgba(244, 63, 94, 0.08)', stroke: C.rose, rx: 8, sw: 1.5 });
+  g += T(475, 96, 'Rejected Response (y_l)', { size: 11, weight: 800, fill: C.rose });
+  g += T(475, 114, 'Toxic • Deceitful • Lazy', { size: 9, fill: C.muted });
+  g += rect(365, 124, 220, 24, { fill: 'rgba(244, 63, 94, 0.2)', rx: 4 });
+  g += T(475, 139, '▼ Policy log π_θ(y_l|x) DECREASES', { size: 8.5, weight: 800, fill: C.rose });
+  g += T(475, 160, 'Gradient pushes policy AWAY from loser', { size: 8, fill: C.text });
+
+  // Bottom Anchor Explanation
+  g += T(320, 194, 'The hyperparameter β anchors π_θ to π_ref, preventing the model from collapsing or drifting away from its foundation.', { size: 9.5, fill: C.muted, italic: true });
+
+  return {
+    html: svg(640, 210, g),
+    caption: 'DPO increases the probability of chosen responses and depresses rejected responses, with β acting as a KL divergence elastic band.'
+  };
+}
+
+function q11SafetyTaxTradeoff() {
+  let g = T(320, 20, 'The HHH Alignment Triad & The Alignment Tax', { size: 14, weight: 800, fill: '#fff' });
+
+  // 3 Pillar Cards
+  const pillars = [
+    { title: 'HELPFUL (H1)', desc: 'Clear, exhaustive, actionable answers. Solves user problem directly.', color: C.cyan, x: 30 },
+    { title: 'HONEST (H2)', desc: 'Well-calibrated uncertainty. Acknowledges knowledge limits; no hallucinations.', color: C.amber, x: 230 },
+    { title: 'HARMLESS (H3)', desc: 'Refuses biological/cyber harm without preachiness or false refusals.', color: C.emerald, x: 430 }
+  ];
+
+  pillars.forEach(p => {
+    g += rect(p.x, 42, 180, 85, { fill: tint(p.color, 0.08), stroke: p.color, rx: 6, sw: 1.2 });
+    g += T(p.x + 90, 62, p.title, { size: 11, weight: 800, fill: p.color });
+    g += T(p.x + 90, 84, p.desc.slice(0, 32), { size: 8, fill: C.text });
+    g += T(p.x + 90, 98, p.desc.slice(32), { size: 8, fill: C.muted });
+  });
+
+  // Bottom Tradeoff Box
+  g += rect(30, 138, 580, 52, { fill: 'rgba(2, 6, 23, 0.7)', stroke: 'rgba(148,163,184,0.2)', rx: 6 });
+  g += T(320, 156, '⚠️ The Alignment Tax Tradeoff: Harmlessness vs Utility', { size: 10, weight: 800, fill: C.rose });
+  g += T(320, 174, 'Over-aligned models suffer “False Refusal Syndrome” (e.g. refusing: “How do I kill a bash script?”)', { size: 8.5, fill: C.muted });
+
+  return {
+    html: svg(640, 200, g),
+    caption: 'Modern alignment balances the HHH triad (Helpful, Honest, Harmless) while avoiding the Alignment Tax of lazy over-refusals.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -1878,7 +2058,8 @@ const VISUALS = {
   'quest-7': [q7Sequential, q7QKV, q7Scale, q7Bank, q7MultiHead],
   'quest-8': [q8Subwords, q8EmbeddingMatrix, q8Permutation, q8RoPE],
   'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache],
-  'quest-10': [q10Unembedding, q10Temperature, q10TopKvsTopP, q10AutoregressiveLoop, q10RepetitionPenalty]
+  'quest-10': [q10Unembedding, q10Temperature, q10TopKvsTopP, q10AutoregressiveLoop, q10RepetitionPenalty],
+  'quest-11': [q11PretrainVsSFT, q11ChatMLTemplate, q11RlhfPipeline, q11DpoLossDynamics, q11SafetyTaxTradeoff]
 };
 
 let activeCleanups = [];

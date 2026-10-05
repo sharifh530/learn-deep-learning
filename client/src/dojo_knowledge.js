@@ -429,6 +429,51 @@ print("Sampled token index:", chosen_idx)
         answer: "B",
         explanation: "Osu! When dividing logits by a near-zero number, differences magnify toward infinity. Softmax turns into an exact Argmax, making next-token prediction 100% deterministic (greedy decoding)!"
       }
+    },
+
+    'quest-11': {
+      title: 'Post-Training & Alignment: SFT, ChatML & DPO',
+      eli10: `🛡️ **The Wild Horse & The Diplomat (Post-Training & DPO Alignment):**\n\nHow do we turn a raw next-token predictor that swallowed the entire internet into a polite, helpful assistant like ChatGPT or Claude?\n\n1. **Pre-Training vs Post-Training:** Pre-training creates raw encyclopedic memory through next-token prediction. It doesn't know it's an assistant! Post-training shapes that knowledge through two stages: SFT and Alignment.\n2. **Supervised Fine-Tuning (SFT):** Natural dialogue is serialized with ChatML special tokens: \`<|im_start|>user\` and \`<|im_start|>assistant\`. PyTorch masks the loss on user prompts (loss = -100) so the model only learns how to answer!\n3. **Direct Preference Optimization (DPO):** Traditional RLHF required training a separate Reward Model and running unstable PPO reinforcement learning with 4 models in GPU memory. DPO (Rafailov et al., 2023) derives the exact optimal policy mathematically in closed form:\n   $$\\mathcal{L}_{\\text{DPO}} = -\\log \\sigma \\left( \\beta \\log \\frac{\\pi_\\theta(y_w)}{\\pi_{\\text{ref}}(y_w)} - \\beta \\log \\frac{\\pi_\\theta(y_l)}{\\pi_{\\text{ref}}(y_l)} \\right)$$\n4. **Implicit Reward ($r_\\theta$):** $r(x, y) = \\beta (\\log \\pi_\\theta(y|x) - \\log \\pi_{\\text{ref}}(y|x))$. The parameter $\\beta$ acts as a KL anchor so the model never drifts away from its foundational common sense!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+def compute_dpo_loss(pol_win, pol_lose, ref_win, ref_lose, beta=0.1):
+    # 1. Compute policy vs reference log likelihood ratios
+    pi_ratios = pol_win - pol_lose
+    ref_ratios = ref_win - ref_lose
+    
+    # 2. Implicit reward margin between winner (y_w) and loser (y_l)
+    logits = beta * (pi_ratios - ref_ratios)
+    
+    # 3. DPO Loss: -log(sigmoid(logits))
+    loss = -F.logsigmoid(logits).mean()
+    
+    # 4. Implicit rewards for monitoring
+    r_win = (beta * (pol_win - ref_win)).mean().item()
+    r_lose = (beta * (pol_lose - ref_lose)).mean().item()
+    return loss, r_win, r_lose
+
+# Simulated log-probabilities for: Helpful response vs Rogue response
+pol_w, pol_l = torch.tensor([-8.2]), torch.tensor([-16.4])
+ref_w, ref_l = torch.tensor([-9.8]), torch.tensor([-12.1])
+
+loss, r_win, r_lose = compute_dpo_loss(pol_w, pol_l, ref_w, ref_l, beta=0.1)
+print(f"DPO Loss: {loss.item():.4f}, Margin: {r_win - r_lose:+.3f}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Direct Preference Optimization (DPO)**\n\nWhat major advantage did DPO introduce over traditional PPO-based RLHF?",
+        options: [
+          "A) It eliminates the need to train a separate Reward Model and Actor-Critic RL loop by mathematically optimizing the policy directly from reference log-ratios",
+          "B) It only works on 8-bit quantized models",
+          "C) It replaces the Transformer architecture with linear regression",
+          "D) It deletes all safety guardrails from the model"
+        ],
+        answer: "A",
+        explanation: "Osu! Rafailov et al. (2023) showed that under the Bradley-Terry preference model, the ground-truth optimal reward can be extracted directly from policy and reference log-probabilities, eliminating the unstable reward model and PPO loop!"
+      }
     }
   },
 
@@ -562,6 +607,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('sampling') || hasPhrase('temperature') || hasPhrase('top-p') || hasPhrase('nucleus') || hasPhrase('greedy') || hasPhrase('logit') || hasPhrase('repetition') || hasPhrase('quest 10')) {
     return DOJO_KNOWLEDGE.quests['quest-10'].eli10;
+  }
+  if (hasPhrase('alignment') || hasPhrase('sft') || hasPhrase('dpo') || hasPhrase('rlhf') || hasPhrase('chatml') || hasPhrase('preference') || hasPhrase('reward') || hasPhrase('jailbreak') || hasPhrase('refusal') || hasPhrase('quest 11')) {
+    return DOJO_KNOWLEDGE.quests['quest-11'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest
