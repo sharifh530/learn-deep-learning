@@ -45,6 +45,11 @@
         </div>
 
         <div class="nav-actions">
+          <button class="nav-btn btn-diploma" id="btn-open-diploma" title="View Sensei Tensor Master Diploma">
+            <span>🎓</span>
+            <span class="btn-text">Diploma</span>
+            <span class="diploma-completion-pill" id="diploma-nav-pill">0/7</span>
+          </button>
           <button class="nav-btn btn-settings" id="btn-open-settings" title="Settings & Google API Key">
             <span>⚙️</span>
             <span class="btn-text">Settings</span>
@@ -70,6 +75,15 @@
           </div>
           <div class="quest-list" id="quest-list-container">
             <!-- Quests populated by main.js -->
+          </div>
+
+          <div class="sidebar-diploma-card" id="sidebar-diploma-trigger" role="button" tabindex="0" title="Click to view Master Diploma">
+            <div class="diploma-badge-icon">🎓</div>
+            <div class="diploma-badge-info">
+              <h4>Master Diploma</h4>
+              <p id="sidebar-diploma-status">0/7 Conquered • Tap to view</p>
+            </div>
+            <span class="diploma-badge-arrow">➔</span>
           </div>
 
           <div class="sidebar-capstone-banner">
@@ -289,11 +303,75 @@
               <input type="text" id="backend-url-input" value="http://localhost:8000" class="form-control" />
             </div>
 
+            <div class="settings-save-section" style="margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+              <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: #fbbf24; display: flex; align-items: center; gap: 0.4rem;">
+                <span>💾</span> Learner Journey & Save Data
+              </h4>
+              <div class="form-group" style="margin-bottom: 0.8rem;">
+                <label for="settings-learner-name">Learner / Scholar Name:</label>
+                <input type="text" id="settings-learner-name" placeholder="Enter your full name for diplomas..." class="form-control" maxlength="32" />
+              </div>
+              <div class="save-actions-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.5rem;">
+                <button type="button" class="btn-secondary" id="btn-export-progress" style="padding: 0.55rem; font-size: 0.82rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer;">
+                  <span>📥</span> Export Backup (.json)
+                </button>
+                <button type="button" class="btn-secondary" id="btn-import-trigger" style="padding: 0.55rem; font-size: 0.82rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer;">
+                  <span>📂</span> Restore Save File
+                </button>
+                <input type="file" id="file-import-progress" accept=".json" style="display: none;" />
+              </div>
+              <div style="margin-top: 0.6rem; display: flex; justify-content: flex-end;">
+                <button type="button" id="btn-reset-progress" style="background: transparent; border: none; color: #f87171; font-size: 0.78rem; text-decoration: underline; cursor: pointer;">
+                  ⚠️ Reset All Quest Progress
+                </button>
+              </div>
+            </div>
+
             <div class="settings-status" id="settings-test-status" style="margin-top: 0.4rem; font-size: 0.85rem; line-height: 1.5;"></div>
           </div>
           <div class="modal-footer">
             <button class="btn-secondary" id="btn-test-api">Test Connection</button>
             <button class="btn-primary" id="btn-save-settings">Save & Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Master Diploma / Course Completion Modal -->
+      <div class="modal-overlay diploma-modal-overlay" id="diploma-modal" style="display: none;">
+        <div class="diploma-modal-card">
+          <div class="diploma-modal-header">
+            <div class="diploma-modal-branding">
+              <span class="diploma-modal-icon">🎓</span>
+              <div class="diploma-modal-titles">
+                <h3>Sensei Tensor Master Diploma</h3>
+                <span class="diploma-subtitle">Official NeuroQuest Deep Learning Credential</span>
+              </div>
+            </div>
+            <button class="modal-close" id="btn-close-diploma" title="Close Diploma (Esc)">&times;</button>
+          </div>
+
+          <div class="diploma-toolbar">
+            <div class="diploma-name-input-group">
+              <label for="diploma-student-name">Scholar Name on Diploma:</label>
+              <input type="text" id="diploma-student-name" placeholder="Enter your name..." value="Tensor Scholar" maxlength="32" />
+            </div>
+            <div class="diploma-actions">
+              <button class="btn-primary diploma-btn" id="btn-download-diploma" title="Download 1600x1100 High-Res PNG">
+                <span>💾</span> Download High-Res PNG
+              </button>
+              <button class="btn-secondary diploma-btn" id="btn-print-diploma" title="Print or Save as PDF">
+                <span>🖨️</span> Print / PDF
+              </button>
+              <button class="btn-secondary diploma-btn" id="btn-share-diploma" title="Copy bragging rights text to clipboard">
+                <span>📋</span> Share Credential
+              </button>
+            </div>
+          </div>
+
+          <div class="diploma-scroll-area">
+            <div class="diploma-canvas-wrapper" id="diploma-canvas-wrapper">
+              <!-- Dynamically populated high-resolution Canvas preview -->
+            </div>
           </div>
         </div>
       </div>

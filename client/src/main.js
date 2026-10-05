@@ -6,6 +6,8 @@ import { marked } from 'marked';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { getSectionVisual, mountVisual, disposeVisuals } from './lesson_visuals.js';
+import { generateDiplomaCanvas, downloadDiplomaPng, generateVerificationCode } from './certificate_generator.js';
+import { exportProgress, importProgress, resetProgress } from './progress_manager.js';
 
 // --- State Management ---
 const state = {
@@ -73,6 +75,10 @@ const dom = {
   btnCloseSidebar: document.getElementById('btn-close-sidebar'),
   sidebarBackdrop: document.getElementById('sidebar-backdrop'),
   sidebarQuests: document.getElementById('sidebar-quests'),
+  btnOpenDiploma: document.getElementById('btn-open-diploma'),
+  diplomaNavPill: document.getElementById('diploma-nav-pill'),
+  sidebarDiplomaTrigger: document.getElementById('sidebar-diploma-trigger'),
+  sidebarDiplomaStatus: document.getElementById('sidebar-diploma-status'),
   // Sidebar
   questListContainer: document.getElementById('quest-list-container'),
   questCompletionCount: document.getElementById('quest-completion-count'),
@@ -115,7 +121,20 @@ const dom = {
   groupCustomAgent: document.getElementById('group-custom-agent'),
   customAgentUrlInput: document.getElementById('custom-agent-url-input'),
   backendUrlInput: document.getElementById('backend-url-input'),
-  settingsTestStatus: document.getElementById('settings-test-status')
+  settingsTestStatus: document.getElementById('settings-test-status'),
+  settingsLearnerName: document.getElementById('settings-learner-name'),
+  btnExportProgress: document.getElementById('btn-export-progress'),
+  btnImportTrigger: document.getElementById('btn-import-trigger'),
+  fileImportProgress: document.getElementById('file-import-progress'),
+  btnResetProgress: document.getElementById('btn-reset-progress'),
+  // Diploma Modal
+  diplomaModal: document.getElementById('diploma-modal'),
+  btnCloseDiploma: document.getElementById('btn-close-diploma'),
+  diplomaStudentName: document.getElementById('diploma-student-name'),
+  btnDownloadDiploma: document.getElementById('btn-download-diploma'),
+  btnPrintDiploma: document.getElementById('btn-print-diploma'),
+  btnShareDiploma: document.getElementById('btn-share-diploma'),
+  diplomaCanvasWrapper: document.getElementById('diploma-canvas-wrapper')
 };
 
 // --- XP & Level Calculations ---
@@ -125,10 +144,18 @@ function updateXpDisplay() {
   let title = 'Tensor Novice';
   let nextXp = 250;
 
-  if (xp >= 750) {
+  if (xp >= 1500) {
+    level = 6;
+    title = 'Attention Grandmaster';
+    nextXp = 2000;
+  } else if (xp >= 1100) {
+    level = 5;
+    title = 'Regularization Sage';
+    nextXp = 1500;
+  } else if (xp >= 750) {
     level = 4;
-    title = 'Master of Convolutions';
-    nextXp = 1000;
+    title = 'Convolution Master';
+    nextXp = 1100;
   } else if (xp >= 450) {
     level = 3;
     title = 'Gradient Surfer';
@@ -191,6 +218,7 @@ function renderQuestList() {
   const total = state.curriculum.quests.length;
   const completed = state.completedQuests.size;
   dom.questCompletionCount.textContent = `${completed}/${total} Done`;
+  updateDiplomaStatus();
 
   state.curriculum.quests.forEach(quest => {
     const isCompleted = state.completedQuests.has(quest.id);
@@ -4001,9 +4029,18 @@ function renderQuiz(quest) {
           feedbackEl.style.color = '#34d399';
           feedbackEl.innerHTML = `✓ <strong>Correct!</strong> ${q.explanation}`;
           awardXp(50);
+          const wasAllCompleteBefore = state.completedQuests.size === state.curriculum.quests.length;
           state.completedQuests.add(quest.id);
           localStorage.setItem('nq_completed_quests', JSON.stringify([...state.completedQuests]));
           renderQuestList();
+          updateDiplomaStatus();
+
+          if (!wasAllCompleteBefore && state.completedQuests.size === state.curriculum.quests.length) {
+            setTimeout(() => {
+              confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 } });
+              alert('🎉 CONGRATULATIONS!\nYou have conquered all 7 Deep Learning Quests!\nSensei Tensor has conferred your Master Diploma! Click "Diploma" in the navbar to claim and download your credential.');
+            }, 600);
+          }
         } else {
           btn.classList.add('wrong');
           feedbackEl.style.display = 'block';
@@ -4399,6 +4436,9 @@ function setupSettings() {
     dom.customAgentUrlInput.value = tutorService.customAgentUrl;
     dom.geminiModelSelect.value = tutorService.model;
     dom.backendUrlInput.value = state.backendUrl;
+    if (dom.settingsLearnerName) {
+      dom.settingsLearnerName.value = localStorage.getItem('nq_learner_name') || 'Tensor Scholar';
+    }
     dom.settingsTestStatus.textContent = '';
     updateProviderVisibility();
     dom.settingsModal.style.display = 'flex';
@@ -4422,6 +4462,11 @@ function setupSettings() {
     const customUrl = dom.customAgentUrlInput.value.trim();
     const model = dom.geminiModelSelect.value;
     const backend = dom.backendUrlInput.value.trim() || 'http://localhost:8000';
+    if (dom.settingsLearnerName) {
+      const name = dom.settingsLearnerName.value.trim() || 'Tensor Scholar';
+      localStorage.setItem('nq_learner_name', name);
+      if (dom.diplomaStudentName) dom.diplomaStudentName.value = name;
+    }
 
     tutorService.setProvider(provider, customUrl);
     tutorService.setApiKey(key);
@@ -4433,6 +4478,57 @@ function setupSettings() {
     closeModal();
     checkBackendStatus();
   });
+
+  if (dom.btnExportProgress) {
+    dom.btnExportProgress.addEventListener('click', () => {
+      const res = exportProgress(state, tutorService);
+      if (res.success) {
+        dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Saved journey data exported to <strong>${res.fileName}</strong></span>`;
+      }
+    });
+  }
+
+  if (dom.btnImportTrigger && dom.fileImportProgress) {
+    dom.btnImportTrigger.addEventListener('click', () => {
+      dom.fileImportProgress.click();
+    });
+
+    dom.fileImportProgress.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const res = importProgress(event.target.result, state, tutorService);
+        if (res.success) {
+          updateXpDisplay();
+          renderQuestList();
+          renderActiveQuest();
+          updateDiplomaStatus();
+          updateTutorBadge();
+          dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Successfully restored journey for <strong>${res.learnerName}</strong> (${res.completedCount}/7 quests, ${res.userXp} XP)!</span>`;
+          confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+        } else {
+          dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">❌ Restore failed: ${res.error}</span>`;
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+  }
+
+  if (dom.btnResetProgress) {
+    dom.btnResetProgress.addEventListener('click', () => {
+      if (confirm('⚠️ Are you sure you want to reset all quest progress and XP? This action cannot be undone.')) {
+        resetProgress(state);
+        updateXpDisplay();
+        renderQuestList();
+        renderActiveQuest();
+        updateDiplomaStatus();
+        closeModal();
+        alert('✓ Progress reset to beginning.');
+      }
+    });
+  }
 
   dom.btnTestApi.addEventListener('click', async () => {
     const key = dom.geminiKeyInput.value.trim();
@@ -4524,10 +4620,123 @@ function setupMobileSidebar() {
     dom.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
   }
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && dom.sidebarQuests && dom.sidebarQuests.classList.contains('open')) {
-      setSidebarOpen(false);
+    if (e.key === 'Escape') {
+      if (dom.sidebarQuests && dom.sidebarQuests.classList.contains('open')) setSidebarOpen(false);
+      if (dom.aiTutorModal && dom.aiTutorModal.style.display === 'flex') dom.aiTutorModal.style.display = 'none';
+      if (dom.settingsModal && dom.settingsModal.style.display === 'flex') dom.settingsModal.style.display = 'none';
+      if (dom.diplomaModal && dom.diplomaModal.style.display === 'flex') dom.diplomaModal.style.display = 'none';
     }
   });
+}
+
+// --- DIPLOMA & COURSE COMPLETION MODAL ---
+let activeDiplomaCanvas = null;
+
+function updateDiplomaStatus() {
+  const total = state.curriculum.quests.length;
+  const completed = state.completedQuests.size;
+  if (dom.diplomaNavPill) {
+    dom.diplomaNavPill.textContent = `${completed}/${total}`;
+  }
+  if (dom.sidebarDiplomaStatus) {
+    if (completed >= total) {
+      dom.sidebarDiplomaStatus.textContent = '★ All 7 Conquered! Claim Master Diploma';
+    } else {
+      dom.sidebarDiplomaStatus.textContent = `${completed}/${total} Conquered • Tap to view`;
+    }
+  }
+  if (completed >= total) {
+    if (dom.btnOpenDiploma) dom.btnOpenDiploma.classList.add('unlocked');
+    if (dom.sidebarDiplomaTrigger) dom.sidebarDiplomaTrigger.classList.add('unlocked');
+  } else {
+    if (dom.btnOpenDiploma) dom.btnOpenDiploma.classList.remove('unlocked');
+    if (dom.sidebarDiplomaTrigger) dom.sidebarDiplomaTrigger.classList.remove('unlocked');
+  }
+}
+
+function renderDiplomaPreview() {
+  if (!dom.diplomaCanvasWrapper) return;
+  const studentName = (dom.diplomaStudentName ? dom.diplomaStudentName.value.trim() : '') || 'Tensor Scholar';
+  
+  activeDiplomaCanvas = generateDiplomaCanvas({
+    studentName,
+    completedQuests: [...state.completedQuests],
+    totalQuests: state.curriculum.quests.length,
+    userXp: state.userXp
+  });
+
+  dom.diplomaCanvasWrapper.innerHTML = '';
+  dom.diplomaCanvasWrapper.appendChild(activeDiplomaCanvas);
+}
+
+function setupDiplomaModal() {
+  const openModal = () => {
+    const savedName = localStorage.getItem('nq_learner_name') || 'Tensor Scholar';
+    if (dom.diplomaStudentName) dom.diplomaStudentName.value = savedName;
+    renderDiplomaPreview();
+    if (dom.diplomaModal) dom.diplomaModal.style.display = 'flex';
+    if (state.completedQuests.size >= state.curriculum.quests.length) {
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
+    }
+  };
+
+  const closeModal = () => {
+    if (dom.diplomaModal) dom.diplomaModal.style.display = 'none';
+  };
+
+  if (dom.btnOpenDiploma) dom.btnOpenDiploma.addEventListener('click', openModal);
+  if (dom.sidebarDiplomaTrigger) dom.sidebarDiplomaTrigger.addEventListener('click', openModal);
+  if (dom.btnCloseDiploma) dom.btnCloseDiploma.addEventListener('click', closeModal);
+
+  // Live input synchronization
+  if (dom.diplomaStudentName) {
+    dom.diplomaStudentName.addEventListener('input', (e) => {
+      const val = e.target.value;
+      localStorage.setItem('nq_learner_name', val);
+      if (dom.settingsLearnerName) dom.settingsLearnerName.value = val;
+      renderDiplomaPreview();
+    });
+  }
+
+  // Download PNG button
+  if (dom.btnDownloadDiploma) {
+    dom.btnDownloadDiploma.addEventListener('click', () => {
+      const name = dom.diplomaStudentName.value.trim() || 'Tensor Scholar';
+      if (!activeDiplomaCanvas) renderDiplomaPreview();
+      downloadDiplomaPng(activeDiplomaCanvas, name);
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+    });
+  }
+
+  // Print button
+  if (dom.btnPrintDiploma) {
+    dom.btnPrintDiploma.addEventListener('click', () => {
+      window.print();
+    });
+  }
+
+  // Share button
+  if (dom.btnShareDiploma) {
+    dom.btnShareDiploma.addEventListener('click', async () => {
+      const name = (dom.diplomaStudentName ? dom.diplomaStudentName.value.trim() : '') || 'Tensor Scholar';
+      const code = generateVerificationCode(name);
+      const text = `🥋 I just conquered all 7 Deep Learning Quests on NeuroQuest! Earned ${state.userXp} XP under Sensei Tensor. Credential ID: ${code} 🚀🧠`;
+      try {
+        await navigator.clipboard.writeText(text);
+        const originalText = dom.btnShareDiploma.innerHTML;
+        dom.btnShareDiploma.innerHTML = `<span>✓</span> Copied to Clipboard!`;
+        setTimeout(() => {
+          dom.btnShareDiploma.innerHTML = originalText;
+        }, 2000);
+      } catch {
+        alert(text);
+      }
+    });
+  }
 }
 
 // --- APP BOOTSTRAP ---
@@ -4540,6 +4749,8 @@ function initApp() {
   setupCodeLab();
   setupAiTutor();
   setupSettings();
+  setupDiplomaModal();
+  updateDiplomaStatus();
   updateTutorBadge();
 
   checkBackendStatus();
