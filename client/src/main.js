@@ -9,6 +9,7 @@ import { getSectionVisual, mountVisual, disposeVisuals } from './lesson_visuals.
 import { generateDiplomaCanvas, downloadDiplomaPng, generateVerificationCode } from './certificate_generator.js';
 import { exportProgress, importProgress, resetProgress } from './progress_manager.js';
 import { soundFx } from './sound_effects.js';
+import { ArchitectDesigner } from './architect_designer.js';
 
 // --- State Management ---
 const state = {
@@ -140,7 +141,21 @@ const dom = {
   btnDownloadDiploma: document.getElementById('btn-download-diploma'),
   btnPrintDiploma: document.getElementById('btn-print-diploma'),
   btnShareDiploma: document.getElementById('btn-share-diploma'),
-  diplomaCanvasWrapper: document.getElementById('diploma-canvas-wrapper')
+  diplomaCanvasWrapper: document.getElementById('diploma-canvas-wrapper'),
+  // Architect Designer Modal
+  btnOpenArchitect: document.getElementById('btn-open-architect'),
+  architectModal: document.getElementById('architect-modal'),
+  btnCloseArchitect: document.getElementById('btn-close-architect'),
+  architectCanvas: document.getElementById('architect-canvas'),
+  architectControlsContainer: document.getElementById('architect-controls-container'),
+  architectCodeOutput: document.getElementById('architect-code-output'),
+  architectParamsBadge: document.getElementById('architect-params-badge'),
+  architectInspectorBox: document.getElementById('architect-inspector-box'),
+  architectPresetSelect: document.getElementById('architect-preset-select'),
+  btnAddLayer: document.getElementById('btn-add-layer'),
+  btnPulseSignal: document.getElementById('btn-pulse-signal'),
+  btnExportArchitectCode: document.getElementById('btn-export-architect-code'),
+  btnCopyArchitectCode: document.getElementById('btn-copy-architect-code')
 };
 
 // --- XP & Level Calculations ---
@@ -4823,6 +4838,101 @@ function setupAudioControls() {
   window.addEventListener('keydown', resumeAudio, { once: true });
 }
 
+// --- Neural Net Architecture Designer ---
+function setupArchitectModal() {
+  if (!dom.architectModal || !dom.architectCanvas) return;
+
+  const designer = new ArchitectDesigner({
+    container: dom.architectModal,
+    canvas: dom.architectCanvas,
+    controlsContainer: dom.architectControlsContainer,
+    codeOutput: dom.architectCodeOutput,
+    paramsBadge: dom.architectParamsBadge,
+    inspectorBox: dom.architectInspectorBox
+  });
+
+  designer.setupEventListeners(dom.architectCanvas, dom.architectControlsContainer);
+
+  const openModal = () => {
+    dom.architectModal.style.display = 'flex';
+    designer.update();
+    soundFx.playBlip(540, 0.08);
+  };
+
+  const closeModal = () => {
+    dom.architectModal.style.display = 'none';
+    soundFx.playBlip(420, 0.06);
+  };
+
+  if (dom.btnOpenArchitect) {
+    dom.btnOpenArchitect.addEventListener('click', openModal);
+  }
+
+  if (dom.btnCloseArchitect) {
+    dom.btnCloseArchitect.addEventListener('click', closeModal);
+  }
+
+  dom.architectModal.addEventListener('click', (e) => {
+    if (e.target === dom.architectModal) {
+      closeModal();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.architectModal.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  if (dom.architectPresetSelect) {
+    dom.architectPresetSelect.addEventListener('change', (e) => {
+      designer.loadPreset(e.target.value);
+    });
+  }
+
+  if (dom.btnAddLayer) {
+    dom.btnAddLayer.addEventListener('click', () => {
+      designer.addHiddenLayer();
+    });
+  }
+
+  if (dom.btnPulseSignal) {
+    dom.btnPulseSignal.addEventListener('click', () => {
+      designer.triggerPulse();
+    });
+  }
+
+  if (dom.btnExportArchitectCode) {
+    dom.btnExportArchitectCode.addEventListener('click', () => {
+      const pyCode = designer.generatePyTorchCode();
+      if (dom.codeEditorArea) {
+        dom.codeEditorArea.value = pyCode;
+      }
+      closeModal();
+      const codeTabBtn = document.querySelector('.tab-btn[data-tab="code"]');
+      if (codeTabBtn) codeTabBtn.click();
+      soundFx.playSuccess();
+    });
+  }
+
+  if (dom.btnCopyArchitectCode) {
+    dom.btnCopyArchitectCode.addEventListener('click', async () => {
+      const pyCode = designer.generatePyTorchCode();
+      try {
+        await navigator.clipboard.writeText(pyCode);
+        const originalText = dom.btnCopyArchitectCode.textContent;
+        dom.btnCopyArchitectCode.textContent = '✓ Copied!';
+        soundFx.playBlip(880, 0.05);
+        setTimeout(() => {
+          dom.btnCopyArchitectCode.textContent = originalText;
+        }, 2000);
+      } catch (err) {
+        console.error('Clipboard copy failed:', err);
+      }
+    });
+  }
+}
+
 // --- APP BOOTSTRAP ---
 function initApp() {
   updateXpDisplay();
@@ -4835,6 +4945,7 @@ function initApp() {
   setupSettings();
   setupAudioControls();
   setupDiplomaModal();
+  setupArchitectModal();
   updateDiplomaStatus();
   updateTutorBadge();
 

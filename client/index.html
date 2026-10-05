@@ -45,6 +45,10 @@
         </div>
 
         <div class="nav-actions">
+          <button class="nav-btn btn-architect" id="btn-open-architect" title="Neural Net Architecture Designer">
+            <span>📐</span>
+            <span class="btn-text">Architect</span>
+          </button>
           <button class="nav-btn btn-audio" id="btn-toggle-sound" title="Toggle Sound FX (Mute/Unmute)">
             <span id="audio-icon">🔊</span>
             <span class="btn-text" id="audio-text">Audio</span>
@@ -382,6 +386,82 @@
           <div class="diploma-scroll-area">
             <div class="diploma-canvas-wrapper" id="diploma-canvas-wrapper">
               <!-- Dynamically populated high-resolution Canvas preview -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Neural Network Architecture Designer Modal -->
+      <div class="modal-overlay architect-modal-overlay" id="architect-modal" style="display: none;">
+        <div class="architect-modal-card">
+          <div class="architect-modal-header">
+            <div class="architect-modal-branding">
+              <span class="architect-modal-icon">📐</span>
+              <div class="architect-modal-titles">
+                <h3>Neural Network Architecture Designer</h3>
+                <span class="architect-subtitle">Interactive Multi-Layer Perceptron (MLP) Visualizer & PyTorch Generator</span>
+              </div>
+            </div>
+            <div class="architect-header-actions">
+              <div class="params-badge-container" id="architect-params-badge">
+                <!-- Dynamically populated parameters breakdown -->
+              </div>
+              <button class="modal-close" id="btn-close-architect" title="Close Designer (Esc)">&times;</button>
+            </div>
+          </div>
+
+          <div class="architect-toolbar">
+            <div class="architect-toolbar-left">
+              <label for="architect-preset-select">Architecture Presets:</label>
+              <select id="architect-preset-select" class="architect-preset-select">
+                <option value="default">Default 4-Layer MLP (3 → 6 → 4 → 2)</option>
+                <option value="classifier">Multi-Class Vision Classifier (4 → 12 → 8 → 3)</option>
+                <option value="bottleneck">Deep Bottleneck Autoencoder (8 → 4 → 2 → 4 → 8)</option>
+                <option value="wide">Wide & Shallow (2 → 14 → 1)</option>
+                <option value="deep">5-Layer Deep Feedforward (4 → 8 → 8 → 6 → 4 → 2)</option>
+              </select>
+              <button class="btn-secondary architect-btn" id="btn-add-layer" title="Add another hidden layer">
+                <span>➕</span> Add Hidden Layer
+              </button>
+            </div>
+            <div class="architect-toolbar-right">
+              <button class="btn-secondary architect-btn btn-pulse-signal" id="btn-pulse-signal" title="Simulate electrical forward pass signal">
+                <span>⚡</span> Pulse Signal
+              </button>
+              <button class="btn-primary architect-btn" id="btn-export-architect-code" title="Send generated PyTorch model to Python Lab">
+                <span>▶</span> Send to Python Lab
+              </button>
+            </div>
+          </div>
+
+          <div class="architect-body">
+            <!-- Canvas Graph Visualization -->
+            <div class="architect-canvas-stage">
+              <canvas id="architect-canvas" width="880" height="340"></canvas>
+            </div>
+
+            <!-- Layer Controls Row -->
+            <div class="architect-controls-row" id="architect-controls-container">
+              <!-- Dynamically populated column controls for each layer -->
+            </div>
+
+            <!-- Bottom Split: Inspector & PyTorch Code -->
+            <div class="architect-bottom-split">
+              <div class="architect-panel inspector-panel">
+                <div class="panel-header">
+                  <span>🔬</span> Neuron Inspector (Click any node to inspect)
+                </div>
+                <div class="inspector-content" id="architect-inspector-box">
+                  <!-- Dynamically populated formula -->
+                </div>
+              </div>
+              <div class="architect-panel code-panel">
+                <div class="panel-header">
+                  <span>🐍</span> Generated PyTorch Code (nn.Sequential)
+                  <button class="btn-copy-code" id="btn-copy-architect-code" title="Copy code">📋 Copy</button>
+                </div>
+                <pre class="architect-code-pre" id="architect-code-output"></pre>
+              </div>
             </div>
           </div>
         </div>
