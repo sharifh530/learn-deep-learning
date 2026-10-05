@@ -69,6 +69,10 @@ const dom = {
   backendStatusText: document.getElementById('backend-status-text'),
   btnOpenSettings: document.getElementById('btn-open-settings'),
   btnToggleTutor: document.getElementById('btn-toggle-tutor'),
+  btnToggleSidebar: document.getElementById('btn-toggle-sidebar'),
+  btnCloseSidebar: document.getElementById('btn-close-sidebar'),
+  sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+  sidebarQuests: document.getElementById('sidebar-quests'),
   // Sidebar
   questListContainer: document.getElementById('quest-list-container'),
   questCompletionCount: document.getElementById('quest-completion-count'),
@@ -172,6 +176,15 @@ async function checkBackendStatus() {
   }
 }
 
+function setSidebarOpen(open) {
+  if (!dom.sidebarQuests) return;
+  dom.sidebarQuests.classList.toggle('open', open);
+  if (dom.sidebarBackdrop) {
+    dom.sidebarBackdrop.classList.toggle('active', open);
+  }
+  document.body.classList.toggle('sidebar-locked', open);
+}
+
 // --- Sidebar Render ---
 function renderQuestList() {
   dom.questListContainer.innerHTML = '';
@@ -201,6 +214,12 @@ function renderQuestList() {
       state.activeQuestId = quest.id;
       renderQuestList();
       renderActiveQuest();
+      if (window.innerWidth <= 960) {
+        setSidebarOpen(false);
+        if (dom.questHero) {
+          dom.questHero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
     });
 
     dom.questListContainer.appendChild(card);
@@ -4490,12 +4509,34 @@ function setupTabs() {
   });
 }
 
+// --- MOBILE SIDEBAR DRAWER ---
+function setupMobileSidebar() {
+  if (dom.btnToggleSidebar) {
+    dom.btnToggleSidebar.addEventListener('click', () => {
+      const isOpen = dom.sidebarQuests && dom.sidebarQuests.classList.contains('open');
+      setSidebarOpen(!isOpen);
+    });
+  }
+  if (dom.btnCloseSidebar) {
+    dom.btnCloseSidebar.addEventListener('click', () => setSidebarOpen(false));
+  }
+  if (dom.sidebarBackdrop) {
+    dom.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.sidebarQuests && dom.sidebarQuests.classList.contains('open')) {
+      setSidebarOpen(false);
+    }
+  });
+}
+
 // --- APP BOOTSTRAP ---
 function initApp() {
   updateXpDisplay();
   renderQuestList();
   renderActiveQuest();
   setupTabs();
+  setupMobileSidebar();
   setupCodeLab();
   setupAiTutor();
   setupSettings();

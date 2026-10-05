@@ -16,6 +16,10 @@
       <!-- Top Navigation Bar -->
       <header class="navbar">
         <div class="nav-brand">
+          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" aria-label="Toggle Quest Map" title="Open Quest Map">
+            <span class="btn-toggle-icon">☰</span>
+            <span class="btn-toggle-label">Quests</span>
+          </button>
           <div class="brand-icon">🧠</div>
           <div class="brand-titles">
             <span class="brand-title">NeuroQuest</span>
@@ -56,10 +60,13 @@
       <!-- Main Application Layout -->
       <div class="layout-container">
         <!-- Sidebar: Quest Map -->
-        <aside class="sidebar-quests">
+        <aside class="sidebar-quests" id="sidebar-quests">
           <div class="sidebar-header">
             <h3>QUEST MAP</h3>
-            <span class="quest-count" id="quest-completion-count">1/4 Ready</span>
+            <div class="sidebar-header-right">
+              <span class="quest-count" id="quest-completion-count">1/4 Ready</span>
+              <button class="btn-sidebar-close" id="btn-close-sidebar" aria-label="Close Quest Map" title="Close Map">&times;</button>
+            </div>
           </div>
           <div class="quest-list" id="quest-list-container">
             <!-- Quests populated by main.js -->
@@ -73,6 +80,9 @@
             </div>
           </div>
         </aside>
+
+        <!-- Mobile Drawer Backdrop -->
+        <div class="sidebar-backdrop" id="sidebar-backdrop" title="Close Quest Map"></div>
 
         <!-- Main Stage: Active Quest Workspace -->
         <main class="main-stage" id="main-stage">
