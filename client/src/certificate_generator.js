@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 12,
+    totalQuests = 13,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -212,25 +212,26 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'IX', icon: '🧱', title: 'GPT Decoder', tag: 'Causal Mask & SwiGLU' },
     { num: 'X', icon: '🎲', title: 'Generation Engine', tag: 'Sampling & Top-P Nucleus' },
     { num: 'XI', icon: '🛡️', title: 'Alignment & DPO', tag: 'ChatML & Preference Tuning' },
-    { num: 'XII', icon: '🎛️', title: 'PEFT & LoRA', tag: 'Low-Rank & QLoRA' }
+    { num: 'XII', icon: '🎛️', title: 'PEFT & LoRA', tag: 'Low-Rank & QLoRA' },
+    { num: 'XIII', icon: '🧠', title: 'Reasoning & PRMs', tag: 'System 2 & GRPO' }
   ];
 
   ctx.save();
 
-  // Symmetrical 6x2 grid (6 in row 1, 6 in row 2)
-  const row1 = quests.slice(0, 6);
-  const row2 = quests.slice(6, 12);
+  // Balanced grid layout (7 in row 1, 6 in row 2)
+  const row1 = quests.slice(0, 7);
+  const row2 = quests.slice(7, 13);
 
-  const cardWidth = 205;
+  const cardWidth = 185;
   const cardHeight = 98;
-  const gap = 14;
+  const gap = 12;
 
   const renderRow = (rowItems, rowIdx, y) => {
     const totalRowWidth = rowItems.length * cardWidth + (rowItems.length - 1) * gap;
     const startX = centerX - totalRowWidth / 2;
 
     rowItems.forEach((q, idx) => {
-      const globalIdx = rowIdx === 0 ? idx : 6 + idx;
+      const globalIdx = rowIdx === 0 ? idx : 7 + idx;
       const x = startX + idx * (cardWidth + gap);
       const isDone = completedQuests.includes(`quest-${globalIdx + 1}`) || completedQuests.length >= totalQuests;
 

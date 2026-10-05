@@ -1192,14 +1192,70 @@
         ],
         "defaultText": "Tokenization powers modern LLMs like ChatGPT and Llama.",
         "embeddingSamples": [
-          { "word": "king", "coords": [0.82, 0.65], "category": "Royalty" },
-          { "word": "queen", "coords": [0.78, 0.92], "category": "Royalty" },
-          { "word": "man", "coords": [0.45, 0.30], "category": "Human" },
-          { "word": "woman", "coords": [0.42, 0.58], "category": "Human" },
-          { "word": "apple", "coords": [-0.65, 0.40], "category": "Food/Tech" },
-          { "word": "banana", "coords": [-0.72, 0.32], "category": "Food" },
-          { "word": "robot", "coords": [0.20, -0.75], "category": "Tech" },
-          { "word": "computer", "coords": [0.15, -0.85], "category": "Tech" }
+          {
+            "word": "king",
+            "coords": [
+              0.82,
+              0.65
+            ],
+            "category": "Royalty"
+          },
+          {
+            "word": "queen",
+            "coords": [
+              0.78,
+              0.92
+            ],
+            "category": "Royalty"
+          },
+          {
+            "word": "man",
+            "coords": [
+              0.45,
+              0.3
+            ],
+            "category": "Human"
+          },
+          {
+            "word": "woman",
+            "coords": [
+              0.42,
+              0.58
+            ],
+            "category": "Human"
+          },
+          {
+            "word": "apple",
+            "coords": [
+              -0.65,
+              0.4
+            ],
+            "category": "Food/Tech"
+          },
+          {
+            "word": "banana",
+            "coords": [
+              -0.72,
+              0.32
+            ],
+            "category": "Food"
+          },
+          {
+            "word": "robot",
+            "coords": [
+              0.2,
+              -0.75
+            ],
+            "category": "Tech"
+          },
+          {
+            "word": "computer",
+            "coords": [
+              0.15,
+              -0.85
+            ],
+            "category": "Tech"
+          }
         ]
       },
       "codeSnippet": "import torch\nimport torch.nn as nn\n\n# 1. Vocabulary of 10,000 subwords, embedding dim d_model = 8\nvocab_size = 10000\nd_model = 8\nembedding_table = nn.Embedding(vocab_size, d_model)\n\n# 2. Simulated input token IDs for: [\"Token\", \"ization\", \"powers\", \"AI\"]\ntoken_ids = torch.tensor([4291, 1324, 7820, 2045])\n\n# 3. Lookup dense semantic coordinates: Shape (4, 8)\nembedded_tokens = embedding_table(token_ids)\n\n# 4. Rotary Position Embedding (RoPE) preview: Rotate 2D pairs by angle m * theta\ndef apply_rope_2d(x, seq_pos, theta=10000.0):\n    # Rotate each 2D vector [x0, x1] by angle pos * (theta ** -0)\n    angle = seq_pos / (theta ** 0.0)\n    cos_a = torch.cos(angle)\n    sin_a = torch.sin(angle)\n    x0, x1 = x[..., 0], x[..., 1]\n    rotated_x0 = x0 * cos_a - x1 * sin_a\n    rotated_x1 = x0 * sin_a + x1 * cos_a\n    return torch.stack([rotated_x0, rotated_x1], dim=-1)\n\npos = torch.arange(len(token_ids), dtype=torch.float32)\nrope_rotated_2d = apply_rope_2d(embedded_tokens[:, :2], pos)\n\nprint(\"Token IDs:\", token_ids.tolist())\nprint(\"Embedded Vectors Shape:\", embedded_tokens.shape)\nprint(\"First Token Vector (8D):\\n\", embedded_tokens[0].detach().round(decimals=3).numpy())\nprint(\"RoPE Rotated First 2 Dimensions:\\n\", rope_rotated_2d.detach().round(decimals=3).numpy())",
@@ -1317,15 +1373,56 @@
       "interactiveType": "transformer_block_inspector",
       "interactiveConfig": {
         "sequenceLength": 5,
-        "tokens": ["The", "future", "of", "AI", "is"],
+        "tokens": [
+          "The",
+          "future",
+          "of",
+          "AI",
+          "is"
+        ],
         "layers": [
-          { "name": "Input Embeddings + RoPE", "type": "input", "shape": "[1, 5, 4096]", "desc": "Tokens converted to 4096-dim vectors with rotary coordinates." },
-          { "name": "RMSNorm #1", "type": "norm", "shape": "[1, 5, 4096]", "desc": "Scales activations by root-mean-square to prevent exploding gradients." },
-          { "name": "Causal Multi-Head Attention", "type": "attention", "shape": "[1, 5, 4096]", "desc": "Upper-triangular masked attention. Each token only attends to past tokens!" },
-          { "name": "Residual Addition #1", "type": "residual", "shape": "[1, 5, 4096]", "desc": "x = x + Attention(x). Clean gradient highway directly back to inputs." },
-          { "name": "RMSNorm #2", "type": "norm", "shape": "[1, 5, 4096]", "desc": "Pre-normalization before non-linear feed-forward transformation." },
-          { "name": "SwiGLU Feed-Forward Network", "type": "ffn", "shape": "[1, 5, 14336]", "desc": "Expands to 14,336 hidden dims. Knowledge retrieval engine with gated Swish." },
-          { "name": "Residual Addition #2", "type": "residual", "shape": "[1, 5, 4096]", "desc": "x = x + SwiGLU(x). Final contextualized block representation." }
+          {
+            "name": "Input Embeddings + RoPE",
+            "type": "input",
+            "shape": "[1, 5, 4096]",
+            "desc": "Tokens converted to 4096-dim vectors with rotary coordinates."
+          },
+          {
+            "name": "RMSNorm #1",
+            "type": "norm",
+            "shape": "[1, 5, 4096]",
+            "desc": "Scales activations by root-mean-square to prevent exploding gradients."
+          },
+          {
+            "name": "Causal Multi-Head Attention",
+            "type": "attention",
+            "shape": "[1, 5, 4096]",
+            "desc": "Upper-triangular masked attention. Each token only attends to past tokens!"
+          },
+          {
+            "name": "Residual Addition #1",
+            "type": "residual",
+            "shape": "[1, 5, 4096]",
+            "desc": "x = x + Attention(x). Clean gradient highway directly back to inputs."
+          },
+          {
+            "name": "RMSNorm #2",
+            "type": "norm",
+            "shape": "[1, 5, 4096]",
+            "desc": "Pre-normalization before non-linear feed-forward transformation."
+          },
+          {
+            "name": "SwiGLU Feed-Forward Network",
+            "type": "ffn",
+            "shape": "[1, 5, 14336]",
+            "desc": "Expands to 14,336 hidden dims. Knowledge retrieval engine with gated Swish."
+          },
+          {
+            "name": "Residual Addition #2",
+            "type": "residual",
+            "shape": "[1, 5, 4096]",
+            "desc": "x = x + SwiGLU(x). Final contextualized block representation."
+          }
         ]
       },
       "codeSnippet": "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass RMSNorm(nn.Module):\n    def __init__(self, dim, eps=1e-6):\n        super().__init__()\n        self.eps = eps\n        self.weight = nn.Parameter(torch.ones(dim))\n    def forward(self, x):\n        # Root Mean Square normalization (no mean centering needed!)\n        rms = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)\n        return x * rms * self.weight\n\nclass SwiGLU(nn.Module):\n    def __init__(self, d_model, d_ff):\n        super().__init__()\n        self.w_gate = nn.Linear(d_model, d_ff, bias=False)\n        self.w_up = nn.Linear(d_model, d_ff, bias=False)\n        self.w_down = nn.Linear(d_ff, d_model, bias=False)\n    def forward(self, x):\n        # SwiGLU: (Swish(xW_gate) * xW_up) * W_down\n        return self.w_down(F.silu(self.w_gate(x)) * self.w_up(x))\n\nclass MiniGPTBlock(nn.Module):\n    def __init__(self, d_model=64, num_heads=4, d_ff=172):\n        super().__init__()\n        self.norm1 = RMSNorm(d_model)\n        self.attn = nn.MultiheadAttention(d_model, num_heads, batch_first=True)\n        self.norm2 = RMSNorm(d_model)\n        self.ffn = SwiGLU(d_model, d_ff)\n    \n    def forward(self, x):\n        B, S, D = x.shape\n        # Create Causal Mask (lower triangular True, upper False)\n        causal_mask = torch.triu(torch.full((S, S), float('-inf')), diagonal=1)\n        \n        # 1. Pre-norm Attention with Residual connection\n        normed = self.norm1(x)\n        attn_out, _ = self.attn(normed, normed, normed, attn_mask=causal_mask)\n        x = x + attn_out\n        \n        # 2. Pre-norm SwiGLU with Residual connection\n        x = x + self.ffn(self.norm2(x))\n        return x\n\nblock = MiniGPTBlock(d_model=64, num_heads=4, d_ff=172)\nsample_input = torch.randn(1, 5, 64)  # Batch=1, Seq=5, Dim=64\noutput = block(sample_input)\nprint(\"Input Tensor:\", sample_input.shape)\nprint(\"Output Contextual Tensor:\", output.shape)\nprint(\"Block Parameters Total:\", sum(p.numel() for p in block.parameters()))",
@@ -1453,49 +1550,153 @@
             "id": "robot",
             "text": "The mysterious robot stepped out of the spaceship and saw a",
             "candidates": [
-              { "token": " alien", "logit": 4.2, "category": "sci-fi" },
-              { "token": " glowing", "logit": 3.7, "category": "desc" },
-              { "token": " city", "logit": 3.3, "category": "place" },
-              { "token": " human", "logit": 2.8, "category": "entity" },
-              { "token": " flower", "logit": 2.1, "category": "nature" },
-              { "token": " glitch", "logit": 1.4, "category": "tech" },
-              { "token": " sandwich", "logit": 0.4, "category": "absurd" },
-              { "token": " banana", "logit": -0.8, "category": "absurd" },
-              { "token": " unicorn", "logit": -1.9, "category": "fantasy" },
-              { "token": " syntax", "logit": -3.5, "category": "code" }
+              {
+                "token": " alien",
+                "logit": 4.2,
+                "category": "sci-fi"
+              },
+              {
+                "token": " glowing",
+                "logit": 3.7,
+                "category": "desc"
+              },
+              {
+                "token": " city",
+                "logit": 3.3,
+                "category": "place"
+              },
+              {
+                "token": " human",
+                "logit": 2.8,
+                "category": "entity"
+              },
+              {
+                "token": " flower",
+                "logit": 2.1,
+                "category": "nature"
+              },
+              {
+                "token": " glitch",
+                "logit": 1.4,
+                "category": "tech"
+              },
+              {
+                "token": " sandwich",
+                "logit": 0.4,
+                "category": "absurd"
+              },
+              {
+                "token": " banana",
+                "logit": -0.8,
+                "category": "absurd"
+              },
+              {
+                "token": " unicorn",
+                "logit": -1.9,
+                "category": "fantasy"
+              },
+              {
+                "token": " syntax",
+                "logit": -3.5,
+                "category": "code"
+              }
             ]
           },
           {
             "id": "code",
             "text": "def train_neural_network(model, optimizer, data_loader):",
             "candidates": [
-              { "token": "\n   ", "logit": 4.8, "category": "indent" },
-              { "token": " model", "logit": 3.9, "category": "code" },
-              { "token": " for", "logit": 3.4, "category": "loop" },
-              { "token": " total", "logit": 2.2, "category": "var" },
-              { "token": " print", "logit": 1.5, "category": "debug" },
-              { "token": " return", "logit": 0.6, "category": "control" },
-              { "token": " pizza", "logit": -2.4, "category": "absurd" },
-              { "token": " spaceship", "logit": -3.8, "category": "absurd" }
+              {
+                "token": "\n   ",
+                "logit": 4.8,
+                "category": "indent"
+              },
+              {
+                "token": " model",
+                "logit": 3.9,
+                "category": "code"
+              },
+              {
+                "token": " for",
+                "logit": 3.4,
+                "category": "loop"
+              },
+              {
+                "token": " total",
+                "logit": 2.2,
+                "category": "var"
+              },
+              {
+                "token": " print",
+                "logit": 1.5,
+                "category": "debug"
+              },
+              {
+                "token": " return",
+                "logit": 0.6,
+                "category": "control"
+              },
+              {
+                "token": " pizza",
+                "logit": -2.4,
+                "category": "absurd"
+              },
+              {
+                "token": " spaceship",
+                "logit": -3.8,
+                "category": "absurd"
+              }
             ]
           },
           {
             "id": "philosophy",
             "text": "In the heart of the quantum computer, artificial consciousness began to",
             "candidates": [
-              { "token": " awaken", "logit": 4.1, "category": "thought" },
-              { "token": " question", "logit": 3.6, "category": "thought" },
-              { "token": " evolve", "logit": 3.2, "category": "action" },
-              { "token": " calculate", "logit": 2.5, "category": "tech" },
-              { "token": " dream", "logit": 2.0, "category": "creative" },
-              { "token": " crash", "logit": 0.8, "category": "bug" },
-              { "token": " dance", "logit": -0.5, "category": "whimsical" },
-              { "token": " potato", "logit": -3.6, "category": "absurd" }
+              {
+                "token": " awaken",
+                "logit": 4.1,
+                "category": "thought"
+              },
+              {
+                "token": " question",
+                "logit": 3.6,
+                "category": "thought"
+              },
+              {
+                "token": " evolve",
+                "logit": 3.2,
+                "category": "action"
+              },
+              {
+                "token": " calculate",
+                "logit": 2.5,
+                "category": "tech"
+              },
+              {
+                "token": " dream",
+                "logit": 2.0,
+                "category": "creative"
+              },
+              {
+                "token": " crash",
+                "logit": 0.8,
+                "category": "bug"
+              },
+              {
+                "token": " dance",
+                "logit": -0.5,
+                "category": "whimsical"
+              },
+              {
+                "token": " potato",
+                "logit": -3.6,
+                "category": "absurd"
+              }
             ]
           }
         ],
         "defaultTemperature": 0.7,
-        "defaultTopP": 0.90,
+        "defaultTopP": 0.9,
         "defaultTopK": 5
       },
       "codeSnippet": "import torch\nimport torch.nn.functional as F\n\ndef sample_next_token(logits, temperature=0.7, top_k=5, top_p=0.9):\n    # 1. Temperature scaling (T > 0)\n    # Lower T (<0.5) makes high logits spike; Higher T (>1.0) flattens distribution\n    scaled_logits = logits / max(temperature, 1e-4)\n    \n    # 2. Top-K filtering: keep only top K logits, mask rest to -inf\n    if top_k > 0:\n        top_k_threshold = torch.topk(scaled_logits, min(top_k, scaled_logits.size(-1)))[0][..., -1, None]\n        scaled_logits[scaled_logits < top_k_threshold] = float('-inf')\n        \n    # 3. Softmax into probabilities (sum to 1.0)\n    probs = F.softmax(scaled_logits, dim=-1)\n    \n    # 4. Top-P (Nucleus) filtering: dynamically slice cumulative probability mass\n    sorted_probs, sorted_indices = torch.sort(probs, descending=True)\n    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)\n    \n    # Remove tokens with cumulative probability above threshold\n    indices_to_remove = cumulative_probs > top_p\n    indices_to_remove[..., 1:] = indices_to_remove[..., :-1].clone()\n    indices_to_remove[..., 0] = False\n    \n    sorted_probs[indices_to_remove] = 0.0\n    probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)  # Re-normalize\n    \n    # 5. Stochastic Multinomial Sample\n    sample_idx = torch.multinomial(probs, num_samples=1)\n    chosen_token = sorted_indices.gather(dim=-1, index=sample_idx).item()\n    \n    return chosen_token, probs\n\n# Simulated vocabulary of 6 candidate tokens\ntokens = [\"alien\", \"glowing\", \"city\", \"human\", \"sandwich\", \"banana\"]\nraw_logits = torch.tensor([4.2, 3.7, 3.3, 2.8, 0.4, -0.8])\n\nchosen_idx, final_probs = sample_next_token(raw_logits, temperature=0.7, top_k=4, top_p=0.85)\nprint(\"Sampled Next Token:\", tokens[chosen_idx])\nprint(\"Top Probabilities:\", [f\"{t}: {p:.3f}\" for t, p in zip(tokens[:4], final_probs[:4])])",
@@ -1814,8 +2015,19 @@
         ],
         "defaultRank": 8,
         "defaultAlpha": 16,
-        "availableModules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "defaultModules": ["q_proj", "v_proj"]
+        "availableModules": [
+          "q_proj",
+          "k_proj",
+          "v_proj",
+          "o_proj",
+          "gate_proj",
+          "up_proj",
+          "down_proj"
+        ],
+        "defaultModules": [
+          "q_proj",
+          "v_proj"
+        ]
       },
       "codeSnippet": "import torch\nimport torch.nn as nn\nimport math\n\nclass LoRALinear(nn.Module):\n    \"\"\"Low-Rank Adaptation (LoRA) Linear Layer (Hu et al., 2021).\"\"\"\n    def __init__(self, in_features, out_features, rank=8, lora_alpha=16, dropout=0.05):\n        super().__init__()\n        self.rank = rank\n        self.lora_alpha = lora_alpha\n        self.scaling = lora_alpha / rank\n        \n        # 1. Frozen pre-trained base weight (W_0)\n        self.base_layer = nn.Linear(in_features, out_features, bias=False)\n        self.base_layer.weight.requires_grad = False  # FROZEN FOUNDATION!\n        \n        # 2. Trainable low-rank adapter matrices: A (r x in) and B (out x r)\n        self.lora_A = nn.Parameter(torch.empty(rank, in_features))\n        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))  # Zero initialized\n        self.dropout = nn.Dropout(p=dropout)\n        \n        # Initialize A with Kaiming uniform (B is zeros, so Delta W starts at 0!)\n        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))\n        \n    def forward(self, x):\n        # Standard forward pass through frozen base weight\n        base_out = self.base_layer(x)\n        # Low-rank delta forward: (x @ A.T) @ B.T * scaling\n        lora_out = (self.dropout(x) @ self.lora_A.T) @ self.lora_B.T * self.scaling\n        return base_out + lora_out\n\n# Test with dimension 4096 -> 4096 (standard Llama 3 hidden layer)\nlayer = LoRALinear(4096, 4096, rank=8, lora_alpha=16)\nx = torch.randn(2, 5, 4096)\noutput = layer(x)\n\nbase_params = 4096 * 4096\nlora_params = (4096 * 8) + (8 * 4096)\nprint(f\"Frozen Base Parameters: {base_params:,}\")\nprint(f\"Trainable LoRA Parameters: {lora_params:,} ({lora_params / base_params * 100:.2f}% of base!)\")\nprint(f\"Output Shape: {list(output.shape)}\")",
       "quiz": [
@@ -1924,6 +2136,290 @@
           "Initializing matrix B randomly instead of with zeros: Injects high-variance noise on step 0, destroying pre-trained performance.",
           "Omitting the scaling factor alpha/r: Changing rank r will inadvertently change the effective learning rate.",
           "Fine-tuning only Q and V projections on complex reasoning tasks: Applying LoRA across all linear layers (including MLP projections) yields significantly higher benchmark scores."
+        ]
+      }
+    },
+    {
+      "id": "quest-13",
+      "number": 13,
+      "title": "Reasoning Models & Test-Time Compute",
+      "subtitle": "System 2 Thinking, Process Reward Models & DeepSeek-R1 GRPO",
+      "tag": "Reasoning & GRPO",
+      "icon": "🧠",
+      "xp": 500,
+      "story": "You stand at the summit of artificial cognition. Until now, models operated as instantaneous System 1 predictors—hurling out the most statistically probable next token without pause. But confronted with a multi-step mathematical Olympiad theorem or intricate algorithmic paradox, unreflective models crash against compounding error horizons. To transcend statistical mimicry, you must give the network a scratchpad: the power to deliberate, spawn multiple thought paths, self-correct mistakes, grade its own intermediate reasoning steps with Process Reward Models (PRMs), and optimize with Group Relative Policy Optimization (GRPO).",
+      "mentalModel": {
+        "analogy": "The Chess Grandmaster's Scratchpad",
+        "explanation": "A novice chess player moves the moment their eye catches an open piece (System 1: fast, instinctive, error-prone). A grandmaster sits in silence, mentally branching through potential candidate lines: 'If I sacrifice the bishop on h7, Black takes with King, then I check with Queen on h5... wait, Black has Nf6 covering h5! That refutes my hypothesis. Let me backtrack and examine Nc3 instead.' This internal monologue is the Chain-of-Thought (<think> ... </think>). By allocating more inference-time compute to exploring and verifying internal reasoning steps before speaking, the model achieves superhuman problem solving without changing a single pre-trained parameter!"
+      },
+      "interactiveType": "reasoning_model_lab",
+      "interactiveConfig": {
+        "problems": [
+          {
+            "id": "strawberries",
+            "title": "Letter Counting & Token Granularity",
+            "category": "Orthography & Tokenization",
+            "prompt": "How many times does the letter 'r' appear in the word 'strawberry'?",
+            "system1Response": "The letter 'r' appears 2 times in the word 'strawberry'.",
+            "reasoningSteps": [
+              {
+                "stepNum": 1,
+                "tag": "Token Breakdown",
+                "thought": "Wait, LLMs see tokens, not raw characters. Subword tokenizer chunks 'strawberry' into ['straw', 'berry']. I must dismantle the word character-by-character: s - t - r - a - w - b - e - r - r - y.",
+                "prmScore": 0.95,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 2,
+                "tag": "Character Indexing",
+                "thought": "Let me index each letter: 1:s, 2:t, 3:r (Match 1!), 4:a, 5:w, 6:b, 7:e, 8:r (Match 2!), 9:r (Match 3!), 10:y.",
+                "prmScore": 0.98,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 3,
+                "tag": "Aha! Self-Correction",
+                "thought": "Count the matches: Index 3 ('r'), Index 8 ('r'), Index 9 ('r'). Total count = 1 + 1 + 1 = 3. System 1 commonly misses the double-r in berry or the r in straw.",
+                "prmScore": 1.0,
+                "isCorrection": true
+              },
+              {
+                "stepNum": 4,
+                "tag": "Verification & Sanity Check",
+                "thought": "Re-verify: 'straw' contains 1 'r'. 'berry' contains 2 'r's. 1 + 2 = 3. Verified with 100% confidence.",
+                "prmScore": 1.0,
+                "isCorrection": false
+              }
+            ],
+            "finalAnswer": "The letter 'r' appears exactly 3 times in the word 'strawberry'."
+          },
+          {
+            "id": "knights_knaves",
+            "title": "Knights and Knaves Island Paradox",
+            "category": "Formal Logic & Deduction",
+            "prompt": "On an island, inhabitants are either Knights (who always tell the truth) or Knaves (who always lie). You meet A and B. A says: 'Both of us are knaves.' What are A and B?",
+            "system1Response": "A says both are knaves, so A must be a knave and B is a knight because usually people have mixed identities.",
+            "reasoningSteps": [
+              {
+                "stepNum": 1,
+                "tag": "Hypothesis 1: A is Knight",
+                "thought": "Assume A is a Knight. If A is a Knight, A's statement must be TRUE. A's statement is: 'Both A and B are Knaves'. But this implies A is a Knave! A cannot be both Knight and Knave simultaneously. Contradiction!",
+                "prmScore": 0.99,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 2,
+                "tag": "Deduction: A is Knave",
+                "thought": "Since assuming A is a Knight produces a logical contradiction, A MUST be a Knave. Therefore, A is a Knave and always lies.",
+                "prmScore": 1.0,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 3,
+                "tag": "Aha! Inverting Falsehood",
+                "thought": "Since A is a Knave, A's statement 'Both A and B are Knaves' is FALSE. The negation of (A is Knave AND B is Knave) is: (A is Knight OR B is Knight).",
+                "prmScore": 0.97,
+                "isCorrection": true
+              },
+              {
+                "stepNum": 4,
+                "tag": "Resolving B",
+                "thought": "We already know A is a Knave. For the disjunction (A is Knight OR B is Knight) to hold true, B MUST be a Knight!",
+                "prmScore": 1.0,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 5,
+                "tag": "Final Verification",
+                "thought": "Check world consistency: A = Knave, B = Knight. A says 'Both are knaves' -> FALSE. A is indeed lying. Consistent. Deduction complete.",
+                "prmScore": 1.0,
+                "isCorrection": false
+              }
+            ],
+            "finalAnswer": "A is a Knave (liar), and B is a Knight (truth-teller)."
+          },
+          {
+            "id": "game_24",
+            "title": "The 24-Game: Arithmetical Search",
+            "category": "Combinatorial Arithmetic",
+            "prompt": "Using the numbers 3, 3, 8, 8 and the basic operations (+, -, *, /), each number exactly once, obtain 24.",
+            "system1Response": "8 * 3 = 24, but we have 8 and 3 left over, so maybe (8 - 3) * (8 - 3) = 25 which is close to 24.",
+            "reasoningSteps": [
+              {
+                "stepNum": 1,
+                "tag": "Integer Factor Exploration",
+                "thought": "Target = 24. Standard integer factors: 3 * 8 = 24, 4 * 6 = 24, 2 * 12 = 24. If I multiply 8 * 3 = 24, remaining are {3, 8}. No way to combine 3 and 8 to get 1 or 0 without changing 24.",
+                "prmScore": 0.88,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 2,
+                "tag": "Additive & Subtractive Search",
+                "thought": "Can we do 8 + 8 + 8? We have only two 8s. 8 * (something)? 3 * (something)? What if we divide by a fraction?",
+                "prmScore": 0.92,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 3,
+                "tag": "Aha! Fractional Division",
+                "thought": "Notice that dividing by a fraction multiplies! 24 = 8 / (1/3). Can I construct 1/3 using {3, 3, 8}? Yes: 3 - (8 / 3) = 9/3 - 8/3 = 1/3! EUREKA!",
+                "prmScore": 1.0,
+                "isCorrection": true
+              },
+              {
+                "stepNum": 4,
+                "tag": "Exact Evaluation",
+                "thought": "Compute 8 / (3 - (8 / 3)): Step A: 8/3. Step B: 3 - 8/3 = 1/3. Step C: 8 / (1/3) = 8 * 3 = 24. Exactly 24!",
+                "prmScore": 1.0,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 5,
+                "tag": "Constraint Verification",
+                "thought": "Verify multiset: {3, 3, 8, 8}. 8 (numerator), 3 (subtrahend), 8 (fraction numerator), 3 (fraction denominator). All 4 numbers used exactly once. Valid.",
+                "prmScore": 1.0,
+                "isCorrection": false
+              }
+            ],
+            "finalAnswer": "8 / (3 - (8 / 3)) = 24"
+          },
+          {
+            "id": "river_crossing",
+            "title": "The River Crossing State-Space Search",
+            "category": "State-Space Planning",
+            "prompt": "A farmer must cross a river with a fox, a goose, and a bag of grain in a boat that holds only himself and one item. Left alone, the fox eats the goose, or the goose eats the grain. How does he cross safely?",
+            "system1Response": "The farmer takes the fox first, then comes back and takes the grain, then takes the goose.",
+            "reasoningSteps": [
+              {
+                "stepNum": 1,
+                "tag": "Constraint Analysis",
+                "thought": "Forbidden states on either bank without farmer: (Fox + Goose) -> Goose eaten. (Goose + Grain) -> Grain eaten. Safe combination: (Fox + Grain). The Goose is the conflict bottleneck.",
+                "prmScore": 0.98,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 2,
+                "tag": "Move 1: Isolate Conflicts",
+                "thought": "Since Fox + Grain can safely stay together on Bank A, the farmer MUST take the Goose across first. Bank A: {Fox, Grain}. Bank B: {Goose}. Farmer returns alone.",
+                "prmScore": 1.0,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 3,
+                "tag": "Move 2 & The Dilemma",
+                "thought": "Farmer takes Fox across to Bank B. But now Bank B has {Fox, Goose}! If farmer leaves, Fox eats Goose!",
+                "prmScore": 0.85,
+                "isCorrection": false
+              },
+              {
+                "stepNum": 4,
+                "tag": "Aha! The Reverse Shuttle Move",
+                "thought": "Backtrack insight: The farmer does NOT need to return alone! He unloads the Fox on Bank B, and takes the GOOSE BACK with him to Bank A! Bank A: {Goose, Grain}. Bank B: {Fox}.",
+                "prmScore": 1.0,
+                "isCorrection": true
+              },
+              {
+                "stepNum": 5,
+                "tag": "Move 4 & 5 to Target",
+                "thought": "Farmer leaves Goose on Bank A, takes Grain to Bank B (Fox + Grain is safe). Farmer returns alone to Bank A, picks up Goose, and crosses to Bank B. All safely across!",
+                "prmScore": 1.0,
+                "isCorrection": false
+              }
+            ],
+            "finalAnswer": "1. Take Goose across. 2. Return alone. 3. Take Fox across. 4. Bring Goose back! 5. Take Grain across. 6. Return alone. 7. Take Goose across."
+          }
+        ],
+        "defaultBudget": 1024,
+        "defaultTemperature": 0.6
+      },
+      "codeSnippet": "import torch\nimport torch.nn.functional as F\n\ndef compute_grpo_loss(policy_logps, old_logps, ref_logps, rewards, epsilon=0.2, beta=0.04):\n    \"\"\"\n    Group Relative Policy Optimization (GRPO) Loss - DeepSeek-R1 (2025)\n    Eliminates the separate Value/Critic model by normalizing rewards across a group of G rollouts.\n    \"\"\"\n    # 1. Normalize rewards across the group of G completions\n    G = rewards.size(0)\n    mean_r = rewards.mean()\n    std_r = rewards.std() + 1e-8\n    advantages = (rewards - mean_r) / std_r  # Shape: [G]\n    \n    # 2. Probability ratio r_i(theta) = pi_theta(o_i|q) / pi_old(o_i|q)\n    log_ratio = policy_logps - old_logps\n    ratio = torch.exp(log_ratio)\n    \n    # 3. PPO-style clipped surrogate objective\n    surr1 = ratio * advantages.unsqueeze(-1)\n    surr2 = torch.clamp(ratio, 1.0 - epsilon, 1.0 + epsilon) * advantages.unsqueeze(-1)\n    policy_loss = -torch.min(surr1, surr2).mean()\n    \n    # 4. KL Divergence penalty against frozen reference model\n    kl_div = torch.exp(ref_logps - policy_logps) - (ref_logps - policy_logps) - 1.0\n    kl_loss = beta * kl_div.mean()\n    \n    total_loss = policy_loss + kl_loss\n    return total_loss, policy_loss.item(), kl_loss.item(), advantages\n\n# Group of G=4 sampled rollouts for a hard math question:\n# Rollouts 1 & 3 found the right answer (R=1.0), Rollout 2 hallucinated (R=0.0), Rollout 4 had wrong arithmetic (R=0.2)\nrewards = torch.tensor([1.0, 0.0, 1.0, 0.2])\npol_logp = torch.tensor([[-0.2], [-1.8], [-0.3], [-0.9]])\nold_logp = torch.tensor([[-0.25], [-1.7], [-0.35], [-0.85]])\nref_logp = torch.tensor([[-0.22], [-1.6], [-0.32], [-0.88]])\n\nloss, p_loss, kl_l, adv = compute_grpo_loss(pol_logp, old_logp, ref_logp, rewards)\nprint(f\"Group Advantages: {adv.tolist()}\")\nprint(f\"GRPO Loss: {loss.item():.4f} (Policy: {p_loss:.4f}, KL Anchor: {kl_l:.4f})\")\nprint(\"Verified DeepSeek-R1 GRPO engine: 0 Critic Models in VRAM!\")\n",
+      "quiz": [
+        {
+          "id": "q13-1",
+          "question": "Why can Outcome Reward Models (ORMs) mislead reinforcement learning when training multi-step reasoning models?",
+          "options": [
+            "A) ORMs take too much disk space to store",
+            "B) ORMs only grade the final answer (+1 or 0), rewarding flawed derivations that stumbled onto the right answer by luck and punishing sound derivations with minor arithmetic slips",
+            "C) ORMs only work on English text",
+            "D) ORMs make transformers run backwards"
+          ],
+          "answer": "B",
+          "explanation": "Correct! Outcome supervision suffers from severe credit assignment ambiguity. A Process Reward Model (PRM) solves this by grading every intermediate step (r_t), giving precise feedback on exactly where logic broke down."
+        },
+        {
+          "id": "q13-2",
+          "question": "How does Group Relative Policy Optimization (GRPO) eliminate the need for a Critic / Value network in DeepSeek-R1?",
+          "options": [
+            "A) It samples a group of G rollouts for the same prompt and computes baseline advantages by normalizing rewards (R_i - mean(R)) / std(R) across the group",
+            "B) It deletes all loss gradients",
+            "C) It converts the LLM into a linear regression model",
+            "D) It runs only on CPU memory"
+          ],
+          "answer": "A",
+          "explanation": "Spot on! Standard PPO requires a massive Critic model in VRAM to estimate state value V(s). GRPO samples G parallel completions for prompt q and uses the empirical group mean as the baseline, saving enormous GPU memory!"
+        },
+        {
+          "id": "q13-3",
+          "question": "What describes the Test-Time Compute Scaling Law discovered in reasoning models like o1 and DeepSeek-R1?",
+          "options": [
+            "A) Generating fewer tokens always makes answers more accurate",
+            "B) Allowing a model to spend more compute (thought tokens) at inference time searching, verifying, and backtracking produces smooth, log-linear gains in reasoning benchmark accuracy",
+            "C) Models only think faster when GPU temperature is cooled to absolute zero",
+            "D) Test-time scaling only applies to image generation"
+          ],
+          "answer": "B",
+          "explanation": "Osu! In addition to pre-training scaling laws, reasoning models exhibit test-time scaling: allocating more tokens to deliberate and self-correct during inference unlocks superhuman performance on math and coding without retraining weights!"
+        }
+      ],
+      "lessonContent": {
+        "formula": "\\mathcal{J}_{\\text{GRPO}}(\\theta) = \\mathbb{E} \\left[ \\frac{1}{G} \\sum_{i=1}^G \\min\\left( \\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)} A_i, \\text{clip}\\left(\\frac{\\pi_\\theta(o_i)}{\\pi_{\\text{old}}(o_i)}, 1 \\pm \\epsilon\\right) A_i \\right) - \\beta D_{\\text{KL}}(\\pi_\\theta \\parallel \\pi_{\\text{ref}}) \\right]",
+        "formulaExplanation": "GRPO samples a group of G candidate reasoning completions for the same prompt, grades them, and normalizes advantages A_i = (R_i - \\mu)/\\sigma across the group. This eliminates the multi-gigabyte Critic/Value model entirely, allowing massive reasoning models to be trained via pure reinforcement learning!",
+        "sections": [
+          {
+            "title": "1. The Reasoning Revolution: System 1 vs. System 2 Deliberation",
+            "paragraphs": [
+              "Until recently, Large Language Models operated entirely in System 1 mode (Daniel Kahneman's framework): fast, automatic, subconscious, and instinctive. An auto-regressive transformer emits tokens at constant compute per token, without pausing to evaluate whether an intermediate deduction is sound.",
+              "For complex multi-step reasoning (e.g. mathematical Olympiad problems, subtle pointer manipulation in C, or formal logic puzzles), this causes catastrophic error accumulation. If a model has a 95% accuracy per deduction step, across a 15-step proof its chance of success is (0.95)^15 ≈ 46.3%!",
+              "System 2 reasoning introduces deliberate, conscious, and slow thinking. By generating a private Chain-of-Thought (<think> ... </think>) before committing to an answer, the model can formulate hypotheses, test edge cases, and self-correct before presenting its solution."
+            ],
+            "keyTakeaway": "System 1 predictors guess the next token instantly; System 2 reasoning models spend test-time compute exploring and verifying logic before answering."
+          },
+          {
+            "title": "2. Chain-of-Thought Scratchpads & Self-Correction Mechanisms",
+            "paragraphs": [
+              "The foundational breakthrough of reasoning models is the internal scratchpad. Within the <think> tokens, the model acts as both generator and critic. It emits reflection markers: 'Wait, let me double check that assumption...', 'Alternatively, what if x is negative?', or 'Let me test this with small numbers.'",
+              "During pre-training or standard SFT, models are heavily penalized for backtracking because standard training datasets only contain clean, polished solutions. In reasoning models, RL incentives encourage active exploration, hypothesis testing, and backtracking.",
+              "When a reasoning model realizes a dead end, it writes: 'Hold on, this yields a contradiction. Let me restart from Step 2...' This self-correction ability allows the model to recover from mistakes that would permanently derail a standard LLM."
+            ],
+            "keyTakeaway": "Self-correction and backtracking turn linear token generation into an adaptive search process capable of error recovery."
+          },
+          {
+            "title": "3. Outcome vs. Process Supervision: The Power of PRMs",
+            "paragraphs": [
+              "How do we teach an LLM to reason? Early approaches used Outcome Reward Models (ORMs): the model is given a math problem, writes a solution, and an automated verifier checks whether the final answer is correct (+1) or incorrect (0).",
+              "Outcome supervision suffers from severe credit assignment ambiguity. An ORM provides zero signal on which specific step was brilliant and which was flawed. Worst of all, it rewards lucky guesses arrived at through completely fabricated math (false positives), and harshly punishes a 20-step proof that had a tiny arithmetic typo on the final line.",
+              "Process Reward Models (PRMs), introduced by OpenAI (Lightman et al., 2023), solve this by scoring every individual reasoning step with a reward r_t ∈ [0, 1]. A PRM acts as a step-level mentor, identifying the precise divergence point where logic derailed."
+            ],
+            "keyTakeaway": "PRMs evaluate every intermediate step, providing granular credit assignment and enabling tree-search algorithms (like MCTS and Best-of-N)."
+          },
+          {
+            "title": "4. DeepSeek-R1 & GRPO: Eliminating the Critic Model with Group Normalization",
+            "paragraphs": [
+              "Traditional Actor-Critic Reinforcement Learning (PPO) requires four large models in GPU memory: Actor (policy π_θ), Critic (value network V_ψ), Reward Model (R), and Reference Model (π_ref). For a 70B parameter model, hosting the Critic network requires hundreds of gigabytes of additional VRAM!",
+              "DeepSeek-R1 introduced Group Relative Policy Optimization (GRPO). Instead of training a Critic model to estimate state values, GRPO samples a group of G candidate reasoning paths {o_1, o_2, ..., o_G} for the same prompt q.",
+              "The advantage of each candidate is computed directly by normalizing its reward against the group: A_i = (R_i - mean(R)) / std(R). Candidates that outperform the group average receive positive gradient reinforcement, while worse candidates receive negative updates—with ZERO Critic models stored in VRAM!"
+            ],
+            "keyTakeaway": "GRPO slashes memory requirements by computing baseline advantages directly from group rollout statistics rather than a separate Critic network."
+          },
+          {
+            "title": "5. Test-Time Compute Scaling Laws & Search Trees (MCTS)",
+            "paragraphs": [
+              "For years, AI scaling followed the Kaplan / Chinchilla laws: performance scales with parameter count and pre-training dataset size. Reasoning models introduced a second scaling axis: Test-Time Compute Scaling.",
+              "By spending more compute at inference time—either via longer reasoning chains (sequential scaling) or parallel search trees like Monte Carlo Tree Search (MCTS) and Best-of-N majority voting (parallel scaling)—accuracy on hard STEM and coding benchmarks scales predictably with compute.",
+              "With verification (e.g. Python interpreters or Lean 4 theorem provers), an LLM can generate N candidate solutions, execute tests, and select the verifiable winner, transforming LLMs from probabilistic chatterboxes into reliable deductive engines."
+            ],
+            "keyTakeaway": "Test-time compute scaling unlocks exponential performance gains during inference through search, verification, and self-consistency voting."
+          }
         ]
       }
     }

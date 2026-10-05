@@ -95,7 +95,15 @@ const state = {
   loraActiveTab: 'matrix', // 'matrix' | 'vram_qlora' | 'hot_swap'
   loraTrainedSteps: 0,
   loraActiveAdapter: 'medical',
-  loraMerged: false
+  loraMerged: false,
+  // Quest 13: Reasoning Models & Test-Time Compute state
+  reasoningProblemIdx: 0,
+  reasoningBudget: 1024,
+  reasoningTemp: 0.6,
+  reasoningActiveTab: 'scratchpad', // 'scratchpad' | 'prm_tree' | 'grpo_arena'
+  reasoningActiveStep: 0,
+  reasoningRolloutGroupIdx: 0,
+  reasoningIsPlaying: false
 };
 
 const tutorService = new AITutorService();
@@ -687,6 +695,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'peft_lora_lab':
       renderPeftLoraLabWidget(quest);
+      break;
+    case 'reasoning_model_lab':
+      renderReasoningModelLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -8071,6 +8082,996 @@ model.save_pretrained(<span class="str">"./llama3_8b_${activeAdapterKey}_merged"
   updateUI();
 }
 
+
+// ============================================================================
+// WIDGET 13: Reasoning Models & Test-Time Compute Lab (DeepSeek-R1, PRM, GRPO)
+// ============================================================================
+function renderReasoningModelLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'reasoning-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const problems = config.problems || [
+    {
+      id: "strawberries",
+      title: "Letter Counting & Token Granularity",
+      category: "Orthography & Tokenization",
+      prompt: "How many times does the letter 'r' appear in the word 'strawberry'?",
+      system1Response: "The letter 'r' appears 2 times in the word 'strawberry'.",
+      reasoningSteps: [
+        {
+          stepNum: 1,
+          tag: "Token Breakdown",
+          thought: "Wait, LLMs see tokens, not raw characters. Subword tokenizer chunks 'strawberry' into ['straw', 'berry']. I must dismantle the word character-by-character: s - t - r - a - w - b - e - r - r - y.",
+          prmScore: 0.95,
+          isCorrection: false
+        },
+        {
+          stepNum: 2,
+          tag: "Character Indexing",
+          thought: "Let me index each letter: 1:s, 2:t, 3:r (Match 1!), 4:a, 5:w, 6:b, 7:e, 8:r (Match 2!), 9:r (Match 3!), 10:y.",
+          prmScore: 0.98,
+          isCorrection: false
+        },
+        {
+          stepNum: 3,
+          tag: "Aha! Self-Correction",
+          thought: "Count the matches: Index 3 ('r'), Index 8 ('r'), Index 9 ('r'). Total count = 1 + 1 + 1 = 3. System 1 commonly misses the double-r in berry or the r in straw.",
+          prmScore: 1.0,
+          isCorrection: true
+        },
+        {
+          stepNum: 4,
+          tag: "Verification & Sanity Check",
+          thought: "Re-verify: 'straw' contains 1 'r'. 'berry' contains 2 'r's. 1 + 2 = 3. Verified with 100% confidence.",
+          prmScore: 1.0,
+          isCorrection: false
+        }
+      ],
+      finalAnswer: "The letter 'r' appears exactly 3 times in the word 'strawberry'."
+    },
+    {
+      id: "knights_knaves",
+      title: "Knights and Knaves Island Paradox",
+      category: "Formal Logic & Deduction",
+      prompt: "On an island, inhabitants are either Knights (who always tell the truth) or Knaves (who always lie). You meet A and B. A says: 'Both of us are knaves.' What are A and B?",
+      system1Response: "A says both are knaves, so A must be a knave and B is a knight because usually people have mixed identities.",
+      reasoningSteps: [
+        {
+          stepNum: 1,
+          tag: "Hypothesis 1: A is Knight",
+          thought: "Assume A is a Knight. If A is a Knight, A's statement must be TRUE. A's statement is: 'Both A and B are Knaves'. But this implies A is a Knave! A cannot be both Knight and Knave simultaneously. Contradiction!",
+          prmScore: 0.99,
+          isCorrection: false
+        },
+        {
+          stepNum: 2,
+          tag: "Deduction: A is Knave",
+          thought: "Since assuming A is a Knight produces a logical contradiction, A MUST be a Knave. Therefore, A is a Knave and always lies.",
+          prmScore: 1.0,
+          isCorrection: false
+        },
+        {
+          stepNum: 3,
+          tag: "Aha! Inverting Falsehood",
+          thought: "Since A is a Knave, A's statement 'Both A and B are Knaves' is FALSE. The negation of (A is Knave AND B is Knave) is: (A is Knight OR B is Knight).",
+          prmScore: 0.97,
+          isCorrection: true
+        },
+        {
+          stepNum: 4,
+          tag: "Resolving B",
+          thought: "We already know A is a Knave. For the disjunction (A is Knight OR B is Knight) to hold true, B MUST be a Knight!",
+          prmScore: 1.0,
+          isCorrection: false
+        },
+        {
+          stepNum: 5,
+          tag: "Final Verification",
+          thought: "Check world consistency: A = Knave, B = Knight. A says 'Both are knaves' -> FALSE. A is indeed lying. Consistent. Deduction complete.",
+          prmScore: 1.0,
+          isCorrection: false
+        }
+      ],
+      finalAnswer: "A is a Knave (liar), and B is a Knight (truth-teller)."
+    },
+    {
+      id: "game_24",
+      title: "The 24-Game: Arithmetical Search",
+      category: "Combinatorial Arithmetic",
+      prompt: "Using the numbers 3, 3, 8, 8 and the basic operations (+, -, *, /), each number exactly once, obtain 24.",
+      system1Response: "8 * 3 = 24, but we have 8 and 3 left over, so maybe (8 - 3) * (8 - 3) = 25 which is close to 24.",
+      reasoningSteps: [
+        {
+          stepNum: 1,
+          tag: "Integer Factor Exploration",
+          thought: "Target = 24. Standard integer factors: 3 * 8 = 24, 4 * 6 = 24, 2 * 12 = 24. If I multiply 8 * 3 = 24, remaining are {3, 8}. No way to combine 3 and 8 to get 1 or 0 without changing 24.",
+          prmScore: 0.88,
+          isCorrection: false
+        },
+        {
+          stepNum: 2,
+          tag: "Additive & Subtractive Search",
+          thought: "Can we do 8 + 8 + 8? We have only two 8s. 8 * (something)? 3 * (something)? What if we divide by a fraction?",
+          prmScore: 0.92,
+          isCorrection: false
+        },
+        {
+          stepNum: 3,
+          tag: "Aha! Fractional Division",
+          thought: "Notice that dividing by a fraction multiplies! 24 = 8 / (1/3). Can I construct 1/3 using {3, 3, 8}? Yes: 3 - (8 / 3) = 9/3 - 8/3 = 1/3! EUREKA!",
+          prmScore: 1.0,
+          isCorrection: true
+        },
+        {
+          stepNum: 4,
+          tag: "Exact Evaluation",
+          thought: "Compute 8 / (3 - (8 / 3)): Step A: 8/3. Step B: 3 - 8/3 = 1/3. Step C: 8 / (1/3) = 8 * 3 = 24. Exactly 24!",
+          prmScore: 1.0,
+          isCorrection: false
+        },
+        {
+          stepNum: 5,
+          tag: "Constraint Verification",
+          thought: "Verify multiset: {3, 3, 8, 8}. 8 (numerator), 3 (subtrahend), 8 (fraction numerator), 3 (fraction denominator). All 4 numbers used exactly once. Valid.",
+          prmScore: 1.0,
+          isCorrection: false
+        }
+      ],
+      finalAnswer: "8 / (3 - (8 / 3)) = 24"
+    },
+    {
+      id: "river_crossing",
+      title: "The River Crossing State-Space Search",
+      category: "State-Space Planning",
+      prompt: "A farmer must cross a river with a fox, a goose, and a bag of grain in a boat that holds only himself and one item. Left alone, the fox eats the goose, or the goose eats the grain. How does he cross safely?",
+      system1Response: "The farmer takes the fox first, then comes back and takes the grain, then takes the goose.",
+      reasoningSteps: [
+        {
+          stepNum: 1,
+          tag: "Constraint Analysis",
+          thought: "Forbidden states on either bank without farmer: (Fox + Goose) -> Goose eaten. (Goose + Grain) -> Grain eaten. Safe combination: (Fox + Grain). The Goose is the conflict bottleneck.",
+          prmScore: 0.98,
+          isCorrection: false
+        },
+        {
+          stepNum: 2,
+          tag: "Move 1: Isolate Conflicts",
+          thought: "Since Fox + Grain can safely stay together on Bank A, the farmer MUST take the Goose across first. Bank A: {Fox, Grain}. Bank B: {Goose}. Farmer returns alone.",
+          prmScore: 1.0,
+          isCorrection: false
+        },
+        {
+          stepNum: 3,
+          tag: "Move 2 & The Dilemma",
+          thought: "Farmer takes Fox across to Bank B. But now Bank B has {Fox, Goose}! If farmer leaves, Fox eats Goose!",
+          prmScore: 0.85,
+          isCorrection: false
+        },
+        {
+          stepNum: 4,
+          tag: "Aha! The Reverse Shuttle Move",
+          thought: "Backtrack insight: The farmer does NOT need to return alone! He unloads the Fox on Bank B, and takes the GOOSE BACK with him to Bank A! Bank A: {Goose, Grain}. Bank B: {Fox}.",
+          prmScore: 1.0,
+          isCorrection: true
+        },
+        {
+          stepNum: 5,
+          tag: "Move 4 & 5 to Target",
+          thought: "Farmer leaves Goose on Bank A, takes Grain to Bank B (Fox + Grain is safe). Farmer returns alone to Bank A, picks up Goose, and crosses to Bank B. All safely across!",
+          prmScore: 1.0,
+          isCorrection: false
+        }
+      ],
+      finalAnswer: "1. Take Goose across. 2. Return alone. 3. Take Fox across. 4. Bring Goose back! 5. Take Grain across. 6. Return alone. 7. Take Goose across."
+    }
+  ];
+
+  // Tree data for PRM Tree Tab
+  const problemTrees = {
+    strawberries: {
+      root: { label: "Root: Count 'r's in 'strawberry'", depth: 0 },
+      nodes: [
+        { id: "s_b1", label: "Step 1: Subwords ['straw', 'berry']", score: 0.95, status: "active", depth: 1, detail: "Model identifies tokenizer chunking boundaries." },
+        { id: "s_b2_bad", label: "Step 2A: Count 1 ('straw') + 1 ('berry') = 2", score: 0.15, status: "pruned", depth: 2, detail: "Greedy subword heuristic misses the double-r in 'berry'. PRM detects contradiction." },
+        { id: "s_b2_good", label: "Step 2B: Character expansion: s-t-r-a-w-b-e-r-r-y", score: 0.98, status: "active", depth: 2, detail: "Model dismantles word into 10 character tokens." },
+        { id: "s_b3_aha", label: "Step 3: Aha! Find matches at indices 3, 8, 9", score: 1.0, status: "active", depth: 3, detail: "Self-correction flags 3 distinct matches. Backtracks from flawed 2-count." },
+        { id: "s_term", label: "Terminal: Verified 'r' Count = 3", score: 1.0, status: "solution", depth: 4, detail: "Outcome verified with 100% certainty. Clean deductive path." }
+      ]
+    },
+    knights_knaves: {
+      root: { label: "Root: A says 'Both of us are knaves'", depth: 0 },
+      nodes: [
+        { id: "k_b1_bad", label: "Hypothesis A: A is Knight (truth-teller)", score: 0.12, status: "pruned", depth: 1, detail: "If A is Knight, his statement is true: both are knaves. So A is knave! Direct paradox. Pruned." },
+        { id: "k_b1_good", label: "Deduction: A must be Knave (liar)", score: 1.0, status: "active", depth: 1, detail: "Hypothesis A being Knight failed, so A is strictly a Knave." },
+        { id: "k_b2_bad", label: "Guess: Since A lies, B also lies -> B is Knave", score: 0.22, status: "pruned", depth: 2, detail: "Invalid inference: negation of conjunction is not both false." },
+        { id: "k_b2_good", label: "Aha! Invert: NOT(A is knave AND B is knave)", score: 0.97, status: "active", depth: 2, detail: "By De Morgan's Law: At least one person must be a Knight!" },
+        { id: "k_term", label: "Terminal: Since A is Knave, B MUST be Knight!", score: 1.0, status: "solution", depth: 3, detail: "Complete resolution verified against all island logic constraints." }
+      ]
+    },
+    game_24: {
+      root: { label: "Root: Obtain 24 from {3, 3, 8, 8}", depth: 0 },
+      nodes: [
+        { id: "g_b1_bad", label: "Path 1: Greedy integer 8 * 3 = 24", score: 0.25, status: "pruned", depth: 1, detail: "Remaining numbers {3, 8} cannot form 1 (identity) or 0. Dead end." },
+        { id: "g_b1_good", label: "Path 2: Fractional division 24 = 8 / (1/3)", score: 0.92, status: "active", depth: 1, detail: "Explore division by fraction to multiply by 3." },
+        { id: "g_b2_bad", label: "Path 2A: Try (8 - 3) * (8 - 3) = 25", score: 0.35, status: "pruned", depth: 2, detail: "Yields 25, close but does not satisfy 24. PRM flags arithmetic mismatch." },
+        { id: "g_b2_good", label: "Aha! Form 1/3 as 3 - (8 / 3)", score: 1.0, status: "active", depth: 2, detail: "3 - 8/3 = 9/3 - 8/3 = 1/3. All numbers {3, 3, 8, 8} utilized." },
+        { id: "g_term", label: "Terminal: 8 / (3 - (8 / 3)) = 24", score: 1.0, status: "solution", depth: 3, detail: "Exact combinatorial arithmetic solution confirmed." }
+      ]
+    },
+    river_crossing: {
+      root: { label: "Root: Farmer, Fox, Goose, Grain across river", depth: 0 },
+      nodes: [
+        { id: "r_b1_bad", label: "Move 1: Take Fox across first", score: 0.10, status: "pruned", depth: 1, detail: "Leaves Goose + Grain alone on Bank A. Goose consumes Grain. Illegal state." },
+        { id: "r_b1_good", label: "Move 1: Take Goose across (Fox + Grain safe)", score: 1.0, status: "active", depth: 1, detail: "Fox does not eat Grain. Bank B has Goose. Farmer returns alone." },
+        { id: "r_b2_bad", label: "Move 2: Take Fox, leave both on Bank B, return alone", score: 0.18, status: "pruned", depth: 2, detail: "Leaves Fox + Goose on Bank B alone. Fox consumes Goose! Illegal state." },
+        { id: "r_b2_good", label: "Aha! Take Fox across, bring GOOSE BACK to Bank A!", score: 1.0, status: "active", depth: 2, detail: "Brilliant reverse shuttle move isolates conflicts on both banks." },
+        { id: "r_term", label: "Terminal: Move Grain, return alone, take Goose across", score: 1.0, status: "solution", depth: 3, detail: "All three items safely transported with zero conflicts." }
+      ]
+    }
+  };
+
+  // Local state variables
+  let currentProblemIdx = state.reasoningProblemIdx || 0;
+  let currentBudget = state.reasoningBudget || 1024;
+  let currentTemp = state.reasoningTemp || 0.6;
+  let activeTab = state.reasoningActiveTab || 'scratchpad';
+  let activeStep = state.reasoningActiveStep || 1;
+  let playInterval = null;
+  let isPlaying = false;
+  let prmThreshold = 0.80;
+  let selectedTreeNodeId = null;
+
+  // GRPO Rollout Arena state
+  let grpoRewards = [1.0, 0.0, 1.0, 0.3];
+  let grpoTrainedSteps = 0;
+
+  const currentProblem = problems[currentProblemIdx] || problems[0];
+
+  container.innerHTML = `
+    <!-- Reasoning Lab Header -->
+    <div class="reasoning-header-bar">
+      <div class="reasoning-title-group">
+        <div class="reasoning-pill-badge">🧠 SYSTEM 2 TEST-TIME COMPUTE</div>
+        <h3 class="reasoning-main-title">Reasoning Models & Test-Time Compute Lab</h3>
+        <p class="reasoning-subtitle">
+          Explore the paradigm shift from fast System 1 next-token prediction to deliberate System 2 reasoning:
+          Chain-of-Thought scratchpads, Process Reward Models (PRMs), and DeepSeek-R1's Critic-free GRPO.
+        </p>
+      </div>
+      <div class="reasoning-metrics-pill">
+        <div class="metric-item">
+          <span class="m-label">THOUGHT COMPUTE</span>
+          <span class="m-val cyan" id="hud-compute-budget">${currentBudget} Tokens</span>
+        </div>
+        <div class="metric-item">
+          <span class="m-label">SAMPLING TEMP</span>
+          <span class="m-val amber" id="hud-temp-val">${currentTemp.toFixed(1)}</span>
+        </div>
+        <div class="metric-item">
+          <span class="m-label">OPTIMIZER</span>
+          <span class="m-val green">GRPO (No Critic)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="reasoning-tabs-nav">
+      <button class="btn-reasoning-tab ${activeTab === 'scratchpad' ? 'active' : ''}" data-tab="scratchpad">
+        <span>💭</span> 1. Chain-of-Thought Scratchpad & Self-Correction
+      </button>
+      <button class="btn-reasoning-tab ${activeTab === 'prm_tree' ? 'active' : ''}" data-tab="prm_tree">
+        <span>🌲</span> 2. PRM Step Verifier & Tree-of-Thoughts Search
+      </button>
+      <button class="btn-reasoning-tab ${activeTab === 'grpo_arena' ? 'active' : ''}" data-tab="grpo_arena">
+        <span>🚀</span> 3. DeepSeek-R1 GRPO Group Rollout Arena
+      </button>
+    </div>
+
+    <!-- Tab 1: Chain-of-Thought Scratchpad -->
+    <div class="reasoning-tab-pane ${activeTab === 'scratchpad' ? 'active' : ''}" id="tab-reasoning-scratchpad">
+      <!-- Problem Selector Deck -->
+      <div class="reasoning-problem-deck">
+        <div class="deck-label">SELECT REASONING CHALLENGE:</div>
+        <div class="problem-chips-row">
+          ${problems.map((p, idx) => `
+            <button class="btn-problem-chip ${idx === currentProblemIdx ? 'active' : ''}" data-pidx="${idx}">
+              <span class="p-icon">${idx === 0 ? '🍓' : idx === 1 ? '🏝️' : idx === 2 ? '🧮' : '🦊'}</span>
+              <span class="p-title">${p.title}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Problem Prompt Banner -->
+      <div class="problem-prompt-banner">
+        <div class="prompt-badge">${currentProblem.category}</div>
+        <div class="prompt-text"><strong>Problem:</strong> "${currentProblem.prompt}"</div>
+      </div>
+
+      <!-- Test-Time Controls Bar -->
+      <div class="test-time-controls-card">
+        <div class="control-col">
+          <div class="slider-label-row">
+            <span>Inference Compute Budget:</span>
+            <strong id="label-token-budget">${currentBudget} Tokens</strong>
+          </div>
+          <input type="range" id="slider-token-budget" min="256" max="4096" step="256" value="${currentBudget}" class="form-range" />
+          <div class="range-hint">Higher budget allocates deeper thought paths, multiple backtrack cycles, and rigorous sanity checks.</div>
+        </div>
+        <div class="control-col">
+          <div class="slider-label-row">
+            <span>Exploration Temperature:</span>
+            <strong id="label-temp-val">${currentTemp.toFixed(1)}</strong>
+          </div>
+          <input type="range" id="slider-temp-val" min="0.1" max="1.2" step="0.1" value="${currentTemp}" class="form-range" />
+          <div class="range-hint">Recommended T=0.6 for reasoning: allows exploratory branching without incoherent degeneration.</div>
+        </div>
+      </div>
+
+      <!-- Dual Stage Comparison (System 1 vs System 2) -->
+      <div class="reasoning-dual-stage">
+        <!-- Left: System 1 Instant Predictor -->
+        <div class="model-arena-box sys1-box">
+          <div class="arena-box-header red">
+            <div class="box-tag">SYSTEM 1 (STANDARD LLM)</div>
+            <h4>⚡ Zero-Shot Fast Predictor</h4>
+            <div class="box-stat">0 Thought Tokens • Greedy Argmax</div>
+          </div>
+          <div class="arena-content">
+            <div class="response-lead-label">Immediate Response:</div>
+            <div class="sys1-response-quote">
+              "${currentProblem.system1Response}"
+            </div>
+            <div class="failure-diagnosis-box">
+              <span class="fail-icon">⚠️</span>
+              <div class="fail-info">
+                <strong>Why System 1 Failed:</strong>
+                <p>
+                  ${currentProblemIdx === 0 
+                    ? "Subword tokenization blindspot! Tokenizer grouped 'straw' and 'berry' as monolithic vector embeddings, preventing character-level positional counting."
+                    : currentProblemIdx === 1
+                    ? "Premature commitment! The model greedily assumed mixed roles without checking logical consistency, failing to invert the falsehood of a liar's conjunction."
+                    : currentProblemIdx === 2
+                    ? "Greedy integer factor trap! The model multiplied 8 * 3 = 24 immediately, leaving no valid way to incorporate the remaining {3, 8} without violating rules."
+                    : "Dead-end state collision! The model moved forward naively without considering reverse shuttle moves, letting the fox eat the goose on the opposite bank."}
+                </p>
+              </div>
+            </div>
+            <div class="accuracy-verdict red">
+              <span>Verdict:</span> <strong>❌ INCORRECT / HALLUCINATED</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: System 2 DeepSeek-R1 Deliberate Engine -->
+        <div class="model-arena-box sys2-box">
+          <div class="arena-box-header green">
+            <div class="box-tag">SYSTEM 2 (DEEPSEEK-R1 / O1)</div>
+            <h4>🧠 Deliberate Reasoning Engine</h4>
+            <div class="box-stat" id="sys2-tokens-spent">Allocated: ${Math.round(currentBudget * (activeStep / Math.max(currentProblem.reasoningSteps.length, 1)))} Tokens</div>
+          </div>
+          <div class="arena-content">
+            <!-- Step Player Controls -->
+            <div class="step-player-toolbar">
+              <button class="btn-player" id="btn-player-reset" title="Restart Scratchpad">⏮ Reset</button>
+              <button class="btn-player" id="btn-player-prev" title="Step Back">◀ Prev</button>
+              <button class="btn-player btn-player-play" id="btn-player-toggle" title="Play/Pause Auto-Reveal">▶ Play</button>
+              <button class="btn-player" id="btn-player-next" title="Next Reasoning Step">Next ▶</button>
+              <div class="step-counter-badge" id="step-counter-text">
+                Step ${Math.min(activeStep, currentProblem.reasoningSteps.length)} / ${currentProblem.reasoningSteps.length}
+              </div>
+            </div>
+
+            <!-- Scratchpad Stream Area -->
+            <div class="scratchpad-stream-container">
+              <div class="scratchpad-header-tag">&lt;think&gt;</div>
+              <div class="scratchpad-steps-list" id="scratchpad-steps-list">
+                <!-- Dynamically injected reasoning step cards -->
+              </div>
+              <div class="scratchpad-footer-tag" id="scratchpad-closing-tag" style="display: none;">&lt;/think&gt;</div>
+            </div>
+
+            <!-- Final Verified Output Card -->
+            <div class="verified-solution-card" id="verified-solution-card" style="display: none;">
+              <div class="solution-header">
+                <span class="sol-icon">✓</span>
+                <div>
+                  <h5>Verified System 2 Conclusion</h5>
+                  <span class="sol-sub">100% Deductive Confidence Verified</span>
+                </div>
+              </div>
+              <div class="solution-body" id="verified-solution-text">
+                "${currentProblem.finalAnswer}"
+              </div>
+              <div class="solution-actions">
+                <button class="btn-claim-xp" id="btn-claim-reasoning-xp">🏆 Claim +25 XP</button>
+                <button class="btn-copy-solution" id="btn-copy-thought-chain">📋 Copy Thought Trace</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: PRM Step Verifier & Tree-of-Thoughts -->
+    <div class="reasoning-tab-pane ${activeTab === 'prm_tree' ? 'active' : ''}" id="tab-reasoning-prm">
+      <!-- PRM vs ORM Architectural Comparison -->
+      <div class="prm-comparison-grid">
+        <div class="prm-card orm-card">
+          <div class="card-badge rose">OUTCOME REWARD MODEL (ORM)</div>
+          <h4>Final Answer Grading Only (+1 or 0)</h4>
+          <p>
+            An ORM inspects only the final line of output. If a model generates a 20-step proof with flawless math but a tiny arithmetic typo on the last line, it gets <strong>Score = 0</strong>.
+            Conversely, if a model writes pure gibberish but stumbles into the right answer by coincidence, it gets <strong>Score = +1</strong>!
+          </p>
+          <div class="prm-flaw-pill">❌ Severe credit assignment ambiguity • Cannot guide search trees</div>
+        </div>
+        <div class="prm-card prm-card-highlight">
+          <div class="card-badge emerald">PROCESS REWARD MODEL (PRM)</div>
+          <h4>Step-by-Step Dense Supervision (r_t ∈ [0, 1])</h4>
+          <p>
+            A PRM acts as an expert mentor checking every intermediate deduction step. It detects the exact moment a line of reasoning breaks down,
+            enabling search algorithms (MCTS, Best-of-N) to <strong>prune dead ends early</strong> and backtrack before wasting tokens.
+          </p>
+          <div class="prm-benefit-pill">✓ Granular credit assignment • Prunes dead ends • Powers MCTS Search</div>
+        </div>
+      </div>
+
+      <!-- Interactive Tree-of-Thoughts Visualization -->
+      <div class="tree-stage-card">
+        <div class="tree-stage-header">
+          <div>
+            <h4>🌲 Tree-of-Thoughts / MCTS Search Explorer</h4>
+            <p>Adjust the PRM pruning threshold below. Branches with step scores below threshold are dynamically pruned to save test-time compute!</p>
+          </div>
+          <div class="tree-controls-group">
+            <span class="threshold-label">PRM Pruning Cutoff:</span>
+            <input type="range" id="slider-prm-threshold" min="0.50" max="0.95" step="0.05" value="${prmThreshold}" class="form-range" style="width: 140px;" />
+            <strong class="threshold-val" id="val-prm-threshold">${Math.round(prmThreshold * 100)}%</strong>
+          </div>
+        </div>
+
+        <!-- Rendered Tree Nodes -->
+        <div class="tree-nodes-canvas" id="tree-nodes-canvas">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Step Diagnostic Inspector -->
+        <div class="tree-node-inspector" id="tree-node-inspector">
+          <div class="inspector-empty">💡 Click any node in the tree above to inspect its PRM verification score, token breakdown, and deductive state.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: DeepSeek-R1 GRPO Group Rollout Arena -->
+    <div class="reasoning-tab-pane ${activeTab === 'grpo_arena' ? 'active' : ''}" id="tab-reasoning-grpo">
+      <!-- Hero Banner: Zero Critic in VRAM -->
+      <div class="grpo-hero-card">
+        <div class="grpo-hero-badge">REINFORCEMENT LEARNING REVOLUTION</div>
+        <h3>DeepSeek-R1 GRPO: Group Relative Policy Optimization</h3>
+        <p>
+          Traditional Actor-Critic (PPO) requires four models in GPU memory: <strong>Policy (π_θ), Critic (V_ψ), Reward (R), and Reference (π_ref)</strong>.
+          For a 70B parameter model, hosting the Critic network requires over 140GB of additional VRAM. 
+          DeepSeek-R1 eliminates the Critic model entirely by sampling a group of G candidate rollouts for each prompt and normalizing rewards against the group!
+        </p>
+        <div class="vram-savings-strip">
+          <div class="vram-spec ppo">PPO VRAM (70B): <strong>~280 GB</strong> (Requires 4× 80GB H100s)</div>
+          <div class="vram-vs">VS</div>
+          <div class="vram-spec grpo">GRPO VRAM (70B): <strong>~140 GB</strong> (50% GPU Memory Saved! 0 Critic in VRAM)</div>
+        </div>
+      </div>
+
+      <!-- Group Rollouts Arena -->
+      <div class="group-rollouts-section">
+        <div class="section-title-bar">
+          <h4>Group of G=4 Sampled Rollouts for Current Prompt</h4>
+          <span class="subtext">Tweak individual completion rewards to see group advantages and policy reinforcement react live:</span>
+        </div>
+
+        <div class="rollout-cards-grid" id="grpo-rollouts-grid">
+          <!-- Populated in JS with 4 interactive rollout cards -->
+        </div>
+
+        <!-- Mathematical Statistics Readout -->
+        <div class="grpo-math-panel">
+          <div class="math-stat-box">
+            <span class="m-title">GROUP MEAN (μ)</span>
+            <span class="m-number" id="grpo-mean-val">0.575</span>
+            <span class="m-desc">Baseline reward expectation across group</span>
+          </div>
+          <div class="math-stat-box">
+            <span class="m-title">GROUP STD (σ)</span>
+            <span class="m-number" id="grpo-std-val">0.428</span>
+            <span class="m-desc">Reward variance across candidates</span>
+          </div>
+          <div class="math-stat-box">
+            <span class="m-title">KL PENALTY (β·D_KL)</span>
+            <span class="m-number cyan">0.0048</span>
+            <span class="m-desc">Anchors policy to reference model π_ref</span>
+          </div>
+          <div class="math-stat-box">
+            <span class="m-title">NET GRPO LOSS</span>
+            <span class="m-number emerald" id="grpo-loss-val">-0.3842</span>
+            <span class="m-desc">Surrogate loss driving gradient descent</span>
+          </div>
+        </div>
+
+        <!-- Action Bar -->
+        <div class="grpo-actions-bar">
+          <button class="btn-grpo-action btn-step" id="btn-simulate-grpo-step">
+            <span>⚡</span> Simulate Policy Gradient Step (+10 XP)
+          </button>
+          <button class="btn-grpo-action btn-reset" id="btn-reset-grpo-rewards">
+            <span>🔄</span> Reset Rollout Rewards
+          </button>
+          <button class="btn-grpo-action btn-copy-code" id="btn-copy-grpo-pytorch">
+            <span>📋</span> Copy PyTorch GRPO Loss
+          </button>
+          <span class="grpo-step-tracker" id="grpo-step-tracker">Steps Simulated: ${grpoTrainedSteps}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.appendChild(container);
+
+  // --- TAB SWITCHING LOGIC ---
+  container.querySelectorAll('.btn-reasoning-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.btn-reasoning-tab').forEach(b => b.classList.remove('active'));
+      container.querySelectorAll('.reasoning-tab-pane').forEach(p => p.classList.remove('active'));
+
+      btn.classList.add('active');
+      activeTab = btn.dataset.tab;
+      state.reasoningActiveTab = activeTab;
+
+      const pane = container.querySelector(`#tab-reasoning-${activeTab}`);
+      if (pane) pane.classList.add('active');
+
+      soundFx.playBlip(750, 0.05);
+
+      if (activeTab === 'prm_tree') {
+        renderTreeCanvas();
+      } else if (activeTab === 'grpo_arena') {
+        updateGrpoArena();
+      }
+    });
+  });
+
+  // --- PROBLEM SELECTION LOGIC ---
+  container.querySelectorAll('.btn-problem-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentProblemIdx = parseInt(btn.dataset.pidx, 10);
+      state.reasoningProblemIdx = currentProblemIdx;
+      activeStep = 1;
+      state.reasoningActiveStep = 1;
+      stopAutoPlay();
+      soundFx.playBlip(680, 0.06);
+
+      // Re-render widget with new problem
+      renderReasoningModelLabWidget(quest);
+    });
+  });
+
+  // --- TAB 1: SCRATCHPAD STEP LOGIC ---
+  function renderScratchpadSteps() {
+    const stepsListEl = container.querySelector('#scratchpad-steps-list');
+    const closingTagEl = container.querySelector('#scratchpad-closing-tag');
+    const solutionCard = container.querySelector('#verified-solution-card');
+    const tokensSpentEl = container.querySelector('#sys2-tokens-spent');
+    const counterText = container.querySelector('#step-counter-text');
+
+    if (!stepsListEl) return;
+    stepsListEl.innerHTML = '';
+
+    const steps = currentProblem.reasoningSteps || [];
+    const revealedSteps = steps.slice(0, activeStep);
+
+    revealedSteps.forEach((st, idx) => {
+      const stepCard = document.createElement('div');
+      stepCard.className = `scratchpad-step-card ${st.isCorrection ? 'is-correction-highlight' : ''}`;
+      
+      const prmPercent = Math.round(st.prmScore * 100);
+      const prmColor = st.prmScore >= 0.95 ? '#34d399' : st.prmScore >= 0.85 ? '#fbbf24' : '#f87171';
+
+      stepCard.innerHTML = `
+        <div class="step-card-header">
+          <div class="step-meta">
+            <span class="step-idx-badge">Step ${st.stepNum}</span>
+            <span class="step-tag-text">${st.tag}</span>
+            ${st.isCorrection ? '<span class="aha-badge">💡 AHA! SELF-CORRECTION</span>' : ''}
+          </div>
+          <div class="step-prm-badge" style="color: ${prmColor}; border-color: ${prmColor};">
+            <span>PRM Score:</span> <strong>${prmPercent}%</strong>
+          </div>
+        </div>
+        <div class="step-thought-text">${st.thought}</div>
+      `;
+
+      stepsListEl.appendChild(stepCard);
+    });
+
+    // Update tokens spent
+    const spentTokens = Math.round(currentBudget * (activeStep / Math.max(steps.length, 1)));
+    if (tokensSpentEl) tokensSpentEl.textContent = `Allocated: ${spentTokens} Tokens • PRM Verified`;
+
+    if (counterText) {
+      counterText.textContent = `Step ${Math.min(activeStep, steps.length)} / ${steps.length}`;
+    }
+
+    const isAllDone = activeStep >= steps.length;
+    if (closingTagEl) closingTagEl.style.display = isAllDone ? 'block' : 'none';
+    if (solutionCard) solutionCard.style.display = isAllDone ? 'block' : 'none';
+  }
+
+  function startAutoPlay() {
+    isPlaying = true;
+    const playBtn = container.querySelector('#btn-player-toggle');
+    if (playBtn) playBtn.innerHTML = '⏸ Pause';
+
+    playInterval = setInterval(() => {
+      const steps = currentProblem.reasoningSteps || [];
+      if (activeStep < steps.length) {
+        activeStep++;
+        state.reasoningActiveStep = activeStep;
+        soundFx.playBlip(780 + activeStep * 40, 0.04);
+        renderScratchpadSteps();
+      } else {
+        stopAutoPlay();
+        soundFx.playLevelUp();
+      }
+    }, 1200);
+  }
+
+  function stopAutoPlay() {
+    isPlaying = false;
+    if (playInterval) {
+      clearInterval(playInterval);
+      playInterval = null;
+    }
+    const playBtn = container.querySelector('#btn-player-toggle');
+    if (playBtn) playBtn.innerHTML = '▶ Play';
+  }
+
+  // Step player buttons
+  const btnNext = container.querySelector('#btn-player-next');
+  const btnPrev = container.querySelector('#btn-player-prev');
+  const btnReset = container.querySelector('#btn-player-reset');
+  const btnToggle = container.querySelector('#btn-player-toggle');
+
+  if (btnNext) {
+    btnNext.addEventListener('click', () => {
+      stopAutoPlay();
+      const steps = currentProblem.reasoningSteps || [];
+      if (activeStep < steps.length) {
+        activeStep++;
+        state.reasoningActiveStep = activeStep;
+        soundFx.playBlip(820, 0.05);
+        renderScratchpadSteps();
+        if (activeStep >= steps.length) soundFx.playLevelUp();
+      }
+    });
+  }
+
+  if (btnPrev) {
+    btnPrev.addEventListener('click', () => {
+      stopAutoPlay();
+      if (activeStep > 1) {
+        activeStep--;
+        state.reasoningActiveStep = activeStep;
+        soundFx.playBlip(540, 0.05);
+        renderScratchpadSteps();
+      }
+    });
+  }
+
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      stopAutoPlay();
+      activeStep = 1;
+      state.reasoningActiveStep = activeStep;
+      soundFx.playBlip(440, 0.06);
+      renderScratchpadSteps();
+    });
+  }
+
+  if (btnToggle) {
+    btnToggle.addEventListener('click', () => {
+      if (isPlaying) {
+        stopAutoPlay();
+        soundFx.playBlip(500, 0.05);
+      } else {
+        const steps = currentProblem.reasoningSteps || [];
+        if (activeStep >= steps.length) activeStep = 0;
+        startAutoPlay();
+        soundFx.playBlip(880, 0.06);
+      }
+    });
+  }
+
+  // Budget & Temp sliders
+  const sliderBudget = container.querySelector('#slider-token-budget');
+  const sliderTemp = container.querySelector('#slider-temp-val');
+  const labelBudget = container.querySelector('#label-token-budget');
+  const labelTemp = container.querySelector('#label-temp-val');
+  const hudBudget = container.querySelector('#hud-compute-budget');
+  const hudTemp = container.querySelector('#hud-temp-val');
+
+  if (sliderBudget) {
+    sliderBudget.addEventListener('input', (e) => {
+      currentBudget = parseInt(e.target.value, 10);
+      state.reasoningBudget = currentBudget;
+      if (labelBudget) labelBudget.textContent = `${currentBudget} Tokens`;
+      if (hudBudget) hudBudget.textContent = `${currentBudget} Tokens`;
+      renderScratchpadSteps();
+    });
+  }
+
+  if (sliderTemp) {
+    sliderTemp.addEventListener('input', (e) => {
+      currentTemp = parseFloat(e.target.value);
+      state.reasoningTemp = currentTemp;
+      if (labelTemp) labelTemp.textContent = currentTemp.toFixed(1);
+      if (hudTemp) hudTemp.textContent = currentTemp.toFixed(1);
+    });
+  }
+
+  // Claim XP Button
+  const btnClaimXp = container.querySelector('#btn-claim-reasoning-xp');
+  if (btnClaimXp) {
+    btnClaimXp.addEventListener('click', () => {
+      soundFx.playLevelUp();
+      awardXp(25, 'Reasoning Scratchpad Conquered');
+      btnClaimXp.disabled = true;
+      btnClaimXp.textContent = '✓ Claimed +25 XP!';
+    });
+  }
+
+  // Copy Thought Chain
+  const btnCopyChain = container.querySelector('#btn-copy-thought-chain');
+  if (btnCopyChain) {
+    btnCopyChain.addEventListener('click', () => {
+      const steps = currentProblem.reasoningSteps || [];
+      const trace = `<think>\n` + steps.map(s => `[Step ${s.stepNum}: ${s.tag}]\n${s.thought}`).join('\n\n') + `\n</think>\n\nFinal Answer: ${currentProblem.finalAnswer}`;
+      navigator.clipboard.writeText(trace).then(() => {
+        btnCopyChain.textContent = '✓ Copied Trace!';
+        setTimeout(() => { btnCopyChain.textContent = '📋 Copy Thought Trace'; }, 1800);
+      });
+      soundFx.playBlip(920, 0.05);
+    });
+  }
+
+  // --- TAB 2: PRM SEARCH TREE LOGIC ---
+  function renderTreeCanvas() {
+    const treeCanvas = container.querySelector('#tree-nodes-canvas');
+    if (!treeCanvas) return;
+    treeCanvas.innerHTML = '';
+
+    const problemKey = currentProblem.id || 'strawberries';
+    const treeData = problemTrees[problemKey] || problemTrees.strawberries;
+
+    const rootEl = document.createElement('div');
+    rootEl.className = 'tree-node-item root-node active';
+    rootEl.innerHTML = `
+      <div class="node-pill">
+        <span class="node-icon">🎯</span>
+        <span class="node-title">${treeData.root.label}</span>
+      </div>
+    `;
+    rootEl.addEventListener('click', () => {
+      inspectTreeNode({
+        title: treeData.root.label,
+        score: 1.0,
+        status: 'root',
+        detail: 'Initial prompt state entered into reasoning model engine.'
+      });
+    });
+    treeCanvas.appendChild(rootEl);
+
+    // Render tree branches
+    const branchesContainer = document.createElement('div');
+    branchesContainer.className = 'tree-branches-container';
+
+    treeData.nodes.forEach(node => {
+      const isPruned = node.score < prmThreshold;
+      const nodeEl = document.createElement('div');
+      nodeEl.className = `tree-node-item ${isPruned ? 'pruned' : node.status === 'solution' ? 'solution' : 'active'}`;
+      nodeEl.dataset.nid = node.id;
+
+      const prmPct = Math.round(node.score * 100);
+      const icon = isPruned ? '✂️' : node.status === 'solution' ? '🏆' : '🌱';
+
+      nodeEl.innerHTML = `
+        <div class="node-pill">
+          <span class="node-icon">${icon}</span>
+          <div class="node-texts">
+            <span class="node-title">${node.label}</span>
+            <span class="node-score-tag">${isPruned ? 'PRUNED' : 'PRM: ' + prmPct + '%'}</span>
+          </div>
+        </div>
+      `;
+
+      nodeEl.addEventListener('click', () => {
+        inspectTreeNode({
+          title: node.label,
+          score: node.score,
+          status: isPruned ? 'pruned' : node.status,
+          detail: node.detail
+        });
+        soundFx.playBlip(720, 0.05);
+      });
+
+      branchesContainer.appendChild(nodeEl);
+    });
+
+    treeCanvas.appendChild(branchesContainer);
+  }
+
+  function inspectTreeNode(nodeInfo) {
+    const inspector = container.querySelector('#tree-node-inspector');
+    if (!inspector) return;
+
+    const prmPct = Math.round(nodeInfo.score * 100);
+    const color = nodeInfo.status === 'pruned' ? '#f43f5e' : nodeInfo.status === 'solution' ? '#10b981' : '#38bdf8';
+
+    inspector.innerHTML = `
+      <div class="inspector-card">
+        <div class="inspector-header">
+          <div class="ins-title-row">
+            <span class="ins-badge" style="background: ${color}22; color: ${color}; border: 1px solid ${color};">
+              ${nodeInfo.status.toUpperCase()}
+            </span>
+            <h5>${nodeInfo.title}</h5>
+          </div>
+          <div class="ins-score-box" style="color: ${color};">
+            PRM Confidence: <strong>${prmPct}%</strong>
+          </div>
+        </div>
+        <p class="ins-detail">${nodeInfo.detail}</p>
+        <div class="ins-verdict">
+          ${nodeInfo.status === 'pruned'
+            ? '⛔ <strong>Pruned by PRM:</strong> Step confidence fell below current threshold (' + Math.round(prmThreshold * 100) + '%). Token exploration halted along this path to conserve inference compute.'
+            : nodeInfo.status === 'solution'
+            ? '🏆 <strong>Terminal Deduction:</strong> Verification passed with 100% formal confidence. Reached target state.'
+            : '✓ <strong>Active Branch:</strong> High PRM confidence score allows Monte Carlo Tree Search to expand subsequent child nodes.'}
+        </div>
+      </div>
+    `;
+  }
+
+  const sliderThreshold = container.querySelector('#slider-prm-threshold');
+  const valThreshold = container.querySelector('#val-prm-threshold');
+  if (sliderThreshold) {
+    sliderThreshold.addEventListener('input', (e) => {
+      prmThreshold = parseFloat(e.target.value);
+      if (valThreshold) valThreshold.textContent = `${Math.round(prmThreshold * 100)}%`;
+      renderTreeCanvas();
+    });
+  }
+
+  // --- TAB 3: GRPO GROUP ROLLOUT LOGIC ---
+  function updateGrpoArena() {
+    const gridEl = container.querySelector('#grpo-rollouts-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = '';
+
+    // Calculate Group Statistics
+    const G = grpoRewards.length;
+    const mean = grpoRewards.reduce((a, b) => a + b, 0) / G;
+    const variance = grpoRewards.reduce((acc, r) => acc + Math.pow(r - mean, 2), 0) / G;
+    const std = Math.sqrt(variance) + 1e-6;
+
+    // Update Math readouts
+    const elMean = container.querySelector('#grpo-mean-val');
+    const elStd = container.querySelector('#grpo-std-val');
+    const elLoss = container.querySelector('#grpo-loss-val');
+
+    if (elMean) elMean.textContent = mean.toFixed(3);
+    if (elStd) elStd.textContent = std.toFixed(3);
+
+    const rolloutMetas = [
+      { num: 1, title: "Rigorous Step-by-Step Proof", desc: "Dismantled premises methodically, confirmed exact invariants, zero hallucinations." },
+      { num: 2, title: "Hallucinated Unsound Jump", desc: "Assumed premature conclusion, committed arithmetic fallacy on intermediate step." },
+      { num: 3, title: "Alternative Valid Derivation", desc: "Approached from dual angle, inverted falsehood, arrived at sound verified answer." },
+      { num: 4, title: "Sound Reasoning, Minor Glitch", desc: "Correct logic trajectory, but minor formatting hesitation before final answer." }
+    ];
+
+    let totalPolicyLoss = 0;
+
+    grpoRewards.forEach((r, idx) => {
+      const adv = (r - mean) / std;
+      const isPositive = adv > 0;
+      const isNeutral = Math.abs(adv) < 0.001;
+      const meta = rolloutMetas[idx];
+
+      // Simulated surrogate loss
+      totalPolicyLoss += -adv;
+
+      const card = document.createElement('div');
+      card.className = `rollout-card ${isPositive ? 'positive-adv' : isNeutral ? 'neutral-adv' : 'negative-adv'}`;
+
+      card.innerHTML = `
+        <div class="rollout-card-header">
+          <div class="rollout-num-badge">Rollout o_${meta.num}</div>
+          <div class="rollout-adv-badge ${isPositive ? 'green' : isNeutral ? 'gray' : 'red'}">
+            Advantage: <strong>${adv >= 0 ? '+' : ''}${adv.toFixed(2)}</strong>
+          </div>
+        </div>
+        <h5 class="rollout-title">${meta.title}</h5>
+        <p class="rollout-desc">${meta.desc}</p>
+        
+        <div class="rollout-slider-control">
+          <div class="r-label-row">
+            <span>Terminal Reward R_${meta.num}:</span>
+            <strong class="r-val-pill">${r.toFixed(2)}</strong>
+          </div>
+          <input type="range" class="reward-slider" data-ridx="${idx}" min="0.0" max="1.0" step="0.1" value="${r}" />
+        </div>
+
+        <div class="rollout-verdict-pill ${isPositive ? 'reinforce' : isNeutral ? 'neutral' : 'penalize'}">
+          ${isPositive 
+            ? '🟢 REINFORCE: Positive gradient update (+Δθ)' 
+            : isNeutral 
+            ? '⚪ BASELINE: Zero policy change (Matches group mean)' 
+            : '🔴 PENALIZE: Negative gradient update (-Δθ)'}
+        </div>
+      `;
+
+      // Slider listener
+      const slider = card.querySelector('.reward-slider');
+      slider.addEventListener('input', (e) => {
+        grpoRewards[idx] = parseFloat(e.target.value);
+        updateGrpoArena();
+      });
+
+      gridEl.appendChild(card);
+    });
+
+    // Net GRPO loss (policy + KL)
+    const netLoss = (totalPolicyLoss / G) + 0.0048;
+    if (elLoss) elLoss.textContent = netLoss.toFixed(4);
+  }
+
+  // GRPO Actions
+  const btnSimulateStep = container.querySelector('#btn-simulate-grpo-step');
+  const btnResetRewards = container.querySelector('#btn-reset-grpo-rewards');
+  const btnCopyGrpoCode = container.querySelector('#btn-copy-grpo-pytorch');
+  const stepTracker = container.querySelector('#grpo-step-tracker');
+
+  if (btnSimulateStep) {
+    btnSimulateStep.addEventListener('click', () => {
+      grpoTrainedSteps += 10;
+      soundFx.playBlip(920, 0.08);
+      awardXp(10, 'GRPO Step Optimized');
+      if (stepTracker) stepTracker.textContent = `Steps Simulated: ${grpoTrainedSteps}`;
+      updateGrpoArena();
+    });
+  }
+
+  if (btnResetRewards) {
+    btnResetRewards.addEventListener('click', () => {
+      grpoRewards = [1.0, 0.0, 1.0, 0.3];
+      soundFx.playBlip(440, 0.06);
+      updateGrpoArena();
+    });
+  }
+
+  if (btnCopyGrpoCode) {
+    btnCopyGrpoCode.addEventListener('click', () => {
+      const codeSnippet = quest.codeSnippet || `# DeepSeek-R1 GRPO Loss\ndef compute_grpo_loss(policy_logps, old_logps, rewards):\n    adv = (rewards - rewards.mean()) / (rewards.std() + 1e-8)\n    return -(torch.exp(policy_logps - old_logps) * adv).mean()`;
+      navigator.clipboard.writeText(codeSnippet).then(() => {
+        btnCopyGrpoCode.textContent = '✓ Copied PyTorch Code!';
+        setTimeout(() => { btnCopyGrpoCode.textContent = '📋 Copy PyTorch GRPO Loss'; }, 1800);
+      });
+      soundFx.playBlip(880, 0.05);
+    });
+  }
+
+  // Initial draw
+  renderScratchpadSteps();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -8265,6 +9266,14 @@ const questPrompts = {
     { label: '🏎️ How does Weight Merging eliminate latency?', prompt: 'Explain how folding the low-rank delta directly into the base weights (W_merged = W0 + (alpha/r)*BA) enables zero inference latency in production.' },
     { label: '💾 How does QLoRA achieve 4-bit fine-tuning?', prompt: 'Explain the 3 pillars of QLoRA: 4-bit NormalFloat (NF4), Double Quantization (DQ), and Paged Optimizers.' },
     { label: '🎯 Quiz me on PEFT & LoRA', prompt: 'Give me a challenging question about LoRA low-rank factorization, rank selection, weight merging, and QLoRA quantization!' }
+  ],
+  'quest-13': [
+    { label: '🧠 System 1 vs System 2 Thinking', prompt: 'Explain the difference between System 1 fast token generation and System 2 deliberate test-time compute in reasoning LLMs.' },
+    { label: '💭 What happens inside <think> scratchpads?', prompt: 'Walk through how Chain-of-Thought scratchpads enable backtracking, hypothesis testing, and self-correction during inference.' },
+    { label: '🎯 ORM vs PRM: Why score every step?', prompt: 'Explain why Process Reward Models (PRMs) outperform Outcome Reward Models (ORMs) for credit assignment in mathematical reasoning.' },
+    { label: '🚀 How does DeepSeek-R1 GRPO eliminate the Critic?', prompt: 'Walk through the mathematical details of GRPO: how does group relative reward normalization replace the value network V(s) in VRAM?' },
+    { label: '📈 Test-Time Compute Scaling Laws', prompt: 'Explain test-time compute scaling: why does spending more tokens or searching wider trees at inference time dramatically boost benchmark accuracy?' },
+    { label: '🎯 Quiz me on Reasoning & Test-Time Compute', prompt: 'Give me a challenging question about DeepSeek-R1, GRPO loss, PRMs, or test-time compute scaling!' }
   ]
 };
 

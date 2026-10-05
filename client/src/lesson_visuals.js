@@ -2288,6 +2288,255 @@ function q12QloraQuantization() {
   };
 }
 
+function q13System1VsSystem2() {
+  let g = T(320, 20, 'System 1 (Instant Guess) vs. System 2 (Deliberate Thinking)', { size: 14, weight: 800, fill: '#fff' });
+
+  // Left Box: System 1 (Autoregressive fast shoot)
+  g += rect(30, 42, 275, 148, { fill: 'rgba(244, 63, 94, 0.08)', stroke: C.rose, rx: 8, sw: 1.5 });
+  g += T(167, 60, 'System 1: Fast & Instinctive', { size: 12, weight: 800, fill: C.rose });
+  g += T(167, 76, 'Direct Next-Token Probability (0 Thinking Time)', { size: 8.5, fill: C.muted });
+
+  g += rect(48, 90, 239, 28, { fill: 'rgba(2, 6, 23, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(167, 104, 'Prompt: "How many \'r\' in strawberry?"', { size: 8, fill: '#fff', mono: true });
+
+  g += arrow(167, 118, 167, 134, 'rose');
+  g += rect(48, 134, 239, 36, { fill: 'rgba(244, 63, 94, 0.2)', stroke: C.rose, rx: 4 });
+  g += T(167, 146, 'Output: "The word has 2 \'r\'s."', { size: 9, weight: 800, fill: '#fecdd3', mono: true });
+  g += T(167, 160, '❌ Hallucination (Error Rate = (1 - ε)^N)', { size: 7.5, fill: C.rose, weight: 700 });
+
+  // Right Box: System 2 (Deliberate Thinking)
+  g += rect(335, 42, 275, 148, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 60, 'System 2: Slow & Deliberate', { size: 12, weight: 800, fill: C.emerald });
+  g += T(472, 76, 'Private <think> Scratchpad (Test-Time Compute)', { size: 8.5, fill: '#86efac' });
+
+  // Chain of thought step blocks
+  const steps = [
+    { text: '1. Deconstruct letters: s-t-r-a-w-b-e-r-r-y', color: C.cyan },
+    { text: '2. Index matching \'r\': index 3, 8, 9', color: C.amber },
+    { text: '3. Aha! 1 + 2 = 3 \'r\'s! Verified.', color: C.emerald }
+  ];
+  steps.forEach((s, idx) => {
+    const y = 90 + idx * 22;
+    g += rect(353, y, 239, 18, { fill: tint(s.color, 0.15), stroke: s.color, rx: 3 });
+    g += T(472, y + 9, s.text, { size: 7.5, fill: '#fff', weight: 600 });
+  });
+
+  g += arrow(472, 156, 472, 168, 'emerald');
+  g += T(472, 178, '✓ Final Answer: Exactly 3 \'r\'s! (100% Accuracy)', { size: 8, weight: 800, fill: C.emerald });
+
+  // Bottom Banner
+  g += rect(80, 198, 480, 24, { fill: 'rgba(6, 182, 212, 0.12)', stroke: C.cyan, rx: 4 });
+  g += T(320, 210, '💡 Test-Time Compute: Spending tokens to think unlocks superhuman reasoning!', { size: 8.5, weight: 700, fill: C.cyan });
+
+  return {
+    html: svg(640, 230, g),
+    caption: 'System 1 produces instant answers with compounding error rates. System 2 generates internal Chain-of-Thought tokens to verify logic before responding.'
+  };
+}
+
+function q13TreeOfThoughts() {
+  let g = T(320, 20, 'Reasoning Tree Search: Branching, Pruning & Backtracking', { size: 14, weight: 800, fill: '#fff' });
+
+  // Root Node
+  g += circ(320, 52, 18, { fill: 'rgba(59, 130, 246, 0.25)', stroke: C.blue, sw: 2 });
+  g += T(320, 52, 'S₀', { size: 11, weight: 800, fill: '#fff', mono: true });
+
+  // 3 Branches: Left (Pruned), Middle (Dead-end), Right (Success)
+  // Left branch (pruned at step 1)
+  g += arrow(306, 62, 140, 95, 'rose');
+  g += rect(90, 95, 100, 36, { fill: 'rgba(244, 63, 94, 0.15)', stroke: C.rose, rx: 4 });
+  g += T(140, 108, 'Branch A (PRM=0.15)', { size: 7.5, weight: 700, fill: C.rose });
+  g += T(140, 122, '❌ Pruned (Dead End)', { size: 7, fill: '#fca5a5' });
+
+  // Middle branch (fails at step 2)
+  g += arrow(320, 70, 320, 95, 'amber');
+  g += rect(270, 95, 100, 36, { fill: 'rgba(251, 191, 36, 0.15)', stroke: C.amber, rx: 4 });
+  g += T(320, 108, 'Step B₁ (PRM=0.65)', { size: 7.5, weight: 700, fill: C.amber });
+  g += T(320, 122, 'Exploring line...', { size: 7, fill: C.muted });
+
+  g += arrow(320, 131, 320, 150, 'rose');
+  g += rect(270, 150, 100, 32, { fill: 'rgba(244, 63, 94, 0.15)', stroke: C.rose, rx: 4 });
+  g += T(320, 161, 'Step B₂ (PRM=0.20)', { size: 7.5, weight: 700, fill: C.rose });
+  g += T(320, 173, '↩ Backtracked!', { size: 7, fill: '#fca5a5', weight: 700 });
+
+  // Right branch (Success path)
+  g += arrow(334, 62, 500, 95, 'emerald');
+  g += rect(450, 95, 100, 36, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 4 });
+  g += T(500, 108, 'Step C₁ (PRM=0.92)', { size: 7.5, weight: 700, fill: C.emerald });
+  g += T(500, 122, 'Sound deduction ✓', { size: 7, fill: '#86efac' });
+
+  g += arrow(500, 131, 500, 150, 'emerald');
+  g += rect(450, 150, 100, 32, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald, rx: 4, sw: 1.5 });
+  g += T(500, 161, 'Step C₂ (PRM=0.99)', { size: 7.5, weight: 800, fill: C.emerald });
+  g += T(500, 173, '🏆 Optimal Solution', { size: 7, fill: '#fff', weight: 700 });
+
+  // Bottom Summary Footnote
+  g += rect(60, 195, 520, 24, { fill: 'rgba(2, 6, 23, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(320, 207, 'MCTS & Tree-of-Thoughts evaluate nodes with PRMs, abandoning dead ends and expanding verified lines.', { size: 8, fill: C.muted });
+
+  return {
+    html: svg(640, 228, g),
+    caption: 'Tree search allows the reasoning model to explore multiple hypotheses, prune flawed paths, and backtrack to successful solution trajectories.'
+  };
+}
+
+function q13OrmVsPrm() {
+  let g = T(320, 20, 'Credit Assignment: Outcome (ORM) vs. Process (PRM) Supervision', { size: 14, weight: 800, fill: '#fff' });
+
+  // Left: ORM Box
+  g += rect(30, 44, 275, 142, { fill: 'rgba(30, 41, 59, 0.4)', stroke: 'rgba(148,163,184,0.3)', rx: 8 });
+  g += T(167, 62, 'Outcome Reward Model (ORM)', { size: 11, weight: 800, fill: C.muted });
+  g += T(167, 76, 'Single binary score on final answer (+1 or 0)', { size: 8, fill: C.dim });
+
+  g += rect(48, 88, 239, 20, { fill: 'rgba(15, 23, 42, 0.8)', rx: 3 });
+  g += T(167, 98, 'Step 1 ➔ Step 2 ➔ Step 3 ➔ Step 4', { size: 8, fill: C.muted, mono: true });
+
+  g += arrow(167, 108, 167, 122, 'rose');
+  g += rect(85, 122, 164, 24, { fill: 'rgba(244, 63, 94, 0.15)', stroke: C.rose, rx: 4 });
+  g += T(167, 134, 'Outcome Reward: R = 0', { size: 9, weight: 800, fill: C.rose, mono: true });
+
+  g += T(167, 164, '⚠️ Blind to where the error occurred! Punishes sound steps.', { size: 7.5, fill: C.rose, weight: 600 });
+  g += T(167, 176, 'Also rewards lucky guesses with false positive logic.', { size: 7, fill: C.dim });
+
+  // Right: PRM Box
+  g += rect(335, 44, 275, 142, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8, sw: 1.5 });
+  g += T(472, 62, 'Process Reward Model (PRM)', { size: 11, weight: 800, fill: C.emerald });
+  g += T(472, 76, 'Continuous score per deduction step r_t ∈ [0, 1]', { size: 8, fill: '#86efac' });
+
+  // Step-by-step scoring pills
+  const prmSteps = [
+    { label: 'Step 1: Formula Setup', score: 'r₁ = 0.98 ✓', color: C.emerald },
+    { label: 'Step 2: Substitution', score: 'r₂ = 0.95 ✓', color: C.emerald },
+    { label: 'Step 3: Arithmetic Slip', score: 'r₃ = 0.12 ✗', color: C.rose }
+  ];
+  prmSteps.forEach((s, idx) => {
+    const y = 88 + idx * 24;
+    g += rect(353, y, 239, 20, { fill: tint(s.color, 0.12), stroke: s.color, rx: 3 });
+    g += T(365, y + 10, s.label, { size: 7.5, fill: '#fff', anchor: 'start', weight: 600 });
+    g += T(580, y + 10, s.score, { size: 7.5, fill: s.color, anchor: 'end', weight: 800, mono: true });
+  });
+
+  g += T(472, 172, '✓ Precise Credit Assignment: Pinpoints the exact bug in Step 3!', { size: 7.5, fill: C.emerald, weight: 800 });
+
+  // Footnote
+  g += rect(40, 196, 560, 22, { fill: 'rgba(2, 6, 23, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(320, 207, 'PRMs enable step-level guidance, active beam search, and reliable reinforcement learning signals.', { size: 8, fill: C.muted });
+
+  return {
+    html: svg(640, 226, g),
+    caption: 'Outcome Reward Models only grade the final answer (+1 or 0), while Process Reward Models grade every intermediate deduction step.'
+  };
+}
+
+function q13GrpoArchitecture() {
+  let g = T(320, 20, 'DeepSeek-R1 GRPO: Group Relative Policy Optimization', { size: 14, weight: 800, fill: '#fff' });
+
+  // Left: Prompt Node
+  g += rect(25, 75, 75, 55, { fill: 'rgba(30, 41, 59, 0.8)', stroke: C.blue, rx: 6 });
+  g += T(62, 95, 'Prompt q', { size: 11, weight: 800, fill: '#fff', mono: true });
+  g += T(62, 114, 'Hard Math', { size: 7.5, fill: C.muted });
+
+  // Fan-out arrow to 4 rollouts
+  g += arrow(100, 102, 140, 102, 'blue');
+
+  // Group of G=4 Rollouts Box
+  g += rect(140, 42, 230, 130, { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(148,163,184,0.25)', rx: 6 });
+  g += T(255, 58, 'Sample Group of G=4 Rollouts', { size: 9, weight: 800, fill: C.cyan });
+
+  const rollouts = [
+    { name: 'o₁: Sound Proof', r: 'R₁ = 1.0', adv: 'A₁ = +0.86', col: C.emerald },
+    { name: 'o₂: Hallucination', r: 'R₂ = 0.0', adv: 'A₂ = -1.05', col: C.rose },
+    { name: 'o₃: Verified Path', r: 'R₃ = 1.0', adv: 'A₃ = +0.86', col: C.emerald },
+    { name: 'o₄: Calculation Error', r: 'R₄ = 0.2', adv: 'A₄ = -0.67', col: C.amber }
+  ];
+  rollouts.forEach((ro, idx) => {
+    const y = 68 + idx * 24;
+    g += rect(150, y, 210, 20, { fill: tint(ro.col, 0.12), stroke: ro.col, rx: 3 });
+    g += T(158, y + 10, ro.name, { size: 7.5, fill: '#fff', anchor: 'start', weight: 600 });
+    g += T(280, y + 10, ro.r, { size: 7.5, fill: ro.col, anchor: 'middle', weight: 700, mono: true });
+    g += T(350, y + 10, ro.adv, { size: 7.5, fill: ro.col, anchor: 'end', weight: 800, mono: true });
+  });
+
+  // Group Normalization Formula Box
+  g += arrow(370, 102, 410, 102, 'cyan');
+  g += rect(410, 52, 205, 100, { fill: 'rgba(6, 182, 212, 0.1)', stroke: C.cyan, rx: 6, sw: 1.5 });
+  g += T(512, 70, 'Group Advantage Formula', { size: 10, weight: 800, fill: C.cyan });
+  g += T(512, 92, 'A_i = (R_i - μ) / (σ + ε)', { size: 9.5, weight: 800, fill: '#fff', mono: true });
+  g += T(512, 112, 'μ = mean(R) • σ = std(R)', { size: 8, fill: C.muted, mono: true });
+  g += T(512, 134, '⚡ Zero Critic Network in VRAM!', { size: 8.5, weight: 800, fill: '#86efac' });
+
+  // Bottom Savings Badge
+  g += rect(40, 185, 560, 26, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 4 });
+  g += T(320, 198, '🏆 Memory Breakthrough: GRPO saves >50% VRAM by discarding the Value/Critic model used in PPO.', { size: 8.5, weight: 700, fill: C.emerald });
+
+  return {
+    html: svg(640, 222, g),
+    caption: 'DeepSeek-R1 uses GRPO to estimate baseline advantages directly from group rollout statistics, completely eliminating the Critic model.'
+  };
+}
+
+function q13TestTimeComputeScaling() {
+  let g = T(320, 20, 'Test-Time Compute Scaling Law: Reasoning Tokens vs. Accuracy', { size: 14, weight: 800, fill: '#fff' });
+
+  // Plot box
+  const box = { x: 90, y: 44, w: 490, h: 125 };
+  const xr = [100, 10000]; // log tokens
+  const yr = [30, 100]; // % accuracy
+
+  // Axes and Grid
+  g += rect(box.x, box.y, box.w, box.h, { fill: 'rgba(2, 6, 23, 0.6)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += line(box.x, box.y + box.h, box.x + box.w, box.y + box.h, C.axis, 1.5);
+  g += line(box.x, box.y, box.x, box.y + box.h, C.axis, 1.5);
+
+  // X ticks (Log scale simulation: 100, 500, 1000, 5000, 10000)
+  const xPoints = [
+    { val: '100 (Direct)', px: 0 },
+    { val: '500 (Short CoT)', px: 110 },
+    { val: '2,000 (R1 Deliberation)', px: 260 },
+    { val: '5,000', px: 380 },
+    { val: '10,000+ (MCTS & Voting)', px: 490 }
+  ];
+  xPoints.forEach(p => {
+    const x = box.x + p.px;
+    g += line(x, box.y, x, box.y + box.h, C.grid, 1);
+    g += T(x, box.y + box.h + 12, p.val, { size: 7.5, fill: C.dim, mono: true });
+  });
+
+  // Y ticks (40%, 60%, 80%, 100%)
+  [40, 60, 80, 100].forEach(p => {
+    const y = box.y + box.h - ((p - 30) / 70) * box.h;
+    g += line(box.x, y, box.x + box.w, y, C.grid, 1);
+    g += T(box.x - 8, y, `${p}%`, { size: 7.5, fill: C.dim, anchor: 'end', mono: true });
+  });
+
+  // Scaling curve: Starts at ~42%, ascends in log-linear fashion to ~94%
+  const pathD = `M ${box.x},${box.y + box.h - (12/70)*box.h} ` +
+    `C ${box.x + 80},${box.y + box.h - (24/70)*box.h} ${box.x + 180},${box.y + box.h - (45/70)*box.h} ${box.x + 260},${box.y + box.h - (54/70)*box.h} ` +
+    `S ${box.x + 400},${box.y + box.h - (62/70)*box.h} ${box.x + 490},${box.y + box.h - (66/70)*box.h}`;
+  g += path(pathD, { stroke: C.emerald, sw: 3 });
+
+  // Key Milestones dots
+  const milestones = [
+    { x: box.x, y: box.y + box.h - (12/70)*box.h, lbl: 'System 1 (42%)', col: C.rose },
+    { x: box.x + 110, y: box.y + box.h - (30/70)*box.h, lbl: 'CoT (60%)', col: C.amber },
+    { x: box.x + 260, y: box.y + box.h - (54/70)*box.h, lbl: 'DeepSeek-R1 (84%)', col: C.cyan },
+    { x: box.x + 490, y: box.y + box.h - (66/70)*box.h, lbl: 'Verified (96%)', col: C.emerald }
+  ];
+  milestones.forEach(m => {
+    g += circ(m.x, m.y, 4, { fill: m.col, stroke: '#fff', sw: 1.5 });
+    g += T(m.x, m.y - 10, m.lbl, { size: 7.5, weight: 700, fill: m.col });
+  });
+
+  // Footnote
+  g += rect(50, 186, 540, 22, { fill: 'rgba(2, 6, 23, 0.8)', stroke: 'rgba(148,163,184,0.2)', rx: 4 });
+  g += T(320, 197, 'As test-time compute scales, models dynamically branch, self-correct, and verify with PRMs to achieve peak accuracy.', { size: 7.8, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'The Test-Time Scaling Law: Spending more tokens on deliberate search and verification yields log-linear accuracy gains on hard tasks.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -2301,7 +2550,8 @@ const VISUALS = {
   'quest-9': [q9CausalMask, q9ResidualHighway, q9RMSNorm, q9SwiGLU, q9KVCache],
   'quest-10': [q10Unembedding, q10Temperature, q10TopKvsTopP, q10AutoregressiveLoop, q10RepetitionPenalty],
   'quest-11': [q11PretrainVsSFT, q11ChatMLTemplate, q11RlhfPipeline, q11DpoLossDynamics, q11SafetyTaxTradeoff],
-  'quest-12': [q12VramExplosion, q12MatrixDecomposition, q12AdapterSwitching, q12WeightMerging, q12QloraQuantization]
+  'quest-12': [q12VramExplosion, q12MatrixDecomposition, q12AdapterSwitching, q12WeightMerging, q12QloraQuantization],
+  'quest-13': [q13System1VsSystem2, q13TreeOfThoughts, q13OrmVsPrm, q13GrpoArchitecture, q13TestTimeComputeScaling]
 };
 
 let activeCleanups = [];

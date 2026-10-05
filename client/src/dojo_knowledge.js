@@ -523,6 +523,54 @@ print(f"Frozen Base: {frozen_p:,} | Trainable LoRA: {trainable_p:,} ({trainable_
         answer: "B",
         explanation: "Osu! If B was initialized randomly, B × A would add random noise to the model's pre-trained weights at step 0, immediately destroying its reasoning capabilities. Zero-initializing B guarantees that ΔW starts at exactly zero!"
       }
+    },
+
+    'quest-13': {
+      title: 'Reasoning Models & Test-Time Compute: DeepSeek-R1 & GRPO',
+      eli10: `🧠 **The Chess Grandmaster & The Internal Scratchpad (Reasoning Models & GRPO):**\n\nHow do we turn a quick-guessing text predictor into a brilliant problem-solver capable of winning Math Olympiad medals?\n\n1. **System 1 vs System 2 Thinking:** Standard LLMs guess the next token instantly with zero pause (System 1). Across a 15-step deduction, even a 5% error per step leads to $(0.95)^{15} \\approx 46\\%$ accuracy! Reasoning models use System 2: spending test-time compute to generate an internal Chain-of-Thought (\`<think> ... </think>\`) to explore, verify, and deliberate before committing to an answer.\n2. **Self-Correction & Backtracking:** When a reasoning model reaches a logical contradiction, it writes: *"Wait, that yields an impossible result. Let me re-examine Step 2..."* and backtracks down an alternative solution branch!\n3. **Outcome vs. Process Supervision (ORMs vs PRMs):** Outcome Reward Models only grade the final answer (+1 or 0), giving zero credit assignment on which specific line was flawed. Process Reward Models (PRMs) grade *every single deduction step* ($r_t \\in [0, 1]$), pinpointing the exact moment logic derailed.\n4. **DeepSeek-R1 GRPO (Group Relative Policy Optimization):** Traditional PPO RL requires a massive Critic/Value model taking up hundreds of GBs of VRAM. GRPO samples a group of $G$ rollouts for prompt $q$ and normalizes advantages directly across the group:\n   $$A_i = \\frac{R_i - \\text{mean}(R)}{\\text{std}(R)}$$\n   Achieving superhuman mathematical reasoning with **0 Critic models in GPU memory**!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn.functional as F
+
+def compute_grpo_loss(policy_logps, old_logps, ref_logps, rewards, epsilon=0.2, beta=0.04):
+    # 1. Normalize rewards across group of G completions (No Critic network!)
+    mean_r = rewards.mean()
+    std_r = rewards.std() + 1e-8
+    advantages = (rewards - mean_r) / std_r
+    
+    # 2. Clipped surrogate objective
+    ratio = torch.exp(policy_logps - old_logps)
+    surr1 = ratio * advantages.unsqueeze(-1)
+    surr2 = torch.clamp(ratio, 1.0 - epsilon, 1.0 + epsilon) * advantages.unsqueeze(-1)
+    policy_loss = -torch.min(surr1, surr2).mean()
+    
+    # 3. KL reference anchor
+    kl_div = torch.exp(ref_logps - policy_logps) - (ref_logps - policy_logps) - 1.0
+    return policy_loss + beta * kl_div.mean(), advantages
+
+# Group of G=4 rollouts: 2 correct (1.0), 1 wrong (0.0), 1 partial (0.2)
+rewards = torch.tensor([1.0, 0.0, 1.0, 0.2])
+pol = torch.tensor([[-0.2], [-1.8], [-0.3], [-0.9]])
+old = torch.tensor([[-0.25], [-1.7], [-0.35], [-0.85]])
+ref = torch.tensor([[-0.22], [-1.6], [-0.32], [-0.88]])
+
+loss, adv = compute_grpo_loss(pol, old, ref, rewards)
+print("Group Advantages:", adv.tolist())
+print(f"GRPO Loss: {loss.item():.4f} (0 Critic VRAM overhead!)")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: DeepSeek-R1 GRPO**\n\nHow does Group Relative Policy Optimization (GRPO) eliminate the need for a separate Critic / Value network in GPU memory?",
+        options: [
+          "A) It samples a group of G rollouts for the same prompt and normalizes advantages directly from group mean and standard deviation: A_i = (R_i - mean(R)) / std(R)",
+          "B) It runs all calculations on CPU floating point chips",
+          "C) It replaces deep learning with binary search trees",
+          "D) It discards all reward feedback"
+        ],
+        answer: "A",
+        explanation: "Osu! In traditional PPO, a Critic network estimates state value V(s). GRPO samples G rollouts for the same question and uses the group average as the baseline, saving over 50% GPU memory!"
+      }
     }
   },
 
@@ -662,6 +710,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('peft') || hasPhrase('lora') || hasPhrase('qlora') || hasPhrase('quantiz') || hasPhrase('low-rank') || hasPhrase('rank') || hasPhrase('adapter') || hasPhrase('nf4') || hasPhrase('quest 12')) {
     return DOJO_KNOWLEDGE.quests['quest-12'].eli10;
+  }
+  if (hasPhrase('reasoning') || hasPhrase('deepseek') || hasPhrase('r1') || hasPhrase('grpo') || hasPhrase('prm') || hasPhrase('orm') || hasPhrase('scratchpad') || hasPhrase('test-time') || hasPhrase('mcts') || hasPhrase('quest 13')) {
+    return DOJO_KNOWLEDGE.quests['quest-13'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

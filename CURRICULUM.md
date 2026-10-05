@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 11)
+## ⚡ Phase 3: The LLM Odyssey (Quests 7 - 13)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -349,9 +349,65 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🧠 Quest 13: Reasoning Models & Test-Time Compute (DeepSeek-R1 & GRPO)
+- **The Concept**:
+  - **System 1 vs. System 2 Deliberation:** Standard auto-regressive models emit tokens greedily with zero pause (System 1). For multi-step reasoning, compounding errors rapidly cause failure: $(0.95)^{15} \approx 46.3\%$. System 2 models spend test-time compute generating an internal Chain-of-Thought (`<think> ... </think>`) to explore, verify, and backtrack before committing to an answer.
+  - **Self-Correction & Backtracking:** When the model encounters a contradiction, it writes: *"Wait, that yields an impossible result. Let me restart from Step 2..."*, turning linear generation into an adaptive tree search.
+  - **Outcome vs. Process Supervision (ORMs vs PRMs):**
+    - Outcome Reward Models (ORMs) grade only the final answer ($+1$ or $0$), causing severe credit assignment ambiguity and rewarding lucky hallucinations.
+    - Process Reward Models (PRMs) grade *every single deduction step* ($r_t \in [0, 1]$), enabling search trees (MCTS / Best-of-N) to prune dead ends early.
+  - **DeepSeek-R1 & GRPO (Group Relative Policy Optimization):**
+    - Traditional Actor-Critic (PPO) requires 4 large models in VRAM (Policy $\pi_\theta$, Critic $V_\psi$, Reward $R$, Ref $\pi_{\text{ref}}$) = 280GB VRAM for a 70B model!
+    - GRPO eliminates the Critic model entirely by sampling a group of $G$ rollouts $\{o_1, \dots, o_G\}$ for prompt $q$ and computing advantages by group normalization:
+      $$A_i = \frac{R_i - \text{mean}(R)}{\text{std}(R) + \epsilon}$$
+      Saving over 50% GPU memory and enabling pure RL reasoning!
+- **The Interactive Sandbox**:
+  - **Chain-of-Thought `<think>` Scratchpad:** Step-by-step player with auto-reveal, test-time token budget slider ($256 - 4096$), live PRM confidence meters, and glowing "Aha! Self-Correction" indicators across 4 reasoning challenges (Strawberry Counting, Knights & Knaves, 24-Game, River Crossing).
+  - **PRM Step Verifier & Tree-of-Thoughts Search:** Interactive tree visualizer with adjustable pruning threshold slider ($50\% - 95\%$) dynamically cutting off flawed branches to save compute.
+  - **DeepSeek-R1 GRPO Rollout Arena:** Group of $G=4$ parallel rollout completions with interactive reward sliders, live group advantage calculation ($A_i$), and policy gradient step simulation.
+- **Hands-On Python (PyTorch)**:
+  ```python
+  import torch
+  import torch.nn.functional as F
+
+  def compute_grpo_loss(policy_logps, old_logps, ref_logps, rewards, epsilon=0.2, beta=0.04):
+      """
+      DeepSeek-R1 Group Relative Policy Optimization (GRPO) Loss
+      Eliminates the Critic/Value network by normalizing rewards across group G.
+      """
+      # 1. Normalize advantages across the group
+      mean_r = rewards.mean()
+      std_r = rewards.std() + 1e-8
+      advantages = (rewards - mean_r) / std_r  # Shape: [G]
+
+      # 2. PPO-style clipped surrogate objective
+      ratio = torch.exp(policy_logps - old_logps)
+      surr1 = ratio * advantages.unsqueeze(-1)
+      surr2 = torch.clamp(ratio, 1.0 - epsilon, 1.0 + epsilon) * advantages.unsqueeze(-1)
+      policy_loss = -torch.min(surr1, surr2).mean()
+
+      # 3. KL penalty anchor against frozen reference model
+      kl_div = torch.exp(ref_logps - policy_logps) - (ref_logps - policy_logps) - 1.0
+      kl_loss = beta * kl_div.mean()
+
+      return policy_loss + kl_loss, advantages
+
+  # Group G=4 rollouts: 2 correct (1.0), 1 hallucinated (0.0), 1 formatting slip (0.3)
+  rewards = torch.tensor([1.0, 0.0, 1.0, 0.3])
+  pol = torch.tensor([[-0.2], [-1.8], [-0.3], [-0.9]])
+  old = torch.tensor([[-0.25], [-1.7], [-0.35], [-0.85]])
+  ref = torch.tensor([[-0.22], [-1.6], [-0.32], [-0.88]])
+
+  loss, adv = compute_grpo_loss(pol, old, ref, rewards)
+  print(f"Group Advantages: {adv.tolist()}")
+  print(f"Net GRPO Loss: {loss.item():.4f} (0 Critic VRAM Overhead!)")
+  ```
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 13: Reasoning Models & Test-Time Compute:** DeepSeek-R1, Chain-of-Thought `<think>` scratchpads, Process Reward Models (PRMs), and Test-Time Scaling.
 - **Quest 14: Agentic Tool Use & Function Calling:** JSON schemas, function dispatching, ReAct loops, and multi-agent coordination.
+- **Quest 15: Multimodal Vision-Language Models (VLMs):** Cross-attention patch projections, CLIP visual embeddings, and multimodal reasoning.
 
 
 ---
