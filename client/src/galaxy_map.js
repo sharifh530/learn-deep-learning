@@ -456,6 +456,7 @@ export class GalaxyConstellationMap {
     this.hoveredNode = null;
     this.selectedNode = null;
     this.animationId = null;
+    this.eventsBound = false;
     this.lastTime = performance.now();
   }
 
@@ -518,7 +519,8 @@ export class GalaxyConstellationMap {
   }
 
   bindEvents() {
-    if (!this.canvas) return;
+    if (!this.canvas || this.eventsBound) return;
+    this.eventsBound = true;
 
     window.addEventListener('resize', () => {
       this.resizeCanvas();
@@ -812,6 +814,8 @@ export class GalaxyConstellationMap {
   }
 
   startAnimationLoop() {
+    if (this.animationId) return;
+    this.lastTime = performance.now();
     const loop = (currentTime) => {
       const dt = (currentTime - this.lastTime) / 1000;
       this.lastTime = currentTime;
@@ -840,6 +844,10 @@ export class GalaxyConstellationMap {
     const rect = this.canvas.getBoundingClientRect();
     const width = rect.width;
     const height = rect.height;
+    if (width === 0 || height === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Clear canvas
     ctx.fillStyle = '#020617'; // Deep interstellar void
@@ -1081,7 +1089,11 @@ export class GalaxyConstellationMap {
       const padX = 8;
       const padY = 4;
       ctx.beginPath();
-      ctx.roundRect(node.x - textWidth / 2 - padX, labelY - padY - 7, textWidth + padX * 2, 17, 4);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(node.x - textWidth / 2 - padX, labelY - padY - 7, textWidth + padX * 2, 17, 4);
+      } else {
+        ctx.rect(node.x - textWidth / 2 - padX, labelY - padY - 7, textWidth + padX * 2, 17);
+      }
       ctx.fill();
       ctx.stroke();
 

@@ -283,6 +283,17 @@ const dom = {
   btnDoodleSendCode: document.getElementById('btn-doodle-send-code'),
   btnDoodleExportWeights: document.getElementById('btn-doodle-export-weights'),
   btnDoodleExportScript: document.getElementById('btn-doodle-export-script'),
+  // Celestial Galaxy Map Modal
+  btnOpenGalaxy: document.getElementById('btn-open-galaxy'),
+  btnSidebarGalaxy: document.getElementById('btn-sidebar-galaxy'),
+  galaxyModal: document.getElementById('galaxy-modal'),
+  btnCloseGalaxy: document.getElementById('btn-close-galaxy'),
+  galaxyCanvas: document.getElementById('galaxy-canvas'),
+  galaxyInspectorDrawer: document.getElementById('galaxy-inspector-drawer'),
+  galaxyStarsConquered: document.getElementById('galaxy-stars-conquered'),
+  btnGalaxyZoomIn: document.getElementById('btn-galaxy-zoom-in'),
+  btnGalaxyZoomOut: document.getElementById('btn-galaxy-zoom-out'),
+  btnGalaxyFit: document.getElementById('btn-galaxy-fit')
 };
 
 // --- XP & Level Calculations ---
@@ -15618,6 +15629,14 @@ function setupGalaxyModal() {
     updateGalaxyHud();
     dom.galaxyModal.style.display = 'flex';
     galaxyMap.init();
+    requestAnimationFrame(() => {
+      galaxyMap.resizeCanvas();
+      galaxyMap.fitEntireGalaxy();
+    });
+    setTimeout(() => {
+      galaxyMap.resizeCanvas();
+      galaxyMap.fitEntireGalaxy();
+    }, 320);
     soundFx.playCelestialChime(640);
   };
 
