@@ -127,7 +127,14 @@ const state = {
   moeSelectedTokenIdx: 2,
   moeRoutingMode: 'top2_mixtral', // 'top1_switch' | 'top2_mixtral' | 'shared_deepseek'
   moeAuxLossWeight: 0.01,
-  moeCapacityFactor: 1.25
+  moeCapacityFactor: 1.25,
+  // Quest 17: Diffusion Models & Flow Matching state
+  diffScenarioIdx: 0,
+  diffActiveTab: 'noise_denoise_canvas', // 'noise_denoise_canvas' | 'cfg_sampler' | 'flow_matching'
+  diffTimestep: 500,
+  diffCfgScale: 7.5,
+  diffSampler: 'flow_matching', // 'ddpm' | 'ddim' | 'flow_matching'
+  diffNumSteps: 20
 };
 
 const tutorService = new AITutorService();
@@ -748,6 +755,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'moe_routing_lab':
       renderMoeRoutingLabWidget(quest);
+      break;
+    case 'diffusion_flow_lab':
+      renderDiffusionFlowLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -11511,6 +11521,961 @@ function renderMoeRoutingLabWidget(quest) {
   renderArenaDiagnostics();
 }
 
+
+// --- WIDGET 17: Diffusion Models & Flow Matching Lab ---
+function renderDiffusionFlowLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'diff-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [
+    {
+      id: 'cyberpunk_city',
+      title: 'Cyberpunk Neon Metropolis',
+      category: 'Sci-Fi & Urban Concept Art',
+      prompt: 'A cinematic night view of a rainy neo-Tokyo alley with glowing holographic cyan kanji and purple reflections.',
+      colorPalette: ['#06b6d4', '#ec4899', '#3b82f6', '#0f172a']
+    },
+    {
+      id: 'deep_sea_jellyfish',
+      title: 'Bioluminescent Abyss Jellyfish',
+      category: 'Nature & Underwater Macro',
+      prompt: 'An ethereal translucent medusa jellyfish drifting through midnight oceanic trenches with glowing emerald tentacles.',
+      colorPalette: ['#10b981', '#06b6d4', '#6366f1', '#020617']
+    },
+    {
+      id: 'cosmic_nebula',
+      title: 'Orion Stellar Nursery & Spiral Galaxy',
+      category: 'Astrophotography & Cosmos',
+      prompt: 'Deep space Hubble view of a swirling violet nebula birthing golden proto-stars amidst interstellar dust.',
+      colorPalette: ['#8b5cf6', '#f59e0b', '#ec4899', '#030712']
+    },
+    {
+      id: 'renaissance_portrait',
+      title: 'Renaissance Astrolabe Scholar',
+      category: 'Classical Fine Art',
+      prompt: 'A chiaroscuro oil painting of a Venetian astronomer in velvet robes examining an ornate brass astrolabe by candlelight.',
+      colorPalette: ['#d97706', '#92400e', '#fef3c7', '#1c1917']
+    }
+  ];
+
+  let scenarioIdx = state.diffScenarioIdx || 0;
+  if (scenarioIdx >= scenarios.length) scenarioIdx = 0;
+  let activeTab = state.diffActiveTab || 'noise_denoise_canvas';
+  let timestep = state.diffTimestep ?? 500;
+  let cfgScale = state.diffCfgScale ?? 7.5;
+  let sampler = state.diffSampler || 'flow_matching';
+  let numSteps = state.diffNumSteps || 20;
+
+  let isDenoisingPlayback = false;
+  let xpNoiseClaimed = false;
+  let xpCfgClaimed = false;
+  let xpFlowClaimed = false;
+
+  const currentScenario = () => scenarios[scenarioIdx] || scenarios[0];
+
+  // Mathematical Cosine Variance Schedule (Nichol & Dhariwal 2021)
+  function getAlphaBar(t) {
+    const s = 0.008;
+    const normT = t / 1000;
+    const fT = Math.cos(((normT + s) / (1 + s)) * (Math.PI / 2));
+    const f0 = Math.cos((s / (1 + s)) * (Math.PI / 2));
+    return Math.min(1.0, Math.max(0.0001, (fT * fT) / (f0 * f0)));
+  }
+
+  function getSnrDb(alphaBar) {
+    const snr = alphaBar / Math.max(1e-5, 1.0 - alphaBar);
+    return (10 * Math.log10(snr)).toFixed(1);
+  }
+
+  // Dynamic SVG Artwork Generator for each scenario
+  function getSceneArtSvg(scId, noiseLevel = 0, filterStyle = '') {
+    // noiseLevel in [0, 1]
+    const noiseOpacity = (noiseLevel * 0.95).toFixed(2);
+    const contentOpacity = Math.max(0.05, 1.0 - noiseLevel * 0.92).toFixed(2);
+
+    let artContent = '';
+    if (scId === 'cyberpunk_city') {
+      artContent = `
+        <!-- Cyberpunk Skyline -->
+        <rect width="320" height="200" fill="#080d1a" />
+        <!-- Distant Skyscrapers -->
+        <rect x="20" y="40" width="35" height="160" fill="#0f172a" />
+        <rect x="65" y="60" width="28" height="140" fill="#1e293b" />
+        <rect x="100" y="25" width="42" height="175" fill="#0b1329" />
+        <rect x="150" y="50" width="32" height="150" fill="#1e293b" />
+        <rect x="190" y="20" width="48" height="180" fill="#0f172a" />
+        <rect x="245" y="70" width="36" height="130" fill="#1e293b" />
+        <rect x="288" y="45" width="25" height="155" fill="#0f172a" />
+        
+        <!-- Glowing Windows -->
+        <circle cx="115" cy="40" r="1.5" fill="#06b6d4" />
+        <circle cx="125" cy="40" r="1.5" fill="#ec4899" />
+        <circle cx="115" cy="55" r="1.5" fill="#06b6d4" />
+        <circle cx="125" cy="55" r="1.5" fill="#facc15" />
+        <circle cx="205" cy="35" r="2" fill="#ec4899" />
+        <circle cx="218" cy="35" r="2" fill="#06b6d4" />
+        <circle cx="205" cy="50" r="2" fill="#06b6d4" />
+        <circle cx="225" cy="50" r="2" fill="#ec4899" />
+
+        <!-- Neon Holographic Kanji Signs -->
+        <g filter="drop-shadow(0 0 6px #06b6d4)">
+          <rect x="158" y="75" width="16" height="60" fill="rgba(6, 182, 212, 0.2)" stroke="#06b6d4" stroke-width="1.5" rx="3" />
+          <text x="166" y="93" fill="#06b6d4" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">東</text>
+          <text x="166" y="111" fill="#06b6d4" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">京</text>
+          <text x="166" y="127" fill="#06b6d4" font-size="10" text-anchor="middle" font-family="sans-serif" font-weight="bold">新</text>
+        </g>
+
+        <!-- Magenta Hologram -->
+        <g filter="drop-shadow(0 0 8px #ec4899)">
+          <rect x="70" y="85" width="18" height="45" fill="rgba(236, 72, 153, 0.2)" stroke="#ec4899" stroke-width="1.5" rx="3" />
+          <text x="79" y="102" fill="#ec4899" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">ネ</text>
+          <text x="79" y="120" fill="#ec4899" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">オ</text>
+        </g>
+
+        <!-- Wet Asphalt Street & Neon Reflections -->
+        <polygon points="0,175 320,175 320,200 0,200" fill="#050811" />
+        <ellipse cx="166" cy="188" rx="25" ry="6" fill="rgba(6, 182, 212, 0.45)" filter="blur(2px)" />
+        <ellipse cx="80" cy="188" rx="22" ry="5" fill="rgba(236, 72, 153, 0.45)" filter="blur(2px)" />
+        <!-- Rain Streaks -->
+        <line x1="40" y1="20" x2="25" y2="60" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" />
+        <line x1="120" y1="10" x2="105" y2="50" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" />
+        <line x1="220" y1="30" x2="205" y2="70" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" />
+        <line x1="280" y1="15" x2="265" y2="55" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" />
+      `;
+    } else if (scId === 'deep_sea_jellyfish') {
+      artContent = `
+        <!-- Abyss Ocean -->
+        <rect width="320" height="200" fill="#020617" />
+        <!-- Ambient Depth Gradient -->
+        <circle cx="160" cy="100" r="100" fill="rgba(16, 185, 129, 0.08)" filter="blur(30px)" />
+        
+        <!-- Glowing Bioluminescent Medusa Dome -->
+        <g filter="drop-shadow(0 0 12px rgba(16, 185, 129, 0.8))">
+          <!-- Bell Dome -->
+          <path d="M 115,100 C 115,50 205,50 205,100 C 205,108 195,112 185,108 C 175,104 165,108 160,108 C 155,108 145,104 135,108 C 125,112 115,108 115,100 Z" 
+                fill="rgba(16, 185, 129, 0.45)" stroke="#34d399" stroke-width="2" />
+          <!-- Inner Organelle Core -->
+          <ellipse cx="160" cy="85" rx="22" ry="16" fill="rgba(6, 182, 212, 0.7)" filter="drop-shadow(0 0 6px #06b6d4)" />
+          <circle cx="160" cy="82" r="7" fill="#fef08a" />
+        </g>
+
+        <!-- Translucent Tentacles -->
+        <g filter="drop-shadow(0 0 5px rgba(52, 211, 153, 0.7))">
+          <path d="M 130,108 Q 120,135 135,160 T 125,195" fill="none" stroke="#6ee7b7" stroke-width="2" />
+          <path d="M 145,108 Q 155,130 140,165 T 150,198" fill="none" stroke="#38bdf8" stroke-width="1.8" />
+          <path d="M 160,108 Q 168,135 158,160 T 164,198" fill="none" stroke="#6ee7b7" stroke-width="2.2" />
+          <path d="M 175,108 Q 165,130 180,165 T 172,198" fill="none" stroke="#38bdf8" stroke-width="1.8" />
+          <path d="M 190,108 Q 200,135 185,160 T 195,195" fill="none" stroke="#6ee7b7" stroke-width="2" />
+        </g>
+
+        <!-- Marine Snow Flakes -->
+        <circle cx="50" cy="40" r="1.5" fill="rgba(16,185,129,0.5)" />
+        <circle cx="280" cy="70" r="2" fill="rgba(6,182,212,0.5)" />
+        <circle cx="80" cy="160" r="1.5" fill="rgba(255,255,255,0.4)" />
+        <circle cx="250" cy="150" r="2" fill="rgba(16,185,129,0.5)" />
+      `;
+    } else if (scId === 'cosmic_nebula') {
+      artContent = `
+        <!-- Deep Space Background -->
+        <rect width="320" height="200" fill="#030712" />
+        
+        <!-- Swirling Violet Nebula Cloud -->
+        <g filter="blur(14px)">
+          <path d="M 40,100 Q 110,30 200,60 Q 280,90 260,150 Q 200,180 120,160 Z" fill="rgba(139, 92, 246, 0.45)" />
+          <ellipse cx="160" cy="100" rx="70" ry="45" fill="rgba(236, 72, 153, 0.45)" transform="rotate(-18, 160, 100)" />
+          <circle cx="160" cy="100" r="32" fill="rgba(245, 158, 11, 0.55)" />
+        </g>
+
+        <!-- Core Protostar Cluster -->
+        <circle cx="160" cy="100" r="8" fill="#fff" filter="drop-shadow(0 0 10px #f59e0b)" />
+        <circle cx="145" cy="92" r="4" fill="#fef08a" filter="drop-shadow(0 0 6px #f59e0b)" />
+        <circle cx="178" cy="108" r="3.5" fill="#67e8f9" filter="drop-shadow(0 0 6px #38bdf8)" />
+
+        <!-- Star Flare Lines -->
+        <line x1="160" y1="70" x2="160" y2="130" stroke="rgba(255,255,255,0.85)" stroke-width="1.5" />
+        <line x1="130" y1="100" x2="190" y2="100" stroke="rgba(255,255,255,0.85)" stroke-width="1.5" />
+
+        <!-- Field Stars -->
+        <circle cx="35" cy="30" r="1" fill="#fff" />
+        <circle cx="75" cy="65" r="1.5" fill="#fef08a" />
+        <circle cx="105" cy="25" r="1.2" fill="#fff" />
+        <circle cx="230" cy="35" r="1" fill="#c4b5fd" />
+        <circle cx="285" cy="50" r="1.5" fill="#fff" />
+        <circle cx="270" cy="160" r="1.2" fill="#fca5a5" />
+        <circle cx="60" cy="170" r="1" fill="#fff" />
+      `;
+    } else {
+      artContent = `
+        <!-- Renaissance Interior Chiaroscuro -->
+        <rect width="320" height="200" fill="#120c06" />
+        
+        <!-- Gothic Arch Window (Night Sky) -->
+        <path d="M 40,140 L 40,60 Q 65,30 90,60 L 90,140 Z" fill="#0f172a" stroke="#451a03" stroke-width="2" />
+        <circle cx="65" cy="55" r="1.5" fill="#fff" />
+        <circle cx="55" cy="75" r="1" fill="#fef3c7" />
+        <circle cx="78" cy="70" r="1" fill="#fff" />
+
+        <!-- Wooden Study Desk -->
+        <polygon points="20,140 300,140 320,200 0,200" fill="#29180c" />
+        
+        <!-- Open Manuscript & Quill -->
+        <rect x="75" y="152" width="60" height="35" fill="#fef3c7" rx="2" transform="rotate(-6, 105, 170)" />
+        <line x1="82" y1="160" x2="128" y2="155" stroke="#78350f" stroke-width="1" />
+        <line x1="84" y1="166" x2="126" y2="161" stroke="#78350f" stroke-width="1" />
+        <line x1="86" y1="172" x2="122" y2="167" stroke="#78350f" stroke-width="1" />
+
+        <!-- Golden Brass Astrolabe Rings -->
+        <g transform="translate(185, 115)" filter="drop-shadow(0 0 6px rgba(245, 158, 11, 0.7))">
+          <circle cx="25" cy="25" r="24" fill="none" stroke="#f59e0b" stroke-width="2.5" />
+          <ellipse cx="25" cy="25" rx="24" ry="12" fill="none" stroke="#fbbf24" stroke-width="1.8" transform="rotate(30, 25, 25)" />
+          <ellipse cx="25" cy="25" rx="24" ry="12" fill="none" stroke="#fbbf24" stroke-width="1.8" transform="rotate(-30, 25, 25)" />
+          <circle cx="25" cy="25" r="5" fill="#d97706" />
+          <line x1="25" y1="1" x2="25" y2="49" stroke="#f59e0b" stroke-width="2" />
+        </g>
+
+        <!-- Candle & Golden Flame Halo -->
+        <rect x="145" y="132" width="10" height="28" fill="#fef3c7" rx="1" />
+        <ellipse cx="150" cy="124" rx="4" ry="8" fill="#f59e0b" filter="drop-shadow(0 0 8px #f59e0b)" />
+        <ellipse cx="150" cy="125" rx="2" ry="4" fill="#fff" />
+        <!-- Candle Warm Light Gradient on Desk -->
+        <circle cx="150" cy="140" r="50" fill="rgba(245, 158, 11, 0.12)" filter="blur(16px)" />
+      `;
+    }
+
+    return `
+      <svg viewBox="0 0 320 200" class="diff-viewport-svg" style="${filterStyle}">
+        <defs>
+          <filter id="diff-noise-filter-${scId}" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="${(0.65 + noiseLevel * 0.35).toFixed(2)}" numOctaves="3" result="noise" />
+            <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" />
+          </filter>
+        </defs>
+
+        <!-- Base Artwork Layer -->
+        <g opacity="${contentOpacity}">
+          ${artContent}
+        </g>
+
+        <!-- Procedural Noise Static Overlay -->
+        <rect width="320" height="200" filter="url(#diff-noise-filter-${scId})" opacity="${noiseOpacity}" style="mix-blend-mode: screen;" />
+      </svg>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="diff-lab-header">
+      <div class="diff-title-row">
+        <div class="diff-title-badge">
+          <span class="diff-icon">🌊</span>
+          <div>
+            <h3>Diffusion Models & Rectified Flow Matching Lab</h3>
+            <p class="diff-subtitle">Deconstruct forward Gaussian noise schedules, explore reverse Langevin denoising, tune Classifier-Free Guidance (CFG), and compare straight-line Flow Matching trajectories.</p>
+          </div>
+        </div>
+        <div class="diff-tab-nav">
+          <button class="diff-tab-btn ${activeTab === 'noise_denoise_canvas' ? 'active' : ''}" data-tab="noise_denoise_canvas">🌫️ Noise & Denoise Canvas</button>
+          <button class="diff-tab-btn ${activeTab === 'cfg_sampler' ? 'active' : ''}" data-tab="cfg_sampler">🎯 CFG & Sampler Arena</button>
+          <button class="diff-tab-btn ${activeTab === 'flow_matching' ? 'active' : ''}" data-tab="flow_matching">⚡ Flow Matching vs SDE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Selector Bar -->
+    <div class="diff-scenario-bar">
+      <span class="scenario-bar-label">🎨 Select Generative Subject:</span>
+      <div class="scenario-chips" id="diff-scenario-chips">
+        ${scenarios.map((sc, idx) => `
+          <button class="scenario-chip ${idx === scenarioIdx ? 'active' : ''}" data-sc-idx="${idx}">
+            <span class="sc-icon">${idx === 0 ? '🌆' : idx === 1 ? '🪼' : idx === 2 ? '🌌' : '📜'}</span>
+            <span class="sc-title">${sc.title}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: FORWARD NOISE & REVERSE DENOISE SCRUB CANVAS -->
+    <div class="diff-tab-panel" id="panel-noise-denoise" style="display: ${activeTab === 'noise_denoise_canvas' ? 'block' : 'none'};">
+      <div class="diff-canvas-layout">
+        <!-- Left: Dynamic Viewport & Playback -->
+        <div class="diff-card viewport-card">
+          <div class="card-header-flex">
+            <div>
+              <h4 id="canvas-card-title">${currentScenario().title}</h4>
+              <p class="card-hint">Scrub through timesteps t ∈ [0, 1000] to witness entropy dissolve the image or reconstruct it step-by-step.</p>
+            </div>
+            <div class="snr-telemetry-badge" id="snr-telemetry-badge">
+              <span class="badge-dot pulse"></span>
+              <span id="snr-db-readout">SNR: +12.4 dB</span>
+            </div>
+          </div>
+
+          <div class="diff-viewport-wrapper" id="diff-viewport-wrapper">
+            <!-- Dynamically populated SVG with noise overlay -->
+          </div>
+
+          <!-- Playback Actions Row -->
+          <div class="playback-actions-bar">
+            <button class="btn-primary" id="btn-animate-denoising">
+              <span class="play-icon">▶</span> Animate Reverse Denoising (t=1000 ➔ 0)
+            </button>
+            <div class="step-quick-buttons">
+              <button class="btn-step-preset" data-t="0">t = 0 (Clean)</button>
+              <button class="btn-step-preset" data-t="250">t = 250</button>
+              <button class="btn-step-preset" data-t="500">t = 500</button>
+              <button class="btn-step-preset" data-t="750">t = 750</button>
+              <button class="btn-step-preset" data-t="1000">t = 1000 (Noise)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Telemetry & Closed-Form Forward Formula -->
+        <div class="diff-card telemetry-card">
+          <div class="card-header-flex">
+            <h4>Closed-Form Forward Leap & Thermodynamics</h4>
+            <button class="btn-claim-xp" id="btn-claim-noise-xp">🏆 Claim +25 XP</button>
+          </div>
+
+          <!-- Timestep Scrubber Slider -->
+          <div class="scrubber-box">
+            <div class="scrubber-header">
+              <label for="diff-t-slider">Diffusion Timestep (t): <strong id="t-val-display">${timestep}</strong> / 1000</label>
+              <span class="progress-sub" id="t-progress-sub">Step 500 of 1000 (Midpoint)</span>
+            </div>
+            <input type="range" id="diff-t-slider" min="0" max="1000" step="10" value="${timestep}" class="diff-slider">
+          </div>
+
+          <!-- Signal vs Noise Ratios Bar -->
+          <div class="signal-ratio-section">
+            <div class="ratio-labels">
+              <span class="signal-txt">Signal: √(ᾱ_t) = <strong id="signal-pct-display">70.7%</strong></span>
+              <span class="noise-txt">Noise: √(1 - ᾱ_t) = <strong id="noise-pct-display">70.7%</strong></span>
+            </div>
+            <div class="ratio-bar-track">
+              <div class="ratio-bar-signal" id="ratio-signal-bar" style="width: 50%;"></div>
+              <div class="ratio-bar-noise" id="ratio-noise-bar" style="width: 50%;"></div>
+            </div>
+          </div>
+
+          <!-- Formula & Mathematical Breakdown -->
+          <div class="formula-banner">
+            <code class="diff-formula">x_t = √(ᾱ_t) · x₀ + √(1 − ᾱ_t) · ε,   ε ~ 𝒩(0, I)</code>
+          </div>
+
+          <div class="telemetry-info-grid">
+            <div class="info-item">
+              <span class="lbl">Cumulative Variance ᾱ_t:</span>
+              <span class="val highlight" id="alpha-bar-val">0.5000</span>
+            </div>
+            <div class="info-item">
+              <span class="lbl">Inference Task:</span>
+              <span class="val" id="task-type-val">Mid-Frequency Inpainting</span>
+            </div>
+          </div>
+
+          <div class="explanation-box" id="step-explanation-box">
+            <p>At <strong>t = 500</strong>, exactly half of the signal energy is preserved while half is Gaussian noise. The U-Net relies on cross-attention text conditioning to hallucinate global composition.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: CLASSIFIER-FREE GUIDANCE & SAMPLER ARENA -->
+    <div class="diff-tab-panel" id="panel-cfg-sampler" style="display: ${activeTab === 'cfg_sampler' ? 'block' : 'none'};">
+      <div class="cfg-arena-layout">
+        <!-- Top: Prompt Conditioning Bar -->
+        <div class="diff-card prompt-card">
+          <div class="card-header-flex">
+            <div>
+              <h4>Cross-Attention Text Conditioning (c)</h4>
+              <p class="card-hint">The target prompt encoded into continuous vectors by CLIP or T5.</p>
+            </div>
+            <span class="prompt-badge">CLIP-ViT-L/14 • 77 Tokens</span>
+          </div>
+          <div class="prompt-display-banner">
+            <span class="prompt-icon">💬</span>
+            <p class="prompt-text" id="cfg-prompt-display">"${currentScenario().prompt}"</p>
+          </div>
+        </div>
+
+        <!-- Left: CFG Slider & Vector Extrapolation -->
+        <div class="diff-card cfg-controls-card">
+          <div class="card-header-flex">
+            <h4>Classifier-Free Guidance (CFG) Extrapolation</h4>
+            <button class="btn-claim-xp" id="btn-claim-cfg-xp">🏆 Claim +25 XP</button>
+          </div>
+
+          <div class="cfg-slider-group">
+            <div class="cfg-slider-header">
+              <label for="cfg-scale-slider">Guidance Scale (w): <strong id="cfg-scale-val">${cfgScale.toFixed(1)}</strong></label>
+              <span class="cfg-status-pill" id="cfg-status-pill">★ Balanced Sweetspot</span>
+            </div>
+            <input type="range" id="cfg-scale-slider" min="1.0" max="20.0" step="0.5" value="${cfgScale}" class="diff-slider">
+            <div class="preset-buttons">
+              <button class="preset-btn" data-scale="1.0">w = 1.0 (Unguided)</button>
+              <button class="preset-btn" data-scale="7.5">w = 7.5 (Optimal Sweetspot)</button>
+              <button class="preset-btn" data-scale="20.0">w = 20.0 (Contrast Burn)</button>
+            </div>
+          </div>
+
+          <!-- Vector Extrapolation Canvas -->
+          <div class="vector-math-box">
+            <div class="vm-header">
+              <span class="vm-title">Noise Space Extrapolation Equation</span>
+              <code>ε̃ = ε_uncond + w · (ε_cond - ε_uncond)</code>
+            </div>
+            <div class="vector-diagram-container" id="vector-diagram-container">
+              <!-- Dynamically populated SVG vector diagram -->
+            </div>
+          </div>
+
+          <div class="cfg-warning-box" id="cfg-warning-box" style="display: none;">
+            <p><strong>⚠️ High-Guidance Distortion:</strong> At w ≥ 16.0, vector extrapolation overshoots the natural image distribution, causing pixel values to clip and creating severe chromatic aberration and contrast burn!</p>
+          </div>
+        </div>
+
+        <!-- Right: Live Image Effect Preview & Sampler Diagnostics -->
+        <div class="diff-card sampler-preview-card">
+          <div class="card-header-flex">
+            <h4>Visual Impact & Sampler Comparison</h4>
+            <span class="res-badge">512×512 Resized</span>
+          </div>
+
+          <!-- Scaled Artwork with Filter -->
+          <div class="cfg-preview-viewport" id="cfg-preview-viewport">
+            <!-- Dynamically populated image with saturation filter -->
+          </div>
+
+          <!-- Sampler Selector & Latency -->
+          <div class="sampler-selector-section">
+            <label class="sampler-lbl">Inference Sampler Algorithm:</label>
+            <div class="sampler-pills">
+              <button class="sampler-pill ${sampler === 'ddpm' ? 'active' : ''}" data-sampler="ddpm">DDPM (1000 Steps)</button>
+              <button class="sampler-pill ${sampler === 'ddim' ? 'active' : ''}" data-sampler="ddim">DDIM (50 Steps)</button>
+              <button class="sampler-pill ${sampler === 'flow_matching' ? 'active' : ''}" data-sampler="flow_matching">Flow Matching (20 Steps) ★</button>
+            </div>
+            <div class="sampler-specs-row" id="sampler-specs-row">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: RECTIFIED FLOW MATCHING VS BROWNIAN DIFFUSION -->
+    <div class="diff-tab-panel" id="panel-flow-matching" style="display: ${activeTab === 'flow_matching' ? 'block' : 'none'};">
+      <div class="flow-layout">
+        <!-- Theory Header Card -->
+        <div class="diff-card flow-theory-card">
+          <div class="flow-theory-grid">
+            <div class="ft-item">
+              <span class="ft-icon">🌪️</span>
+              <h5>Brownian Diffusion SDE (Curved)</h5>
+              <p>Classic DDPM treats generation as reverse Brownian motion. The probability flow ODE trajectory curves wildly through high-dimensional space. Discretization errors accumulate rapidly if steps fall below 50.</p>
+            </div>
+            <div class="ft-item">
+              <span class="ft-icon">⚡</span>
+              <h5>Rectified Flow Matching (Straight Highway)</h5>
+              <p>Flux.1 and Stable Diffusion 3 define generative paths along direct straight lines: <code>x_t = (1 - t)x₀ + t x₁</code> with constant target velocity <code>v_t = x₁ - x₀</code>. Straight lines allow Euler integration in just 15-20 steps!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Phase Space & Step Slider -->
+        <div class="diff-card phase-space-card">
+          <div class="card-header-flex">
+            <div>
+              <h4>2D Generative Phase Space: Trajectory Curvature & Drift Error</h4>
+              <p class="card-hint">Compare particle trajectories from Gaussian noise prior (x₁) to data cluster (x₀).</p>
+            </div>
+            <button class="btn-claim-xp" id="btn-claim-flow-xp">🏆 Claim +30 XP</button>
+          </div>
+
+          <div class="phase-controls-row">
+            <div class="step-slider-group">
+              <label for="flow-steps-slider">Euler Integration Steps (N): <strong id="flow-steps-val">${numSteps}</strong> steps</label>
+              <input type="range" id="flow-steps-slider" min="2" max="50" step="2" value="${numSteps}" class="diff-slider">
+            </div>
+
+            <div class="phase-actions">
+              <button class="btn-primary" id="btn-rollout-particles">
+                <span class="icon">🚀</span> Simulate Particle Trajectory Rollout
+              </button>
+            </div>
+          </div>
+
+          <!-- Phase Space Canvas -->
+          <div class="phase-canvas-wrapper" id="phase-canvas-wrapper">
+            <!-- Dynamically populated SVG with trajectory curves -->
+          </div>
+
+          <!-- Telemetry Comparison Metrics -->
+          <div class="flow-metrics-grid" id="flow-metrics-grid">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.innerHTML = '';
+  dom.interactiveContainer.appendChild(container);
+
+  // --- TAB NAVIGATION ---
+  const tabButtons = container.querySelectorAll('.diff-tab-btn');
+  const tabPanels = {
+    noise_denoise_canvas: container.querySelector('#panel-noise-denoise'),
+    cfg_sampler: container.querySelector('#panel-cfg-sampler'),
+    flow_matching: container.querySelector('#panel-flow-matching')
+  };
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetTab = btn.dataset.tab;
+      activeTab = targetTab;
+      state.diffActiveTab = targetTab;
+      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      Object.entries(tabPanels).forEach(([key, panel]) => {
+        if (panel) panel.style.display = key === targetTab ? 'block' : 'none';
+      });
+      soundFx.playBlip(540, 0.05);
+    });
+  });
+
+  // --- SCENARIO SELECTOR ---
+  const scenarioChips = container.querySelectorAll('#diff-scenario-chips .scenario-chip');
+  scenarioChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      scenarioIdx = parseInt(chip.dataset.scIdx, 10);
+      state.diffScenarioIdx = scenarioIdx;
+      scenarioChips.forEach(c => c.classList.toggle('active', c === chip));
+      soundFx.playBlip(600 + scenarioIdx * 40, 0.05);
+      renderAllTabs();
+    });
+  });
+
+  // --- TAB 1 LOGIC: FORWARD & REVERSE NOISE CANVAS ---
+  const viewportWrapper = container.querySelector('#diff-viewport-wrapper');
+  const tSlider = container.querySelector('#diff-t-slider');
+  const tValDisplay = container.querySelector('#t-val-display');
+  const tProgressSub = container.querySelector('#t-progress-sub');
+  const snrDbReadout = container.querySelector('#snr-db-readout');
+  const signalPctDisplay = container.querySelector('#signal-pct-display');
+  const noisePctDisplay = container.querySelector('#noise-pct-display');
+  const ratioSignalBar = container.querySelector('#ratio-signal-bar');
+  const ratioNoiseBar = container.querySelector('#ratio-noise-bar');
+  const alphaBarVal = container.querySelector('#alpha-bar-val');
+  const taskTypeVal = container.querySelector('#task-type-val');
+  const stepExplanationBox = container.querySelector('#step-explanation-box');
+  const btnAnimateDenoising = container.querySelector('#btn-animate-denoising');
+  const stepPresetButtons = container.querySelectorAll('.btn-step-preset');
+  const btnClaimNoiseXp = container.querySelector('#btn-claim-noise-xp');
+
+  function updateNoiseCanvas() {
+    const sc = currentScenario();
+    const alphaBar = getAlphaBar(timestep);
+    const snrDb = getSnrDb(alphaBar);
+    const signalAmp = Math.sqrt(alphaBar);
+    const noiseAmp = Math.sqrt(1.0 - alphaBar);
+
+    // Update displays
+    if (tValDisplay) tValDisplay.textContent = timestep;
+    if (alphaBarVal) alphaBarVal.textContent = alphaBar.toFixed(4);
+    if (snrDbReadout) snrDbReadout.textContent = `SNR: ${snrDb > 0 ? '+' : ''}${snrDb} dB`;
+    if (signalPctDisplay) signalPctDisplay.textContent = `${(signalAmp * 100).toFixed(1)}%`;
+    if (noisePctDisplay) noisePctDisplay.textContent = `${(noiseAmp * 100).toFixed(1)}%`;
+    if (ratioSignalBar) ratioSignalBar.style.width = `${(signalAmp / (signalAmp + noiseAmp) * 100).toFixed(0)}%`;
+    if (ratioNoiseBar) ratioNoiseBar.style.width = `${(noiseAmp / (signalAmp + noiseAmp) * 100).toFixed(0)}%`;
+
+    if (tProgressSub) {
+      if (timestep <= 100) tProgressSub.textContent = 'Step 0-100: Micro Detail Cleaning';
+      else if (timestep <= 400) tProgressSub.textContent = 'Step 100-400: Mid-Frequency Edge Synthesis';
+      else if (timestep <= 750) tProgressSub.textContent = 'Step 400-750: Global Geometry Formation';
+      else tProgressSub.textContent = 'Step 750-1000: Coarse Compositional Halos';
+    }
+
+    if (taskTypeVal) {
+      if (timestep <= 150) taskTypeVal.textContent = 'High-Frequency Texture Cleaning';
+      else if (timestep <= 600) taskTypeVal.textContent = 'Mid-Frequency Semantic Formation';
+      else taskTypeVal.textContent = 'Coarse Spatial Composition';
+    }
+
+    if (stepExplanationBox) {
+      if (timestep <= 50) {
+        stepExplanationBox.innerHTML = `<p>At <strong>t = ${timestep}</strong>, the image is 99% clean. The U-Net performs micro-detail sharpening on hair, wet reflections, and fine text.</p>`;
+      } else if (timestep <= 500) {
+        stepExplanationBox.innerHTML = `<p>At <strong>t = ${timestep}</strong>, signal energy equals noise energy (0 dB). Structural silhouettes and dominant color palettes crystallize from the mist.</p>`;
+      } else {
+        stepExplanationBox.innerHTML = `<p>At <strong>t = ${timestep}</strong>, noise completely dominates (SNR: ${snrDb} dB). The U-Net receives cross-attention prompt guidance to decide initial layout seeds.</p>`;
+      }
+    }
+
+    // Render SVG
+    if (viewportWrapper) {
+      viewportWrapper.innerHTML = getSceneArtSvg(sc.id, noiseAmp);
+    }
+  }
+
+  if (tSlider) {
+    tSlider.addEventListener('input', (e) => {
+      timestep = parseInt(e.target.value, 10);
+      state.diffTimestep = timestep;
+      updateNoiseCanvas();
+    });
+  }
+
+  stepPresetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      timestep = parseInt(btn.dataset.t, 10);
+      state.diffTimestep = timestep;
+      if (tSlider) tSlider.value = timestep;
+      soundFx.playBlip(550 + timestep * 0.3, 0.04);
+      updateNoiseCanvas();
+    });
+  });
+
+  if (btnAnimateDenoising) {
+    btnAnimateDenoising.addEventListener('click', () => {
+      if (isDenoisingPlayback) return;
+      isDenoisingPlayback = true;
+      btnAnimateDenoising.disabled = true;
+      btnAnimateDenoising.innerHTML = `<span class="play-icon spin">🔄</span> Denoising Reverse Loop...`;
+
+      timestep = 1000;
+      updateNoiseCanvas();
+
+      const keyframes = [900, 800, 700, 600, 500, 400, 300, 200, 100, 0];
+      let kIdx = 0;
+
+      const interval = setInterval(() => {
+        if (kIdx >= keyframes.length) {
+          clearInterval(interval);
+          isDenoisingPlayback = false;
+          btnAnimateDenoising.disabled = false;
+          btnAnimateDenoising.innerHTML = `<span class="play-icon">▶</span> Animate Reverse Denoising (t=1000 ➔ 0)`;
+          soundFx.playLevelUp();
+          confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+          return;
+        }
+
+        timestep = keyframes[kIdx];
+        state.diffTimestep = timestep;
+        if (tSlider) tSlider.value = timestep;
+        soundFx.playBlip(400 + (keyframes.length - kIdx) * 50, 0.04);
+        updateNoiseCanvas();
+        kIdx++;
+      }, 250);
+    });
+  }
+
+  if (btnClaimNoiseXp) {
+    btnClaimNoiseXp.addEventListener('click', () => {
+      if (!xpNoiseClaimed) {
+        xpNoiseClaimed = true;
+        awardXp(25, 'Forward & Reverse Diffusion Conquered');
+        btnClaimNoiseXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimNoiseXp.disabled = true;
+        btnClaimNoiseXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // --- TAB 2 LOGIC: CFG & SAMPLER ARENA ---
+  const cfgPromptDisplay = container.querySelector('#cfg-prompt-display');
+  const cfgScaleSlider = container.querySelector('#cfg-scale-slider');
+  const cfgScaleVal = container.querySelector('#cfg-scale-val');
+  const cfgStatusPill = container.querySelector('#cfg-status-pill');
+  const cfgPresetButtons = container.querySelectorAll('.cfg-slider-group .preset-btn');
+  const vectorDiagramContainer = container.querySelector('#vector-diagram-container');
+  const cfgWarningBox = container.querySelector('#cfg-warning-box');
+  const cfgPreviewViewport = container.querySelector('#cfg-preview-viewport');
+  const samplerPills = container.querySelectorAll('.sampler-pill');
+  const samplerSpecsRow = container.querySelector('#sampler-specs-row');
+  const btnClaimCfgXp = container.querySelector('#btn-claim-cfg-xp');
+
+  function updateCfgArena() {
+    const sc = currentScenario();
+    if (cfgPromptDisplay) cfgPromptDisplay.textContent = `"${sc.prompt}"`;
+    if (cfgScaleVal) cfgScaleVal.textContent = cfgScale.toFixed(1);
+
+    // Update CFG status and warning
+    if (cfgStatusPill) {
+      if (cfgScale <= 2.5) {
+        cfgStatusPill.className = 'cfg-status-pill underguided';
+        cfgStatusPill.textContent = '⚠️ Under-Guided (Washed Out)';
+        if (cfgWarningBox) cfgWarningBox.style.display = 'none';
+      } else if (cfgScale <= 6.5) {
+        cfgStatusPill.className = 'cfg-status-pill mild';
+        cfgStatusPill.textContent = 'Mild Guidance (Natural)';
+        if (cfgWarningBox) cfgWarningBox.style.display = 'none';
+      } else if (cfgScale <= 9.0) {
+        cfgStatusPill.className = 'cfg-status-pill optimal';
+        cfgStatusPill.textContent = '★ Balanced Sweetspot (High Fidelity)';
+        if (cfgWarningBox) cfgWarningBox.style.display = 'none';
+      } else if (cfgScale <= 14.0) {
+        cfgStatusPill.className = 'cfg-status-pill stylized';
+        cfgStatusPill.textContent = 'Strong Stylization (High Contrast)';
+        if (cfgWarningBox) cfgWarningBox.style.display = 'none';
+      } else {
+        cfgStatusPill.className = 'cfg-status-pill burned';
+        cfgStatusPill.textContent = '🔥 Contrast Burn / Artifacts';
+        if (cfgWarningBox) cfgWarningBox.style.display = 'block';
+      }
+    }
+
+    // Dynamic Filter Style for Preview Image
+    let filterStyle = '';
+    if (cfgScale <= 2.0) {
+      filterStyle = 'filter: saturate(0.55) contrast(0.85);';
+    } else if (cfgScale <= 5.0) {
+      filterStyle = 'filter: saturate(0.85) contrast(0.95);';
+    } else if (cfgScale <= 9.0) {
+      filterStyle = 'filter: saturate(1.2) contrast(1.1);';
+    } else if (cfgScale <= 14.0) {
+      filterStyle = 'filter: saturate(1.7) contrast(1.4);';
+    } else {
+      filterStyle = 'filter: saturate(2.6) contrast(2.2) brightness(1.15) drop-shadow(0 0 10px rgba(239, 68, 68, 0.7));';
+    }
+
+    if (cfgPreviewViewport) {
+      cfgPreviewViewport.innerHTML = getSceneArtSvg(sc.id, 0.08, filterStyle);
+    }
+
+    // Render Vector Diagram
+    if (vectorDiagramContainer) {
+      const uX = 90;
+      const uY = 65;
+      const cX = 140;
+      const cY = 40;
+      // Extrapolate: u + w * (c - u)
+      const diffX = cX - uX;
+      const diffY = cY - uY;
+      const normW = Math.min(2.5, 0.4 + (cfgScale / 20.0) * 2.1);
+      const gX = Math.round(uX + diffX * normW);
+      const gY = Math.round(uY + diffY * normW);
+
+      vectorDiagramContainer.innerHTML = `
+        <svg viewBox="0 0 280 110" class="vector-svg">
+          <!-- Origin Base Latent -->
+          <circle cx="30" cy="85" r="4" fill="#f59e0b" />
+          <text x="30" y="100" fill="#f59e0b" font-size="8" text-anchor="middle" font-family="monospace">x_t</text>
+
+          <!-- Vector 1: Unconditional eps_u -->
+          <line x1="30" y1="85" x2="${uX}" y2="${uY}" stroke="#64748b" stroke-width="2" stroke-dasharray="3,2" />
+          <circle cx="${uX}" cy="${uY}" r="3" fill="#64748b" />
+          <text x="${uX - 10}" y="${uY - 6}" fill="#94a3b8" font-size="7.5" font-family="monospace">ε_uncond</text>
+
+          <!-- Vector 2: Conditional eps_c -->
+          <line x1="30" y1="85" x2="${cX}" y2="${cY}" stroke="#06b6d4" stroke-width="2" />
+          <circle cx="${cX}" cy="${cY}" r="3" fill="#06b6d4" />
+          <text x="${cX}" y="${cY - 6}" fill="#06b6d4" font-size="7.5" font-family="monospace" font-weight="bold">ε_cond</text>
+
+          <!-- Vector Extrapolation Line (Red/Emerald) -->
+          <line x1="${uX}" y1="${uY}" x2="${gX}" y2="${gY}" stroke="${cfgScale > 15 ? '#ef4444' : '#10b981'}" stroke-width="2.5" />
+          <circle cx="${gX}" cy="${gY}" r="5" fill="${cfgScale > 15 ? '#ef4444' : '#10b981'}" />
+          <text x="${gX}" y="${Math.max(12, gY - 8)}" fill="${cfgScale > 15 ? '#f87171' : '#34d399'}" font-size="8.5" font-family="monospace" font-weight="bold">
+            Guided ε̃ (w=${cfgScale.toFixed(1)})
+          </text>
+        </svg>
+      `;
+    }
+
+    // Sampler Specs row
+    if (samplerSpecsRow) {
+      if (sampler === 'ddpm') {
+        samplerSpecsRow.innerHTML = `
+          <div class="spec-col"><span class="k">Required Steps:</span><span class="v">1,000 passes</span></div>
+          <div class="spec-col"><span class="k">Inference Latency:</span><span class="v">~18.5 seconds (Slow)</span></div>
+          <div class="spec-col"><span class="k">Math Type:</span><span class="v">Stochastic Markov Chain</span></div>
+        `;
+      } else if (sampler === 'ddim') {
+        samplerSpecsRow.innerHTML = `
+          <div class="spec-col"><span class="k">Required Steps:</span><span class="v">50 passes</span></div>
+          <div class="spec-col"><span class="k">Inference Latency:</span><span class="v">~920 ms (Fast)</span></div>
+          <div class="spec-col"><span class="k">Math Type:</span><span class="v">Deterministic ODE Solver</span></div>
+        `;
+      } else {
+        samplerSpecsRow.innerHTML = `
+          <div class="spec-col"><span class="k">Required Steps:</span><span class="v highlight">20 passes</span></div>
+          <div class="spec-col"><span class="k">Inference Latency:</span><span class="v highlight">~340 ms (Blazing Fast)</span></div>
+          <div class="spec-col"><span class="k">Math Type:</span><span class="v highlight">Rectified Flow Matching</span></div>
+        `;
+      }
+    }
+  }
+
+  if (cfgScaleSlider) {
+    cfgScaleSlider.addEventListener('input', (e) => {
+      cfgScale = parseFloat(e.target.value);
+      state.diffCfgScale = cfgScale;
+      updateCfgArena();
+    });
+  }
+
+  cfgPresetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      cfgScale = parseFloat(btn.dataset.scale);
+      state.diffCfgScale = cfgScale;
+      if (cfgScaleSlider) cfgScaleSlider.value = cfgScale;
+      soundFx.playBlip(620, 0.04);
+      updateCfgArena();
+    });
+  });
+
+  samplerPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      sampler = pill.dataset.sampler;
+      state.diffSampler = sampler;
+      samplerPills.forEach(p => p.classList.toggle('active', p === pill));
+      soundFx.playBlip(680, 0.05);
+      updateCfgArena();
+    });
+  });
+
+  if (btnClaimCfgXp) {
+    btnClaimCfgXp.addEventListener('click', () => {
+      if (!xpCfgClaimed) {
+        xpCfgClaimed = true;
+        awardXp(25, 'Classifier-Free Guidance Conquered');
+        btnClaimCfgXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimCfgXp.disabled = true;
+        btnClaimCfgXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // --- TAB 3 LOGIC: FLOW MATCHING VS SDE ---
+  const flowStepsSlider = container.querySelector('#flow-steps-slider');
+  const flowStepsVal = container.querySelector('#flow-steps-val');
+  const btnRolloutParticles = container.querySelector('#btn-rollout-particles');
+  const phaseCanvasWrapper = container.querySelector('#phase-canvas-wrapper');
+  const flowMetricsGrid = container.querySelector('#flow-metrics-grid');
+  const btnClaimFlowXp = container.querySelector('#btn-claim-flow-xp');
+
+  let isRollingOut = false;
+
+  function renderPhaseSpace() {
+    if (flowStepsVal) flowStepsVal.textContent = numSteps;
+
+    // Truncation Error Calculation
+    const sdeDriftError = Math.max(1.2, (120 / numSteps)).toFixed(1);
+    const flowDriftError = Math.max(0.1, (18 / (numSteps * numSteps))).toFixed(2);
+
+    if (flowMetricsGrid) {
+      flowMetricsGrid.innerHTML = `
+        <div class="flow-metric-box danger">
+          <span class="m-lbl">Curved Diffusion Drift Error</span>
+          <span class="m-val">${sdeDriftError}% Deviation</span>
+          <span class="m-sub">Wandering trajectory cuts corners</span>
+        </div>
+
+        <div class="flow-metric-box success">
+          <span class="m-lbl">Rectified Flow Drift Error</span>
+          <span class="m-val">${flowDriftError}% Deviation</span>
+          <span class="m-sub">Linear velocity field (zero drift)</span>
+        </div>
+
+        <div class="flow-metric-box">
+          <span class="m-lbl">Inference Speedup</span>
+          <span class="m-val highlight">${(1000 / numSteps).toFixed(0)}× FASTER</span>
+          <span class="m-sub">Compared to classic 1000-step DDPM</span>
+        </div>
+
+        <div class="flow-metric-box">
+          <span class="m-lbl">Frontier Adoption</span>
+          <span class="m-val">Flux.1 & SD 3</span>
+          <span class="m-sub">State-of-the-art open weights</span>
+        </div>
+      `;
+    }
+
+    if (phaseCanvasWrapper) {
+      phaseCanvasWrapper.innerHTML = `
+        <svg viewBox="0 0 520 220" class="phase-svg">
+          <!-- Background Grid Lines -->
+          <line x1="40" y1="30" x2="40" y2="190" stroke="rgba(255,255,255,0.06)" />
+          <line x1="160" y1="30" x2="160" y2="190" stroke="rgba(255,255,255,0.06)" />
+          <line x1="280" y1="30" x2="280" y2="190" stroke="rgba(255,255,255,0.06)" />
+          <line x1="400" y1="30" x2="400" y2="190" stroke="rgba(255,255,255,0.06)" />
+          <line x1="40" y1="190" x2="480" y2="190" stroke="#475569" stroke-width="1.5" />
+
+          <!-- Noise Prior Cluster (Left: x_1) -->
+          <circle cx="80" cy="110" r="35" fill="rgba(239, 68, 68, 0.08)" stroke="#f87171" stroke-width="1" stroke-dasharray="2,2" />
+          <circle cx="80" cy="110" r="5" fill="#f87171" />
+          <text x="80" y="160" fill="#f87171" font-size="9" text-anchor="middle" font-family="monospace">Noise Prior x₁ ~ 𝒩(0, I)</text>
+
+          <!-- Data Manifold Cluster (Right: x_0) -->
+          <circle cx="440" cy="110" r="35" fill="rgba(16, 185, 129, 0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="2,2" />
+          <circle cx="440" cy="110" r="5" fill="#34d399" />
+          <text x="440" y="160" fill="#34d399" font-size="9" text-anchor="middle" font-family="monospace">Data Manifold x₀</text>
+
+          <!-- 1. Curved Diffusion Path (Red dashed curve) -->
+          <path d="M 80,110 C 180,25 240,200 440,110" fill="none" stroke="#f87171" stroke-width="2.5" stroke-dasharray="4,3" />
+          <text x="210" y="45" fill="#fca5a5" font-size="8.5" font-family="monospace">Curved SDE Path (Brownian Drift)</text>
+
+          <!-- 2. Rectified Flow Straight Highway (Emerald bold line) -->
+          <line x1="80" y1="110" x2="440" y2="110" stroke="#10b981" stroke-width="3.5" />
+          <circle cx="260" cy="110" r="4" fill="#10b981" />
+          <text x="260" y="100" fill="#34d399" font-size="9.5" text-anchor="middle" font-family="monospace" font-weight="bold">
+            Rectified Flow Vector v_t = x₁ - x₀ (Direct Laser)
+          </text>
+        </svg>
+      `;
+    }
+  }
+
+  if (flowStepsSlider) {
+    flowStepsSlider.addEventListener('input', (e) => {
+      numSteps = parseInt(e.target.value, 10);
+      state.diffNumSteps = numSteps;
+      renderPhaseSpace();
+    });
+  }
+
+  if (btnRolloutParticles) {
+    btnRolloutParticles.addEventListener('click', () => {
+      if (isRollingOut) return;
+      isRollingOut = true;
+      btnRolloutParticles.disabled = true;
+      btnRolloutParticles.innerHTML = `<span class="icon spin">🔄</span> Rolling Out Particles...`;
+      soundFx.playBlip(720, 0.08);
+
+      setTimeout(() => {
+        isRollingOut = false;
+        btnRolloutParticles.disabled = false;
+        btnRolloutParticles.innerHTML = `<span class="icon">🚀</span> Simulate Particle Trajectory Rollout`;
+        soundFx.playLevelUp();
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }, 500);
+    });
+  }
+
+  if (btnClaimFlowXp) {
+    btnClaimFlowXp.addEventListener('click', () => {
+      if (!xpFlowClaimed) {
+        xpFlowClaimed = true;
+        awardXp(30, 'Rectified Flow Matching Conquered');
+        btnClaimFlowXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimFlowXp.disabled = true;
+        btnClaimFlowXp.style.opacity = '0.6';
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  function renderAllTabs() {
+    updateNoiseCanvas();
+    updateCfgArena();
+    renderPhaseSpace();
+  }
+
+  // Initial render
+  renderAllTabs();
+}
+
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -11734,6 +12699,13 @@ const questPrompts = {
     { label: '📦 How does Token Dropping and Capacity Factor work?', prompt: 'Explain the role of Expert Capacity buffers in distributed multi-GPU clusters, and what happens when tokens exceed capacity.' },
     { label: '🏛️ Switch Transformer vs Mixtral vs DeepSeek-V3', prompt: 'Compare the architectural design choices between Top-1 routing (Switch), Top-2 of 8 (Mixtral), and Shared + Top-8 of 256 fine-grained routing (DeepSeek-V3).' },
     { label: '🎯 Quiz me on Mixture-of-Experts & Dynamic Routing', prompt: 'Give me a challenging question about MoE router gating, expert parallelism, capacity factors, or auxiliary load balancing!' }
+  ],
+  'quest-17': [
+    { label: '🌊 How does Forward Noise Addition work in O(1)?', prompt: 'Explain the closed-form forward sampling equation q(x_t|x_0) in DDPM and why cumulative variance alpha_bar allows skipping to step t without sequential loops.' },
+    { label: '🎯 How does Classifier-Free Guidance (CFG) work?', prompt: 'Walk through Classifier-Free Guidance mathematically: why do we train with null prompt dropout, and how does vector extrapolation in noise space push the image toward the prompt?' },
+    { label: '⚡ Why does Rectified Flow Matching beat classic DDPM?', prompt: 'Compare the curved stochastic trajectories of Brownian diffusion against the straight linear velocity field of Rectified Flow Matching in Flux.1 and SD3.' },
+    { label: '🏛️ What is Latent Diffusion (Stable Diffusion)?', prompt: 'Explain the difference between pixel-space diffusion and latent-space diffusion: how does a VAE compress spatial dimensions by 8x to slash VRAM and FLOP requirements?' },
+    { label: '🎯 Quiz me on Diffusion Models & Flow Matching', prompt: 'Give me a challenging question about DDPM score matching, CFG guidance scales, noise schedules, or rectified flow trajectories!' }
   ]
 };
 

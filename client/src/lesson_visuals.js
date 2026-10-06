@@ -3298,6 +3298,281 @@ function q16ModernMoeArchitectures() {
   };
 }
 
+
+// ==========================================
+// QUEST 17: DIFFUSION MODELS & FLOW MATCHING
+// ==========================================
+
+function q17ForwardReverseMarkov() {
+  let g = '';
+  g += T(320, 18, 'The Thermodynamic Cycle: Forward Noise vs Reverse Neural Denoising', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Clean Data Image x_0
+  g += rect(30, 45, 120, 110, { fill: 'rgba(56, 189, 248, 0.12)', stroke: C.cyan, rx: 8 });
+  g += T(90, 68, 'Clean Image x₀', { size: 10, weight: 700, fill: C.cyan });
+  g += rect(48, 80, 84, 55, { fill: 'rgba(56, 189, 248, 0.25)', stroke: 'rgba(56, 189, 248, 0.5)', rx: 4 });
+  g += T(90, 105, '🌆 Sharp Scene', { size: 9, fill: '#fff' });
+  g += T(90, 120, 'q(x₀) Data Manifold', { size: 7.5, mono: true, fill: C.cyan });
+  g += T(90, 145, 't = 0 (SNR → ∞)', { size: 8, mono: true, fill: C.muted });
+
+  // Forward Arrow 1
+  g += arrow(155, 95, 235, 95, 'amber', 2);
+  g += T(195, 82, '+ √β_t · ε', { size: 8.5, mono: true, fill: C.amber });
+  g += T(195, 115, 'q(x_t | x_{t-1})', { size: 8, mono: true, fill: C.muted });
+
+  // 2. Partially Noisy Latent x_t (t=500)
+  g += rect(240, 45, 130, 110, { fill: 'rgba(245, 158, 11, 0.1)', stroke: C.amber, rx: 8 });
+  g += T(305, 68, 'Noisy Latent x_t', { size: 10, weight: 700, fill: C.amber });
+  g += rect(258, 80, 94, 55, { fill: 'rgba(245, 158, 11, 0.25)', stroke: 'rgba(245, 158, 11, 0.4)', rx: 4 });
+  g += T(305, 105, '🌫️ Grainy Outline', { size: 9, fill: '#fef08a' });
+  g += T(305, 120, '50% Signal / 50% Noise', { size: 7.5, fill: C.amber });
+  g += T(305, 145, 't = 500 (Midpoint)', { size: 8, mono: true, fill: C.muted });
+
+  // Forward Arrow 2
+  g += arrow(375, 95, 455, 95, 'rose', 2);
+  g += T(415, 82, 'Destroy Structure', { size: 8, fill: C.rose });
+  g += T(415, 115, 'Entropy Maximum', { size: 7.5, fill: C.muted });
+
+  // 3. Pure Gaussian Noise x_T (t=1000)
+  g += rect(460, 45, 145, 110, { fill: 'rgba(239, 68, 68, 0.1)', stroke: C.rose, rx: 8 });
+  g += T(532, 68, 'Gaussian Static x_T', { size: 10, weight: 700, fill: C.rose });
+  g += rect(478, 80, 108, 55, { fill: 'rgba(239, 68, 68, 0.25)', stroke: 'rgba(239, 68, 68, 0.4)', rx: 4 });
+  g += T(532, 105, '📺 Pure Static TV', { size: 9, fill: '#fca5a5' });
+  g += T(532, 120, 'x_T ~ 𝒩(0, I)', { size: 8, mono: true, fill: C.rose });
+  g += T(532, 145, 't = 1000 (SNR → 0)', { size: 8, mono: true, fill: C.muted });
+
+  // Bottom Return Arc: Neural Denoiser p_theta
+  g += arrow(460, 175, 155, 175, 'emerald', 2.5);
+  g += T(310, 168, '◄ REVERSE TIME REVERSAL: Neural Denoiser p_θ(x_{t-1} | x_t) subtracting ε_θ(x_t, t)', { size: 9, weight: 700, fill: C.emerald });
+  g += T(320, 204, 'Forward process destroys information via thermodynamics; trained neural network learns to reverse the arrow of time.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Forward Markov chain destroys data into pure Gaussian static; the reverse neural process removes predicted noise step-by-step.'
+  };
+}
+
+function q17ClosedFormJump() {
+  let g = '';
+  g += T(320, 18, 'Closed-Form Forward Jump: Sampling Step t in O(1) Time', { size: 12.5, weight: 700, fill: C.text });
+
+  // Formula Banner
+  g += rect(80, 36, 480, 32, { fill: 'rgba(0, 0, 0, 0.45)', stroke: 'rgba(56, 189, 248, 0.3)', rx: 6 });
+  g += T(320, 56, 'x_t = √(ᾱ_t) · x₀ + √(1 − ᾱ_t) · ε,   where ε ~ 𝒩(0, I)', { size: 10.5, mono: true, weight: 700, fill: '#7dd3fc' });
+
+  // Left Component: Signal Retention
+  g += rect(40, 80, 160, 95, { fill: 'rgba(56, 189, 248, 0.1)', stroke: C.cyan, rx: 6 });
+  g += T(120, 100, 'Signal Retention', { size: 10, weight: 700, fill: C.cyan });
+  g += T(120, 120, '√(ᾱ_t) · x₀', { size: 11, mono: true, weight: 700, fill: '#fff' });
+  g += T(120, 140, 'ᾱ_t = ∏_{s=1}^t (1 - β_s)', { size: 8, mono: true, fill: C.muted });
+  g += T(120, 158, 'Smooth exponential decay', { size: 7.5, fill: C.cyan });
+
+  // Plus Sign
+  g += T(220, 125, '+', { size: 22, weight: 700, fill: '#fff' });
+
+  // Middle Component: Noise Injection
+  g += rect(240, 80, 160, 95, { fill: 'rgba(239, 68, 68, 0.1)', stroke: C.rose, rx: 6 });
+  g += T(320, 100, 'Injected Gaussian Noise', { size: 10, weight: 700, fill: C.rose });
+  g += T(320, 120, '√(1 − ᾱ_t) · ε', { size: 11, mono: true, weight: 700, fill: '#fff' });
+  g += T(320, 140, 'ε ~ 𝒩(0, I) i.i.d.', { size: 8, mono: true, fill: C.muted });
+  g += T(320, 158, 'Variance grows toward 1.0', { size: 7.5, fill: C.rose });
+
+  // Equals Sign
+  g += T(420, 125, '=', { size: 22, weight: 700, fill: '#fff' });
+
+  // Right Component: Noisy Latent x_t
+  g += rect(440, 80, 160, 95, { fill: 'rgba(16, 185, 129, 0.12)', stroke: C.emerald, rx: 6 });
+  g += T(520, 100, 'Instant Latent x_t', { size: 10, weight: 700, fill: C.emerald });
+  g += T(520, 120, 'O(1) Direct Sampling', { size: 10, weight: 700, fill: '#a7f3d0' });
+  g += T(520, 140, 'Jump directly to t = 750', { size: 8, mono: true, fill: C.emerald });
+  g += T(520, 158, 'Zero sequential loop needed!', { size: 7.5, fill: '#6ee7b7', weight: 600 });
+
+  g += T(320, 204, 'Because the sum of Gaussians is Gaussian, training can jump to any arbitrary timestep t in O(1) time without simulating earlier steps.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Closed-form forward jump allows training at random timesteps in O(1) parallel GPU time.'
+  };
+}
+
+function q17UnetTimeConditioned() {
+  let g = '';
+  g += T(320, 18, 'Time-Conditioned U-Net: Noise Residual Prediction Architecture', { size: 12.5, weight: 700, fill: C.text });
+
+  // Input Box x_t
+  g += rect(30, 48, 90, 60, { fill: 'rgba(245, 158, 11, 0.12)', stroke: C.amber, rx: 6 });
+  g += T(75, 68, 'Noisy Latent x_t', { size: 9, weight: 700, fill: C.amber });
+  g += T(75, 84, '[B, 4, 64, 64]', { size: 7.5, mono: true, fill: C.muted });
+  g += T(75, 96, 'Compressed Latent', { size: 7, fill: C.text });
+
+  // Timestep Conditioning Box
+  g += rect(30, 120, 90, 55, { fill: 'rgba(139, 92, 246, 0.15)', stroke: C.violet, rx: 6 });
+  g += T(75, 138, 'Timestep t', { size: 9, weight: 700, fill: C.violet });
+  g += T(75, 152, 'Sinusoidal Embed', { size: 7.5, fill: '#c4b5fd' });
+  g += T(75, 164, 'e(t) ∈ ℝ^{d_model}', { size: 7, mono: true, fill: C.muted });
+
+  // Arrow to Encoder
+  g += arrow(125, 78, 165, 78, 'amber', 2);
+  g += arrow(125, 147, 165, 120, 'violet', 1.5);
+
+  // Encoder (Downsampling)
+  g += rect(170, 42, 100, 135, { fill: 'rgba(56, 189, 248, 0.08)', stroke: C.cyan, rx: 6 });
+  g += T(220, 60, 'Encoder', { size: 10, weight: 700, fill: C.cyan });
+  g += T(220, 75, 'Downsample 2×', { size: 7.5, fill: C.muted });
+  g += rect(180, 85, 80, 22, { fill: 'rgba(56, 189, 248, 0.2)', rx: 4 });
+  g += T(220, 99, 'ResBlock + e(t)', { size: 7.5, mono: true, fill: '#fff' });
+  g += rect(180, 115, 80, 22, { fill: 'rgba(56, 189, 248, 0.2)', rx: 4 });
+  g += T(220, 129, 'Self-Attention', { size: 7.5, mono: true, fill: '#fff' });
+  g += rect(180, 145, 80, 22, { fill: 'rgba(56, 189, 248, 0.2)', rx: 4 });
+  g += T(220, 159, 'Downsample 4×', { size: 7.5, mono: true, fill: '#fff' });
+
+  // Skip Connection 1
+  g += arrow(270, 75, 365, 75, 'cyan', 1.5);
+  g += T(318, 67, 'Skip [64×64]', { size: 7, mono: true, fill: C.cyan });
+
+  // Bottleneck (Cross-Attention with Prompt)
+  g += rect(275, 95, 85, 80, { fill: 'rgba(167, 139, 250, 0.15)', stroke: C.violet, rx: 6 });
+  g += T(317, 112, 'Bottleneck', { size: 9, weight: 700, fill: C.violet });
+  g += T(317, 128, 'Cross-Attn', { size: 8, fill: '#ddd6fe' });
+  g += T(317, 144, 'Prompt Text c', { size: 7.5, mono: true, fill: '#a78bfa' });
+  g += T(317, 160, '(CLIP / T5)', { size: 7, fill: C.muted });
+
+  // Arrow to Decoder
+  g += arrow(360, 135, 375, 135, 'violet', 1.5);
+
+  // Decoder (Upsampling)
+  g += rect(375, 42, 100, 135, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 6 });
+  g += T(425, 60, 'Decoder', { size: 10, weight: 700, fill: C.emerald });
+  g += T(425, 75, 'Upsample 2×', { size: 7.5, fill: C.muted });
+  g += rect(385, 85, 80, 22, { fill: 'rgba(16, 185, 129, 0.2)', rx: 4 });
+  g += T(425, 99, 'Concat Skip', { size: 7.5, mono: true, fill: '#fff' });
+  g += rect(385, 115, 80, 22, { fill: 'rgba(16, 185, 129, 0.2)', rx: 4 });
+  g += T(425, 129, 'ResBlock + e(t)', { size: 7.5, mono: true, fill: '#fff' });
+  g += rect(385, 145, 80, 22, { fill: 'rgba(16, 185, 129, 0.2)', rx: 4 });
+  g += T(425, 159, 'Cross-Attention', { size: 7.5, mono: true, fill: '#fff' });
+
+  // Arrow to Output
+  g += arrow(480, 105, 520, 105, 'emerald', 2);
+
+  // Output Box Predicted Noise ε_hat
+  g += rect(525, 48, 95, 115, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(572, 70, 'Predicted Noise', { size: 9, weight: 700, fill: C.emerald });
+  g += T(572, 86, 'ε̂_θ(x_t, t, c)', { size: 9.5, mono: true, weight: 700, fill: '#34d399' });
+  g += T(572, 106, 'Target: Ground ε', { size: 7.5, fill: C.text });
+  g += T(572, 124, 'Loss = ||ε - ε̂||²', { size: 8, mono: true, fill: '#6ee7b7' });
+  g += T(572, 145, 'Subtracted from x_t', { size: 7, fill: C.muted });
+
+  g += T(320, 204, 'The U-Net learns to predict the noise residual rather than the clean image, keeping gradient magnitudes stable throughout training.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Time-conditioned U-Net predicts the noise perturbation vector ε_θ using skip connections and cross-attention conditioning.'
+  };
+}
+
+function q17CfgVectorExtrapolation() {
+  let g = '';
+  g += T(320, 18, 'Classifier-Free Guidance (CFG): Noise Space Vector Extrapolation', { size: 12.5, weight: 700, fill: C.text });
+
+  // Vector Space Coordinate System
+  g += rect(30, 42, 340, 140, { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(255, 255, 255, 0.1)', rx: 8 });
+  g += T(70, 60, 'Noise Vector Space', { size: 8.5, mono: true, fill: C.muted });
+
+  // Base Point x_t
+  g += circle(60, 140, 5, { fill: C.amber });
+  g += T(60, 158, 'Noisy Latent x_t', { size: 8, mono: true, fill: C.amber });
+
+  // Vector 1: Unconditional Vector eps(x_t, null)
+  g += arrow(60, 140, 130, 110, 'muted', 2);
+  g += circle(130, 110, 4, { fill: C.muted });
+  g += T(135, 95, 'ε_uncond (Generic)', { size: 8, fill: C.muted });
+
+  // Vector 2: Conditional Vector eps(x_t, c)
+  g += arrow(60, 140, 180, 80, 'cyan', 2);
+  g += circle(180, 80, 4, { fill: C.cyan });
+  g += T(185, 70, 'ε_cond (Prompt Direction)', { size: 8.5, weight: 700, fill: C.cyan });
+
+  // Extrapolation Arrow: w = 7.5
+  g += arrow(130, 110, 310, 60, 'emerald', 2.5);
+  g += circle(310, 60, 6, { fill: '#34d399' });
+  g += T(310, 48, 'Guided ε̃ (w = 7.5)', { size: 9.5, weight: 700, fill: '#34d399' });
+  g += T(235, 105, 'w · (ε_cond - ε_uncond)', { size: 8, mono: true, fill: '#6ee7b7' });
+
+  // Right Side: CFG Presets Comparison
+  g += rect(385, 42, 225, 140, { fill: 'rgba(30, 41, 59, 0.5)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 8 });
+  g += T(497, 60, 'Guidance Scale Impact', { size: 10, weight: 700, fill: C.text });
+
+  // Preset 1: w = 1.0
+  g += rect(395, 72, 205, 24, { fill: 'rgba(255, 255, 255, 0.04)', rx: 4 });
+  g += T(425, 88, 'w = 1.0', { size: 8.5, mono: true, fill: C.muted });
+  g += T(520, 88, 'Under-guided • Low contrast', { size: 7.5, fill: C.muted });
+
+  // Preset 2: w = 7.5
+  g += rect(395, 102, 205, 26, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 4 });
+  g += T(425, 119, 'w = 7.5 ★', { size: 9, mono: true, weight: 700, fill: '#34d399' });
+  g += T(525, 119, 'Optimal sweetspot • High fidelity', { size: 7.5, weight: 600, fill: '#a7f3d0' });
+
+  // Preset 3: w = 20.0
+  g += rect(395, 134, 205, 24, { fill: 'rgba(239, 68, 68, 0.1)', rx: 4 });
+  g += T(425, 150, 'w = 20.0', { size: 8.5, mono: true, fill: C.rose });
+  g += T(520, 150, 'Over-saturated • Burnt artifacts', { size: 7.5, fill: C.rose });
+
+  g += T(320, 204, 'CFG extrapolates along the vector difference between conditional and unconditional noise, pushing the generation aggressively toward user prompt tokens.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Classifier-Free Guidance extrapolates in noise prediction space: ε̃ = ε_uncond + w · (ε_cond - ε_uncond).'
+  };
+}
+
+function q17RectifiedFlowMatching() {
+  let g = '';
+  g += T(320, 18, 'Rectified Flow Matching vs Curved Diffusion Trajectories', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Classic Diffusion (Curved Brownian Path)
+  g += rect(30, 42, 275, 140, { fill: 'rgba(239, 68, 68, 0.06)', stroke: C.rose, rx: 8 });
+  g += T(167, 62, '1. Classic Diffusion (DDPM / DDIM)', { size: 10, weight: 700, fill: C.rose });
+  g += T(167, 78, 'Curved Probability Flow ODE', { size: 8, fill: C.muted });
+
+  // Curved Path visualization
+  g += circle(60, 140, 5, { fill: C.rose });
+  g += T(60, 158, 'Noise x₁', { size: 7.5, mono: true, fill: C.rose });
+  
+  g += circle(260, 95, 5, { fill: C.cyan });
+  g += T(260, 115, 'Image x₀', { size: 7.5, mono: true, fill: C.cyan });
+
+  // Curved squiggly bezier
+  g += '<path d="M 60,140 Q 110,65 170,125 T 260,95" fill="none" stroke="#f87171" stroke-width="2.5" stroke-dasharray="4,2" />';
+  g += T(150, 92, 'Curved ODE Trajectory', { size: 7.5, fill: C.rose });
+  g += T(167, 145, '⚠️ Requires 50 - 1000 steps', { size: 8.5, weight: 600, fill: '#fca5a5' });
+  g += T(167, 162, 'Large steps cut corners and drift off manifold', { size: 7, fill: C.muted });
+
+  // Right: Rectified Flow Matching (Straight Line)
+  g += rect(335, 42, 275, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(472, 62, '2. Rectified Flow Matching (Flux / SD3) ★', { size: 10, weight: 700, fill: C.emerald });
+  g += T(472, 78, 'Linear Velocity Field v_t = x₁ - x₀', { size: 8, mono: true, fill: '#6ee7b7' });
+
+  // Straight line visualization
+  g += circle(365, 140, 5, { fill: C.rose });
+  g += T(365, 158, 'Noise x₁', { size: 7.5, mono: true, fill: C.rose });
+
+  g += circle(565, 95, 5, { fill: C.emerald });
+  g += T(565, 115, 'Image x₀', { size: 7.5, mono: true, fill: C.emerald });
+
+  // Straight arrow
+  g += arrow(370, 138, 560, 97, 'emerald', 3);
+  g += T(465, 105, 'Straight-Line Vector v_t', { size: 8, weight: 700, fill: '#34d399' });
+  g += T(472, 145, '⚡ Only 15 - 20 Euler Steps!', { size: 9, weight: 700, fill: '#34d399' });
+  g += T(472, 162, 'Zero truncation error from curve bending', { size: 7, fill: C.muted });
+
+  g += T(320, 204, 'Flow matching straightens generative trajectories into direct linear paths, allowing fast Euler integration with minimal steps and superior fidelity.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Rectified Flow Matching connects noise to data along straight lines, enabling photorealistic generation in only 15–20 steps.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -3315,7 +3590,8 @@ const VISUALS = {
   'quest-13': [q13System1VsSystem2, q13TreeOfThoughts, q13OrmVsPrm, q13GrpoArchitecture, q13TestTimeComputeScaling],
   'quest-14': [q14LlmToolBridge, q14ReactLoopCycle, q14JsonSchemaValidation, q14AgentSandboxSecurity, q14MultiAgentSwarm],
   'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding],
-  'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures]
+  'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures],
+  'quest-17': [q17ForwardReverseMarkov, q17ClosedFormJump, q17UnetTimeConditioned, q17CfgVectorExtrapolation, q17RectifiedFlowMatching]
 };
 
 let activeCleanups = [];

@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 16)
+## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 17)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing] ➡️ [Quest 17: Diffusion Models & Flow Matching]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -472,9 +472,29 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🌊 Quest 17: Diffusion Models & Flow Matching (DDPM, Score Matching, CFG & Continuous Trajectories)
+- **Tagline:** Diffusion & Flow Matching
+- **The Core Problem:**
+  Generative Adversarial Networks (GANs) suffer from fragile min-max equilibrium battles, mode collapse, and vanishing gradients. Autoregressive pixel models (PixelCNN) require generating 1 million pixels one-by-one sequentially.
+- **The Solution:**
+  Formulate image generation as physical time reversal via non-equilibrium thermodynamics. In the forward process, data $x_0$ is systematically dissolved into Gaussian noise over $T=1,000$ steps according to a variance schedule $\beta_t$. In the reverse process, a time-conditioned neural network (U-Net or Diffusion Transformer) learns to estimate the injected noise vector $\epsilon_\theta(x_t, t)$, allowing iterative reconstruction of crystal-clear images from pure static.
+- **Key Concepts:**
+  - **Closed-Form Forward Leap:** $x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$, sampling noisy latents at arbitrary step $t$ in $\mathcal{O}(1)$ parallel time without sequential loops.
+  - **Simplified Denoising Objective:** $\mathcal{L}_{\text{simple}}(\theta) = \mathbb{E}[\|\epsilon - \epsilon_\theta(x_t, t, c)\|^2]$, training the network to predict the noise perturbation rather than the clean image.
+  - **Classifier-Free Guidance (CFG):** $\tilde{\epsilon} = \epsilon_\text{uncond} + w (\epsilon_\text{cond} - \epsilon_\text{uncond})$, extrapolating along the prompt vector in noise space to dramatically boost fidelity and contrast.
+  - **Rectified Flow Matching:** Straightening curved probability flow ODE trajectories into direct linear velocity paths ($v_t = x_1 - x_0$), slashing sampling latency from 1,000 steps to 15–20 steps (Flux.1 and Stable Diffusion 3).
+- **Interactive Playground:** 3-tab Generative Diffusion Lab:
+  - *Tab 1: Noise & Denoise Scrub Canvas:* Interactive timestep scrubber $t \in [0, 1000]$ with dynamic noise blending, real-time SNR meter ($\text{dB}$), animated reverse denoising loop, and signal-to-noise ratio gauge.
+  - *Tab 2: Classifier-Free Guidance & Sampler Arena:* Prompt conditioning display, CFG guidance scale slider $w \in [1.0, 20.0]$ with live visual saturation preview, vector extrapolation diagram, and latency comparison across DDPM, DDIM, and Flow Matching.
+  - *Tab 3: Rectified Flow Matching vs Brownian Diffusion:* 2D phase space canvas comparing curved stochastic SDE paths against straight-line ODE flow vectors, Euler integration step slider, and particle trajectory rollout animation.
+- **Python Lab Snippet:**
+  Runnable PyTorch implementation of `DDPMScheduler` with closed-form forward noise addition and Classifier-Free Guidance extrapolation.
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 17: Diffusion Models & Flow Matching:** Denoising score matching, continuous flow trajectories, CFG guidance, and latent diffusion synthesis.
 - **Quest 18: Audio & Speech AI:** Continuous neural audio codecs (EnCodec/Descript), Mel spectrograms, and autoregressive speech tokenizers.
+- **Quest 19: World Models & Video Generation:** Spatio-temporal 3D DiT diffusion, latent video dynamics, and action-conditioned world models.
 
 
 ---

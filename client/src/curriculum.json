@@ -3576,6 +3576,210 @@
           "breakdown": "x = Token input, W_g = Router projection weights, sigma = Set of k chosen expert indices, FFN = SwiGLU expert feedforward network."
         }
       }
+    },
+    {
+      "id": "quest-17",
+      "number": 17,
+      "title": "Diffusion Models & Flow Matching",
+      "subtitle": "DDPM, Score-Based Denoising, Classifier-Free Guidance & Rectified Flow",
+      "tag": "GENERATIVE DIFFUSION & FLOW",
+      "icon": "🌊",
+      "xp": 350,
+      "story": "How did AI learn to generate hyper-realistic artwork and photorealistic scenes out of pure static? Enter non-equilibrium thermodynamics. Instead of adversarial min-max games between unstable GANs, Generative Diffusion formulates creation as physical time reversal: forward diffusion systematically destroys an image into Gaussian noise over 1,000 steps, while a time-conditioned U-Net or DiT learns to predict and subtract noise at every micro-step, pulling crisp visuals out of the static mist.",
+      "mentalModel": "The Perfume Mist & The Time-Reversal Wizard: Spray a bottle of perfume and entropy scatters the molecules uniformly across the room (Forward Process q(x_t|x_0)). Reversing this by hand is impossible—unless you train a neural network to calculate the exact velocity vector of every molecule at every millisecond (Reverse Denoiser eps_theta). With Classifier-Free Guidance acting as an acoustic megaphone, the model navigates the probability cloud directly toward your prompt!",
+      "interactiveType": "diffusion_flow_lab",
+      "interactiveConfig": {
+        "scenarios": [
+          {
+            "id": "cyberpunk_city",
+            "title": "Cyberpunk Neon Metropolis",
+            "category": "Sci-Fi & Urban Concept Art",
+            "prompt": "A cinematic night view of a rainy neo-Tokyo alley with glowing holographic cyan kanji and purple reflections.",
+            "colorPalette": [
+              "#06b6d4",
+              "#ec4899",
+              "#3b82f6",
+              "#0f172a"
+            ],
+            "aspectRatio": "16:9"
+          },
+          {
+            "id": "deep_sea_jellyfish",
+            "title": "Bioluminescent Abyss Jellyfish",
+            "category": "Nature & Underwater Macro",
+            "prompt": "An ethereal translucent medusa jellyfish drifting through midnight oceanic trenches with glowing emerald tentacles.",
+            "colorPalette": [
+              "#10b981",
+              "#06b6d4",
+              "#6366f1",
+              "#020617"
+            ],
+            "aspectRatio": "1:1"
+          },
+          {
+            "id": "cosmic_nebula",
+            "title": "Orion Stellar Nursery & Spiral Galaxy",
+            "category": "Astrophotography & Cosmos",
+            "prompt": "Deep space Hubble view of a swirling violet nebula birthing golden proto-stars amidst interstellar dust.",
+            "colorPalette": [
+              "#8b5cf6",
+              "#f59e0b",
+              "#ec4899",
+              "#030712"
+            ],
+            "aspectRatio": "16:9"
+          },
+          {
+            "id": "renaissance_portrait",
+            "title": "Renaissance Astrolabe Scholar",
+            "category": "Classical Fine Art",
+            "prompt": "A chiaroscuro oil painting of a Venetian astronomer in velvet robes examining an ornate brass astrolabe by candlelight.",
+            "colorPalette": [
+              "#d97706",
+              "#92400e",
+              "#fef3c7",
+              "#1c1917"
+            ],
+            "aspectRatio": "4:3"
+          }
+        ],
+        "samplers": [
+          {
+            "id": "ddpm",
+            "name": "DDPM (Markovian Langevin)",
+            "steps": 1000,
+            "stochastic": true,
+            "desc": "Classic stochastic reverse diffusion with Gaussian Langevin noise injection at each step; high sample quality but slow inference."
+          },
+          {
+            "id": "ddim",
+            "name": "DDIM (Deterministic ODE)",
+            "steps": 50,
+            "stochastic": false,
+            "desc": "Non-Markovian deterministic trajectory mapping forward diffusion to an ODE; skips 95% of steps with identical marginal distributions."
+          },
+          {
+            "id": "flow_matching",
+            "name": "Rectified Flow Matching (Flux / SD3)",
+            "steps": 20,
+            "stochastic": false,
+            "desc": "Straightens curved probability flow ODE trajectories into direct linear velocity paths (v_t = x_1 - x_0); achieves state-of-the-art fidelity in 15-20 steps."
+          }
+        ],
+        "cfgPresets": [
+          {
+            "scale": 1.0,
+            "name": "Unguided (w = 1.0)",
+            "status": "Under-guided: Diverse but low prompt adherence, muted colors, soft composition."
+          },
+          {
+            "scale": 7.5,
+            "name": "Balanced Sweetspot (w = 7.5)",
+            "status": "Optimal: Crisp subject definition, vibrant saturation, high fidelity to user prompt."
+          },
+          {
+            "scale": 20.0,
+            "name": "Over-Saturated (w = 20.0)",
+            "status": "Over-guided: Extreme contrast, burned outlines, distorted anatomy and high-frequency artifacts."
+          }
+        ]
+      },
+      "codeSnippet": "import torch\nimport torch.nn as nn\nimport math\n\nclass DDPMScheduler:\n    def __init__(self, num_timesteps=1000, beta_start=1e-4, beta_end=0.02):\n        self.num_timesteps = num_timesteps\n        # Linear variance schedule\n        self.betas = torch.linspace(beta_start, beta_end, num_timesteps)\n        self.alphas = 1.0 - self.betas\n        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)\n        self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)\n        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)\n\n    def add_noise(self, x_0, t, noise=None):\n        \"\"\"Forward diffusion closed-form sampling: q(x_t | x_0)\"\"\"\n        if noise is None:\n            noise = torch.randn_like(x_0)\n        sqrt_alpha_bar = self.sqrt_alphas_cumprod[t].view(-1, 1, 1, 1)\n        sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alphas_cumprod[t].view(-1, 1, 1, 1)\n        # x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon\n        x_t = sqrt_alpha_bar * x_0 + sqrt_one_minus_alpha_bar * noise\n        return x_t, noise\n\ndef classifier_free_guidance(eps_uncond, eps_cond, guidance_scale=7.5):\n    \"\"\"CFG extrapolation: eps_tilde = eps_uncond + w * (eps_cond - eps_uncond)\"\"\"\n    return eps_uncond + guidance_scale * (eps_cond - eps_uncond)\n\n# 1. Forward process verification\nscheduler = DDPMScheduler(num_timesteps=1000)\nx_0 = torch.randn(4, 3, 64, 64) # Batch of 4 images\nt = torch.tensor([100, 400, 750, 999]) # Diverse timesteps\nx_t, noise = scheduler.add_noise(x_0, t)\n\nprint(f\"Original Image Shape: {x_0.shape}\")\nprint(f\"Noisy Latents at t={t.tolist()}: shape {x_t.shape}\")\n\n# 2. CFG vector extrapolation test\neps_u = torch.tensor([[0.2, -0.4]])\neps_c = torch.tensor([[0.8, 0.5]])\nguided_eps = classifier_free_guidance(eps_u, eps_c, guidance_scale=7.5)\nprint(f\"CFG Guided Noise Vector (w=7.5): {guided_eps.tolist()}\")",
+      "quiz": [
+        {
+          "question": "What is the critical mathematical advantage of the closed-form forward sampling formula q(x_t | x_0) = N(x_t; sqrt(alpha_bar_t) * x_0, (1 - alpha_bar_t) * I) in DDPM?",
+          "options": [
+            "It allows training to jump directly to any arbitrary timestep t in O(1) time without simulating steps 1 through t-1 sequentially",
+            "It reduces image resolution to 8x8 pixels so GPUs do not overheat",
+            "It forces the neural network to output only JPEG compressed files",
+            "It completely eliminates the need for backpropagation"
+          ],
+          "correct": 0,
+          "explanation": "Because the composition of independent Gaussian random variables is also Gaussian, the cumulative product alpha_bar_t allows sampling x_t directly at t=732 in a single matrix multiplication without computing the preceding 731 steps!"
+        },
+        {
+          "question": "How does Classifier-Free Guidance (CFG, Ho & Salimans 2021) dramatically improve prompt adherence without requiring a separate pre-trained classifier?",
+          "options": [
+            "By training a single denoiser with random prompt dropout (e.g. 10% null conditioning) and extrapolating in noise space: eps_tilde = eps_uncond + w * (eps_cond - eps_uncond)",
+            "By increasing the GPU fan speed during text decoding",
+            "By setting all negative weights in the U-Net to zero using standard ReLU",
+            "By running gradient ascent on a separate ResNet-50 classifier network during inference"
+          ],
+          "correct": 0,
+          "explanation": "CFG trains a single model to handle both conditional eps_cond and unconditional eps_uncond (null prompt). At inference time, setting guidance scale w > 1 pushes predictions along the vector difference (eps_cond - eps_uncond), strongly emphasizing prompt features over generic imagery."
+        },
+        {
+          "question": "Why does Rectified Flow Matching (used in Flux.1 and Stable Diffusion 3) allow photorealistic image generation in only 15–20 steps compared to classic DDPM requiring 1,000 steps?",
+          "options": [
+            "Flow matching straightens curved probability flow ODE trajectories into linear velocity vectors (v_t = x_1 - x_0), minimizing Euler integration truncation errors",
+            "Flow matching deletes all convolutional layers and replaces them with 1D linear regressions",
+            "Flow matching converts all images to black and white grayscale",
+            "Flow matching runs exclusively on quantum computers"
+          ],
+          "correct": 0,
+          "explanation": "Standard diffusion ODEs follow curved, meandering trajectories through latent space. Large step sizes cut corners and deviate from the true data manifold. Rectified Flow pairs noise and data along straight lines, enabling large Euler step sizes with minimal error accumulation."
+        }
+      ],
+      "lesson": {
+        "subtitle": "Non-Equilibrium Thermodynamics, Score Matching, CFG & Flow Matching",
+        "sections": [
+          {
+            "heading": "From GAN Chaos to Diffusion Thermodynamics",
+            "analogy": "A sculptor carving a marble statue in reverse: instead of fighting an adversary who critiques your unfinished work, you film a pristine sculpture being slowly eroded into fine sand by wind, then train a wizard to reverse the video frame-by-frame.",
+            "deepDive": "For nearly a decade, Generative Adversarial Networks (GANs, Goodfellow 2014) dominated deep generative modeling. However, GANs suffered from notorious instabilities: mode collapse (generating only 1 identical dog over and over), vanishing gradients, and delicate Nash equilibrium balancing between generator and discriminator.\n\nDenoising Diffusion Probabilistic Models (DDPM, Sohl-Dickstein 2015, Ho et al. 2020) reimagined image generation as a physical non-equilibrium thermodynamic process. Instead of producing an image in a single risky leap, diffusion breaks generation into hundreds of tiny, predictable denoising micro-steps. Because each step only requires estimating a small Gaussian noise perturbation, training is extraordinarily stable and scales predictably with model size.",
+            "formulaCard": {
+              "name": "The Denoising Paradigm Comparison",
+              "equation": "\\text{GAN: } G(z) \\to x, \\quad \\text{Diffusion: } x_T \\xrightarrow{p_\\theta(x_{t-1} \\mid x_t)} x_{t-1} \\dots \\to x_0",
+              "breakdown": "GANs jump from latent z to image x in one forward pass. Diffusion takes T steps (e.g. T=1000), progressively cleaning noise latent x_T into natural image x_0."
+            }
+          },
+          {
+            "heading": "The Forward Markov Chain & Closed-Form Noise Addition",
+            "analogy": "Dropping ink into clear water: with each passing second, the dye molecules diffuse further until the water reaches uniform cloudiness.",
+            "deepDive": "The forward process q adds Gaussian noise to a clean image x_0 over T discrete timesteps according to a predefined variance schedule beta_1, beta_2, ..., beta_T:\n\nq(x_t | x_{t-1}) = N(x_t; sqrt(1 - beta_t) * x_{t-1}, beta_t * I)\n\nCrucially, we do NOT have to simulate this step-by-step during training! By defining alpha_t = 1 - beta_t and alpha_bar_t = prod_{s=1}^t alpha_s, the composition of Gaussians yields an exact closed-form jump equation:\n\nq(x_t | x_0) = N(x_t; sqrt(alpha_bar_t) * x_0, (1 - alpha_bar_t) * I)\n\nThis means that to train a neural network at timestep t=600, we simply sample random noise epsilon ~ N(0, I) and compute x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon in a single matrix operation!",
+            "formulaCard": {
+              "name": "Closed-Form Forward Diffusion Equation",
+              "equation": "x_t = \\sqrt{\\bar{\\alpha}_t} x_0 + \\sqrt{1 - \\bar{\\alpha}_t} \\epsilon, \\quad \\epsilon \\sim \\mathcal{N}(0, \\mathbf{I})",
+              "breakdown": "x_0 = Clean data image, alpha_bar_t = Cumulative signal retention factor, 1 - alpha_bar_t = Variance of injected Gaussian noise."
+            }
+          },
+          {
+            "heading": "The Reverse Denoising Process & The Time-Conditioned U-Net",
+            "analogy": "A forensic investigator viewing a noisy surveillance tape: the model inspects the static, estimates what interference was added, and subtracts it to reveal the license plate.",
+            "deepDive": "The true reverse distribution q(x_{t-1} | x_t) depends on the entire data distribution q(x_0), which is intractable. However, for small beta_t, the reverse step is also Gaussian!\n\nWe parameterize the reverse step with a neural network p_theta(x_{t-1} | x_t) = N(x_{t-1}; mu_theta(x_t, t), Sigma_theta(x_t, t)).\n\nRemarkably, Ho et al. proved that instead of predicting the clean image x_0 or mean mu directly, it is mathematically optimal and numerically stable to train a U-Net or Diffusion Transformer (DiT) to predict the EXACT noise vector epsilon that was added:\n\nL_{simple}(theta) = E_{t, x_0, epsilon} [ || epsilon - epsilon_theta(x_t, t, c) ||^2 ]\n\nThe U-Net receives timestep t via sinusoidal positional embeddings (similar to Transformer positional encoding) injected into every ResNet block, informing the model whether it is dealing with coarse compositional noise (t near 1000) or fine micro-detail cleaning (t near 0).",
+            "formulaCard": {
+              "name": "Simplified Noise Prediction Objective",
+              "equation": "\\mathcal{L}_{\\text{simple}}(\\theta) = \\mathbb{E}_{t, x_0, \\epsilon} \\left[ \\left\\| \\epsilon - \\epsilon_\\theta\\left(\\sqrt{\\bar{\\alpha}_t} x_0 + \\sqrt{1 - \\bar{\\alpha}_t}\\epsilon, \\; t, \\; c\\right) \\right\\|^2 \\right]",
+              "breakdown": "epsilon = Ground-truth injected noise, epsilon_theta = Neural network prediction conditioned on noisy latent, timestep t, and prompt context c."
+            }
+          },
+          {
+            "heading": "Classifier-Free Guidance (CFG): Amplifying Prompt Fidelity",
+            "analogy": "A megaphone amplifying a whisper: the model knows how to draw generic landscapes, but when you yell through the megaphone, it exaggerates every requested keyword to overpower the background noise.",
+            "deepDive": "Unconditional diffusion generates plausible images, but text-conditioned diffusion often produces washed-out results that ignore subtle prompt details. Early work used an auxiliary pre-trained classifier gradient grad_x log p(y|x) to guide generation, but this required training noisy classifiers for every domain.\n\nClassifier-Free Guidance (CFG, Ho & Salimans 2021) solved this elegantly: during training, the text conditioning c is randomly dropped (set to empty string null) 10% to 20% of the time. The network learns both unconditional predictions epsilon_theta(x_t, null) and conditional predictions epsilon_theta(x_t, c).\n\nAt inference time, the guided noise prediction extrapolates along the vector difference:\n\neps_tilde = epsilon_theta(x_t, null) + w * (epsilon_theta(x_t, c) - epsilon_theta(x_t, null))\n\nSetting w = 1.0 yields standard conditional generation. Setting w = 7.0 to 9.0 pushes the trajectory aggressively toward prompt compliance, dramatically enhancing contrast, clarity, and visual punch!",
+            "formulaCard": {
+              "name": "Classifier-Free Guidance Formula",
+              "equation": "\\tilde{\\epsilon}_\\theta(x_t, c) = \\epsilon_\\theta(x_t, \\emptyset) + w \\cdot \\big( \\epsilon_\\theta(x_t, c) - \\epsilon_\\theta(x_t, \\emptyset) \\big)",
+              "breakdown": "w = Guidance scale (typically 7.0-8.5). w > 1 amplifies prompt adherence; excessive w (>15) causes over-saturation and contrast burn."
+            }
+          },
+          {
+            "heading": "Rectified Flow Matching: Straightening the Generative Highway",
+            "analogy": "Driving on a winding mountain road vs building a straight supersonic highway across the desert: classic diffusion meanders through curved probability curves, whereas flow matching connects noise to data along straight lines.",
+            "deepDive": "While DDIM reduced steps from 1,000 to 50, modern state-of-the-art models like Stable Diffusion 3, Flux.1, and Midjourney v6 adopt Flow Matching (Lipman et al., 2022; Liu et al., 2022).\n\nIn diffusion, the probability flow ODE trajectories are curved. When numerical solvers take large discrete steps (dt), they cut across curvature corners and drift away from the true data manifold.\n\nRectified Flow Matching defines the generative path between noise x_1 ~ N(0, I) and data x_0 as a direct straight line:\nx_t = (1 - t) x_0 + t x_1,  where t in [0, 1].\n\nThe target velocity field is simply constant: v_t = d x_t / dt = x_1 - x_0. The neural network learns to predict this velocity vector v_theta(x_t, t). Because the vector field is approximately straight, high-order Euler integration can traverse the entire space in just 10 to 20 steps with virtually zero error accumulation!",
+            "formulaCard": {
+              "name": "Rectified Flow Matching Objective",
+              "equation": "x_t = (1 - t) x_0 + t x_1, \\quad \\mathcal{L}_{\\text{flow}}(\\theta) = \\mathbb{E}_{t, x_0, x_1} \\left[ \\| v_\\theta(x_t, t) - (x_1 - x_0) \\|^2 \\right]",
+              "breakdown": "x_0 = Data point, x_1 = Gaussian noise point, v_theta = Neural velocity field, (x_1 - x_0) = Straight-line ground-truth displacement."
+            }
+          }
+        ],
+        "formula": {
+          "name": "Unified Continuous Diffusion & Flow Differential Equation",
+          "equation": "d x_t = f(x_t, t) dt + g(t) d w_t, \\quad \\frac{d x_t}{dt} = v_\\theta(x_t, t)",
+          "breakdown": "Left: Ito Stochastic Differential Equation (SDE) governing Brownian diffusion. Right: Deterministic Probability Flow Ordinary Differential Equation (ODE) governing Flow Matching."
+        }
+      }
     }
   ]
 }

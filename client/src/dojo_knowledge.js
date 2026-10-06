@@ -712,6 +712,59 @@ print(f"Sparse Softmax Weights:\n{routing_weights.round(decimals=3).tolist()}")
         explanation: "Osu! In a Top-2 of 8 architecture, exactly 2/8 = 25% of the expert parameters are activated per token! This allows the model to store 47B parameters of knowledge while maintaining the blazing fast inference speed of a 13B dense model."
       }
     },
+    'quest-17': {
+      title: 'Quest 17: Diffusion Models & Flow Matching',
+      eli10: `🌊 **Diffusion & Flow Matching Explained Like You're 10:**
+
+Imagine an artist who creates hyper-detailed paintings out of a cloud of sand!
+
+1. **The Forward Process (Destroying):** You take a photo of a glowing neon city and drop tiny specks of gray sand on it over 1,000 seconds. After 1,000 seconds, the painting has completely disappeared into pure static (Gaussian noise)!
+2. **The Reverse Miracle (Denoising):** A smart robot named **U-Net** watches this happen in reverse. At each second, U-Net looks at the sand, predicts where the noise was added, and gently blows away a tiny fraction of static.
+3. **The Megaphone (Classifier-Free Guidance / CFG):** If you whisper your prompt ("a neon Tokyo alley"), the robot might draw a generic city. But with a **CFG megaphone** (e.g. scale $w=7.5$), you amplify the difference between "generic city" and "neon Tokyo", forcing every brushstroke to obey your words!
+4. **The Straight Highway (Flow Matching):** Classic diffusion wobbles and curves through latent space like a winding mountain trail (requiring hundreds of steps). **Rectified Flow Matching** (used in Flux and SD3) draws a direct straight laser beam from noise to painting, finishing the entire masterpiece in just 15 to 20 fast Euler steps!`,
+
+      snippet: `\`\`\`python
+# DDPM Forward Noise Addition & Classifier-Free Guidance (PyTorch)
+import torch
+
+class DDPMScheduler:
+    def __init__(self, timesteps=1000):
+        # Linear variance schedule
+        self.betas = torch.linspace(1e-4, 0.02, timesteps)
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+
+    def add_noise(self, x_0, t, noise=None):
+        if noise is None: noise = torch.randn_like(x_0)
+        sqrt_alpha_bar = torch.sqrt(self.alphas_cumprod[t]).view(-1, 1, 1, 1)
+        sqrt_one_minus = torch.sqrt(1.0 - self.alphas_cumprod[t]).view(-1, 1, 1, 1)
+        # Closed-form forward jump: x_t = sqrt(alpha_bar_t)*x_0 + sqrt(1-alpha_bar_t)*noise
+        return sqrt_alpha_bar * x_0 + sqrt_one_minus * noise
+
+def apply_cfg(eps_uncond, eps_cond, guidance_scale=7.5):
+    # Extrapolate along prompt direction: eps_uncond + w * (eps_cond - eps_uncond)
+    return eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+
+# Quick demonstration
+scheduler = DDPMScheduler()
+x_0 = torch.randn(2, 4, 64, 64) # Batch of 2 latent images
+t = torch.tensor([250, 750])     # Sample at timesteps 250 and 750
+x_t = scheduler.add_noise(x_0, t)
+print(f"Noisy Latent Tensor Shape at t={t.tolist()}: {x_t.shape}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Diffusion Models & Classifier-Free Guidance**\n\nIn Classifier-Free Guidance (CFG), what happens to the generated image if you set the guidance scale $w$ to an extreme value like $w = 25.0$?",
+        options: [
+            "A) The model runs out of memory and crashes",
+            "B) Over-saturation and severe contrast burn: colors clip to extreme values, producing unnatural halos and distorted artifacts",
+            "C) The image becomes completely black and white",
+            "D) The sampling steps automatically increase from 20 to 1000"
+        ],
+        answer: "B",
+        explanation: "Osu! Extreme guidance scales ($w > 15$) push predictions too far along the extrapolation vector $\\tilde{\\epsilon} = \\epsilon_u + w(\\epsilon_c - \\epsilon_u)$, causing latent values to exceed the training distribution. This produces heavily over-saturated, 'burned' contrast and geometric distortions!"
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -862,6 +915,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('moe') || hasPhrase('mixture of experts') || hasPhrase('router') || hasPhrase('gating') || hasPhrase('top-k') || hasPhrase('switch transformer') || hasPhrase('mixtral') || hasPhrase('deepseek-v3') || hasPhrase('load balance') || hasPhrase('capacity factor') || hasPhrase('quest 16')) {
     return DOJO_KNOWLEDGE.quests['quest-16'].eli10;
+  }
+  if (hasPhrase('diffusion') || hasPhrase('ddpm') || hasPhrase('ddim') || hasPhrase('flow matching') || hasPhrase('score matching') || hasPhrase('cfg') || hasPhrase('classifier-free guidance') || hasPhrase('latent diffusion') || hasPhrase('rectified flow') || hasPhrase('quest 17')) {
+    return DOJO_KNOWLEDGE.quests['quest-17'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

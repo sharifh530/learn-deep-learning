@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 16,
+    totalQuests = 17,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -216,28 +216,29 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'XIII', icon: '🧠', title: 'Reasoning & PRMs', tag: 'System 2 & GRPO' },
     { num: 'XIV', icon: '🛠️', title: 'Agentic Tool Use', tag: 'ReAct & Tool Dispatch' },
     { num: 'XV', icon: '👁️', title: 'Multimodal VLMs', tag: 'Vision & Cross-Attention' },
-    { num: 'XVI', icon: '🔀', title: 'Mixture of Experts', tag: 'Top-k Gating & MoE' }
+    { num: 'XVI', icon: '🔀', title: 'Mixture of Experts', tag: 'Top-k Gating & MoE' },
+    { num: 'XVII', icon: '🌊', title: 'Diffusion & Flow', tag: 'Score Matching & Flow' }
   ];
 
   ctx.save();
 
-  // Symmetrical 4x4 grid (4 rows of 4 cards)
+  // Grid layout: 3 rows of 4 cards + 1 row of 5 cards (perfect horizontal balance ~1142px)
   const row1 = quests.slice(0, 4);
   const row2 = quests.slice(4, 8);
   const row3 = quests.slice(8, 12);
-  const row4 = quests.slice(12, 16);
+  const row4 = quests.slice(12, 17);
 
   const cardWidth = 275;
   const cardHeight = 74;
   const gap = 14;
 
-  const renderRow = (rowItems, rowIdx, y) => {
-    const totalRowWidth = rowItems.length * cardWidth + (rowItems.length - 1) * gap;
+  const renderRow = (rowItems, startGlobalIdx, y, cWidth = cardWidth, cGap = gap) => {
+    const totalRowWidth = rowItems.length * cWidth + (rowItems.length - 1) * cGap;
     const startX = centerX - totalRowWidth / 2;
 
     rowItems.forEach((q, idx) => {
-      const globalIdx = rowIdx * 4 + idx;
-      const x = startX + idx * (cardWidth + gap);
+      const globalIdx = startGlobalIdx + idx;
+      const x = startX + idx * (cWidth + cGap);
       const isDone = completedQuests.includes(`quest-${globalIdx + 1}`) || completedQuests.length >= totalQuests;
 
       // Card background
@@ -245,45 +246,45 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
       ctx.strokeStyle = isDone ? 'rgba(16, 185, 129, 0.6)' : 'rgba(71, 85, 105, 0.4)';
       ctx.lineWidth = 1.5;
 
-      drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 10);
+      drawRoundedRect(ctx, x, y, cWidth, cardHeight, 10);
       ctx.fill();
       ctx.stroke();
 
       // Quest number badge
-      ctx.font = '700 11.5px "Outfit", sans-serif';
+      ctx.font = '700 11px "Outfit", sans-serif';
       ctx.fillStyle = isDone ? '#34d399' : '#64748b';
       ctx.textAlign = 'left';
-      ctx.fillText(`QUEST ${q.num}`, x + 12, y + 18);
+      ctx.fillText(`QUEST ${q.num}`, x + 10, y + 18);
 
       // Icon + Status checkmark
-      ctx.font = '20px "Segoe UI Emoji", sans-serif';
-      ctx.fillText(q.icon, x + 12, y + 44);
+      ctx.font = '19px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(q.icon, x + 10, y + 43);
 
       if (isDone) {
-        ctx.font = '700 12px "Outfit", sans-serif';
+        ctx.font = '700 11px "Outfit", sans-serif';
         ctx.fillStyle = '#10b981';
         ctx.textAlign = 'right';
-        ctx.fillText('✓ PASSED', x + cardWidth - 12, y + 18);
+        ctx.fillText('✓ PASSED', x + cWidth - 10, y + 18);
       }
 
       // Quest Title
-      ctx.font = '600 13.5px "Outfit", sans-serif';
+      ctx.font = cWidth < 250 ? '600 12.5px "Outfit", sans-serif' : '600 13.5px "Outfit", sans-serif';
       ctx.fillStyle = isDone ? '#f8fafc' : '#94a3b8';
       ctx.textAlign = 'left';
-      ctx.fillText(q.title, x + 42, y + 44);
+      ctx.fillText(q.title, x + 38, y + 43);
 
       // Technical tag
-      ctx.font = '400 10px "JetBrains Mono", monospace';
+      ctx.font = cWidth < 250 ? '400 9px "JetBrains Mono", monospace' : '400 10px "JetBrains Mono", monospace';
       ctx.fillStyle = isDone ? '#67e8f9' : '#475569';
-      ctx.fillText(q.tag, x + 12, y + 62);
+      ctx.fillText(q.tag, x + 10, y + 61);
     });
   };
 
   const startGridY = 465;
-  renderRow(row1, 0, startGridY);
-  renderRow(row2, 1, startGridY + cardHeight + gap);
-  renderRow(row3, 2, startGridY + (cardHeight + gap) * 2);
-  renderRow(row4, 3, startGridY + (cardHeight + gap) * 3);
+  renderRow(row1, 0, startGridY, cardWidth, gap);
+  renderRow(row2, 4, startGridY + cardHeight + gap, cardWidth, gap);
+  renderRow(row3, 8, startGridY + (cardHeight + gap) * 2, cardWidth, gap);
+  renderRow(row4, 12, startGridY + (cardHeight + gap) * 3, 217, gap);
 
   ctx.restore();
 }
