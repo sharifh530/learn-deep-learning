@@ -11,6 +11,7 @@ import { exportProgress, importProgress, resetProgress } from './progress_manage
 import { soundFx } from './sound_effects.js';
 import { ArchitectDesigner } from './architect_designer.js';
 import { DoodleCapstoneStudio } from './doodle_capstone.js';
+import { GalaxyConstellationMap } from './galaxy_map.js';
 
 // --- State Management ---
 const state = {
@@ -15579,6 +15580,105 @@ function setupAudioControls() {
 // --- Neural Net Architecture Designer ---
 
 // --- DoodleVision AI Capstone Playroom ---
+
+// --- Celestial Constellation Galaxy Map ---
+function setupGalaxyModal() {
+  if (!dom.galaxyModal || !dom.galaxyCanvas) return;
+
+  const galaxyMap = new GalaxyConstellationMap({
+    container: dom.galaxyModal,
+    canvas: dom.galaxyCanvas,
+    inspector: dom.galaxyInspectorDrawer,
+    curriculum: state.curriculum.quests,
+    getCompletedQuests: () => state.completedQuests,
+    getActiveQuestId: () => state.activeQuestId,
+    onSelectQuest: (questId) => {
+      state.activeQuestId = questId;
+      renderQuestList();
+      renderActiveQuest();
+      closeModal();
+      if (dom.questHero) {
+        dom.questHero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      soundFx.playDojoGong();
+    },
+    onOpenDiploma: () => {
+      closeModal();
+      if (dom.btnOpenDiploma) dom.btnOpenDiploma.click();
+    }
+  });
+
+  const updateGalaxyHud = () => {
+    if (dom.galaxyStarsConquered) {
+      dom.galaxyStarsConquered.textContent = `${state.completedQuests.size} / ${state.curriculum.quests.length} Conquered`;
+    }
+  };
+
+  const openModal = () => {
+    updateGalaxyHud();
+    dom.galaxyModal.style.display = 'flex';
+    galaxyMap.init();
+    soundFx.playCelestialChime(640);
+  };
+
+  const closeModal = () => {
+    dom.galaxyModal.style.display = 'none';
+    galaxyMap.stopAnimationLoop();
+    soundFx.playBlip(380, 0.05);
+  };
+
+  if (dom.btnOpenGalaxy) {
+    dom.btnOpenGalaxy.addEventListener('click', openModal);
+  }
+
+  if (dom.btnSidebarGalaxy) {
+    dom.btnSidebarGalaxy.addEventListener('click', openModal);
+  }
+
+  if (dom.btnCloseGalaxy) {
+    dom.btnCloseGalaxy.addEventListener('click', closeModal);
+  }
+
+  dom.galaxyModal.addEventListener('click', (e) => {
+    if (e.target === dom.galaxyModal) {
+      closeModal();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.galaxyModal.style.display === 'flex') {
+      closeModal();
+    }
+    if ((e.key === 'f' || e.key === 'F') && dom.galaxyModal.style.display === 'flex') {
+      galaxyMap.fitEntireGalaxy();
+    }
+  });
+
+  // Zoom and Fit controls
+  if (dom.btnGalaxyZoomIn) {
+    dom.btnGalaxyZoomIn.addEventListener('click', () => galaxyMap.zoomIn());
+  }
+
+  if (dom.btnGalaxyZoomOut) {
+    dom.btnGalaxyZoomOut.addEventListener('click', () => galaxyMap.zoomOut());
+  }
+
+  if (dom.btnGalaxyFit) {
+    dom.btnGalaxyFit.addEventListener('click', () => galaxyMap.fitEntireGalaxy());
+  }
+
+  // Sector quick-jump chips
+  const sectorChips = dom.galaxyModal.querySelectorAll('.sector-jump-chip');
+  sectorChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      sectorChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const sectorId = chip.dataset.sector;
+      galaxyMap.jumpToSector(sectorId);
+    });
+  });
+}
+
 function setupCapstoneModal() {
   if (!dom.capstoneModal || !dom.doodleCanvas) return;
 
@@ -15882,6 +15982,7 @@ function initApp() {
   setupDiplomaModal();
   setupArchitectModal();
   setupCapstoneModal();
+  setupGalaxyModal();
   updateDiplomaStatus();
   updateTutorBadge();
 

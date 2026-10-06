@@ -53,6 +53,10 @@
             <span>🎨</span>
             <span class="btn-text">DoodleVision</span>
           </button>
+          <button class="nav-btn btn-galaxy" id="btn-open-galaxy" title="Celestial 20-Quest Constellation Galaxy Map">
+            <span>🌌</span>
+            <span class="btn-text">Galaxy Map</span>
+          </button>
           <button class="nav-btn btn-audio" id="btn-toggle-sound" title="Toggle Sound FX (Mute/Unmute)">
             <span id="audio-icon">🔊</span>
             <span class="btn-text" id="audio-text">Audio</span>
@@ -79,9 +83,14 @@
         <!-- Sidebar: Quest Map -->
         <aside class="sidebar-quests" id="sidebar-quests">
           <div class="sidebar-header">
-            <h3>QUEST MAP</h3>
+            <div class="sidebar-title-group">
+              <h3>QUEST MAP</h3>
+              <button class="btn-sidebar-galaxy" id="btn-sidebar-galaxy" title="Open Celestial Constellation Galaxy Map">
+                <span>🌌</span> Galaxy Map
+              </button>
+            </div>
             <div class="sidebar-header-right">
-              <span class="quest-count" id="quest-completion-count">1/4 Ready</span>
+              <span class="quest-count" id="quest-completion-count">0/20 Ready</span>
               <button class="btn-sidebar-close" id="btn-close-sidebar" aria-label="Close Quest Map" title="Close Map">&times;</button>
             </div>
           </div>
@@ -723,6 +732,61 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Celestial Constellation Galaxy Map Modal -->
+      <div class="modal-overlay galaxy-modal-overlay" id="galaxy-modal" style="display: none;">
+        <div class="galaxy-modal-card">
+          <!-- Galaxy Top Bar HUD -->
+          <div class="galaxy-hud-header">
+            <div class="galaxy-branding">
+              <span class="galaxy-icon">🌌</span>
+              <div class="galaxy-titles">
+                <h3>Celestial Constellation Galaxy Map</h3>
+                <span class="galaxy-subtitle">The 20-Quest Neural Cosmos • Skill Tech Tree &amp; Dependency Graph</span>
+              </div>
+            </div>
+            <div class="galaxy-hud-stats">
+              <div class="galaxy-stat-pill" id="galaxy-conquered-pill">
+                <span class="stat-icon">⭐</span>
+                <span id="galaxy-stars-conquered">0 / 20 Conquered</span>
+              </div>
+              <div class="galaxy-stat-pill" id="galaxy-active-sector-pill">
+                <span class="stat-icon">🪐</span>
+                <span id="galaxy-active-sector-text">20 Celestial Stars</span>
+              </div>
+            </div>
+            <div class="galaxy-hud-actions">
+              <button class="galaxy-ctrl-btn" id="btn-galaxy-zoom-in" title="Zoom In (+)">➕</button>
+              <button class="galaxy-ctrl-btn" id="btn-galaxy-zoom-out" title="Zoom Out (-)">➖</button>
+              <button class="galaxy-ctrl-btn" id="btn-galaxy-fit" title="Fit Entire Galaxy (F)">⛶ Fit Galaxy</button>
+              <button class="modal-close" id="btn-close-galaxy" title="Close Galaxy Map (Esc)">&times;</button>
+            </div>
+          </div>
+
+          <!-- Galaxy Sector Jumper Toolbar -->
+          <div class="galaxy-sector-toolbar">
+            <span class="sector-label">🔭 Sector Jump:</span>
+            <button class="sector-jump-chip active" data-sector="all">🌌 Entire Cosmos</button>
+            <button class="sector-jump-chip" data-sector="p1">🔵 Phase 1: Foundations (I–VI)</button>
+            <button class="sector-jump-chip" data-sector="p2">🟣 Phase 2: Attention &amp; GPT (VII–X)</button>
+            <button class="sector-jump-chip" data-sector="p3">🟠 Phase 3: Frontiers &amp; Robotics (XI–XX)</button>
+            <button class="sector-jump-chip" data-sector="apex">👑 Master Nexus</button>
+            <div class="galaxy-hints-right">
+              <span>🖱️ Drag to pan • Scroll to zoom • Double-click node to launch</span>
+            </div>
+          </div>
+
+          <!-- Canvas Arena & Side Drawer Split -->
+          <div class="galaxy-stage-container">
+            <canvas id="galaxy-canvas"></canvas>
+
+            <!-- Star Inspector Cosmic Drawer -->
+            <div class="galaxy-inspector-drawer" id="galaxy-inspector-drawer">
+              <!-- Populated dynamically when a star is clicked -->
             </div>
           </div>
         </div>

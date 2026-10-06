@@ -331,6 +331,39 @@ class SoundSynthesizer {
       this.playQuestComplete();
     }, 400);
   }
+
+  /**
+   * Resonant ethereal cosmic chime for celestial constellation star selection
+   */
+  playCelestialChime(freq = 880) {
+    const dest = this.getAudioDestination();
+    if (!dest) return;
+    const now = this.ctx.currentTime;
+
+    const tones = [
+      { f: freq, d: 0.6, g: 0.18 },
+      { f: freq * 1.5, d: 0.45, g: 0.1 },
+      { f: freq * 2.0, d: 0.35, g: 0.06 }
+    ];
+
+    tones.forEach(({ f, d, g }) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now);
+      osc.frequency.exponentialRampToValueAtTime(f * 1.02, now + d);
+
+      gain.gain.setValueAtTime(g, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + d);
+
+      osc.connect(gain);
+      gain.connect(dest);
+
+      osc.start(now);
+      osc.stop(now + d);
+    });
+  }
 }
 
 export const soundFx = new SoundSynthesizer();
