@@ -10,6 +10,7 @@ import { generateDiplomaCanvas, downloadDiplomaPng, generateVerificationCode } f
 import { exportProgress, importProgress, resetProgress } from './progress_manager.js';
 import { soundFx } from './sound_effects.js';
 import { ArchitectDesigner } from './architect_designer.js';
+import { DoodleCapstoneStudio } from './doodle_capstone.js';
 
 // --- State Management ---
 const state = {
@@ -255,6 +256,32 @@ const dom = {
   btnPulseSignal: document.getElementById('btn-pulse-signal'),
   btnExportArchitectCode: document.getElementById('btn-export-architect-code'),
   btnCopyArchitectCode: document.getElementById('btn-copy-architect-code')
+,
+  // DoodleVision Capstone Modal
+  btnOpenCapstone: document.getElementById('btn-open-capstone'),
+  sidebarCapstoneTrigger: document.getElementById('sidebar-capstone-trigger'),
+  capstoneModal: document.getElementById('capstone-modal'),
+  btnCloseCapstone: document.getElementById('btn-close-capstone'),
+  doodleCanvas: document.getElementById('doodle-canvas'),
+  doodlePreview28: document.getElementById('doodle-preview-28x28'),
+  doodleEngineBadge: document.getElementById('doodle-engine-badge'),
+  doodleEngineStatusText: document.getElementById('doodle-engine-status-text'),
+  tabCapstoneSketch: document.getElementById('tab-capstone-sketch'),
+  tabCapstonePictionary: document.getElementById('tab-capstone-pictionary'),
+  tabCapstoneTraining: document.getElementById('tab-capstone-training'),
+  capstoneContentSketch: document.getElementById('capstone-content-sketch'),
+  capstoneContentPictionary: document.getElementById('capstone-content-pictionary'),
+  capstoneContentTraining: document.getElementById('capstone-content-training'),
+  btnToolBrush: document.getElementById('btn-tool-brush'),
+  btnToolEraser: document.getElementById('btn-tool-eraser'),
+  btnDoodleUndo: document.getElementById('btn-doodle-undo'),
+  btnDoodleClear: document.getElementById('btn-doodle-clear'),
+  btnStartPictionary: document.getElementById('btn-start-pictionary'),
+  btnDoodleTrainStep: document.getElementById('btn-doodle-train-step'),
+  btnDoodleResetModel: document.getElementById('btn-doodle-reset-model'),
+  btnDoodleSendCode: document.getElementById('btn-doodle-send-code'),
+  btnDoodleExportWeights: document.getElementById('btn-doodle-export-weights'),
+  btnDoodleExportScript: document.getElementById('btn-doodle-export-script'),
 };
 
 // --- XP & Level Calculations ---
@@ -313,14 +340,26 @@ async function checkBackendStatus() {
       const data = await res.json();
       state.backendOnline = true;
       dom.backendStatusPill.classList.add('online');
-      dom.backendStatusText.textContent = 'PyTorch Engine: Online 🟢';
+            dom.backendStatusText.textContent = 'PyTorch Engine: Online 🟢';
+      if (dom.doodleEngineBadge) {
+        dom.doodleEngineBadge.style.background = 'rgba(16, 185, 129, 0.12)';
+        dom.doodleEngineBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        dom.doodleEngineBadge.style.color = '#34d399';
+      }
+      if (dom.doodleEngineStatusText) dom.doodleEngineStatusText.textContent = 'PyTorch Engine: Ready 🟢';
     } else {
       throw new Error();
     }
   } catch {
     state.backendOnline = false;
     dom.backendStatusPill.classList.remove('online');
-    dom.backendStatusText.textContent = 'PyTorch Engine: Offline (Local Mode)';
+        dom.backendStatusText.textContent = 'PyTorch Engine: Offline (Local Mode)';
+    if (dom.doodleEngineBadge) {
+      dom.doodleEngineBadge.style.background = 'rgba(245, 158, 11, 0.12)';
+      dom.doodleEngineBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+      dom.doodleEngineBadge.style.color = '#fbbf24';
+    }
+    if (dom.doodleEngineStatusText) dom.doodleEngineStatusText.textContent = 'Local Heuristic Mode 🟡';
   }
 }
 
@@ -15538,6 +15577,203 @@ function setupAudioControls() {
 }
 
 // --- Neural Net Architecture Designer ---
+
+// --- DoodleVision AI Capstone Playroom ---
+function setupCapstoneModal() {
+  if (!dom.capstoneModal || !dom.doodleCanvas) return;
+
+  const studio = new DoodleCapstoneStudio({
+    container: dom.capstoneModal,
+    canvas: dom.doodleCanvas,
+    previewCanvas: dom.doodlePreview28,
+    getBackendUrl: () => state.backendUrl,
+    isBackendOnline: () => state.backendOnline,
+    onAwardXp: (amount) => awardXp(amount, 'DoodleVision Pictionary Victory'),
+    onSendCodeToLab: (pyCode) => {
+      if (dom.codeEditorArea) dom.codeEditorArea.value = pyCode;
+      closeModal();
+      const codeTabBtn = document.querySelector('.tab-btn[data-tab="code"]');
+      if (codeTabBtn) codeTabBtn.click();
+      soundFx.playSuccess();
+    }
+  });
+
+  studio.init();
+
+  const openModal = () => {
+    dom.capstoneModal.style.display = 'flex';
+    studio.init();
+    soundFx.playBlip(540, 0.08);
+  };
+
+  const closeModal = () => {
+    dom.capstoneModal.style.display = 'none';
+    if (studio.challengeActive) studio.stopPictionaryChallenge(false);
+    soundFx.playBlip(420, 0.06);
+  };
+
+  if (dom.btnOpenCapstone) {
+    dom.btnOpenCapstone.addEventListener('click', openModal);
+  }
+
+  if (dom.sidebarCapstoneTrigger) {
+    dom.sidebarCapstoneTrigger.addEventListener('click', openModal);
+    dom.sidebarCapstoneTrigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openModal();
+      }
+    });
+  }
+
+  if (dom.btnCloseCapstone) {
+    dom.btnCloseCapstone.addEventListener('click', closeModal);
+  }
+
+  dom.capstoneModal.addEventListener('click', (e) => {
+    if (e.target === dom.capstoneModal) {
+      closeModal();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.capstoneModal.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  // Tab switching
+  const tabs = [
+    { btn: dom.tabCapstoneSketch, content: dom.capstoneContentSketch },
+    { btn: dom.tabCapstonePictionary, content: dom.capstoneContentPictionary },
+    { btn: dom.tabCapstoneTraining, content: dom.capstoneContentTraining }
+  ];
+
+  tabs.forEach(t => {
+    if (!t.btn) return;
+    t.btn.addEventListener('click', () => {
+      tabs.forEach(other => {
+        if (other.btn) other.btn.classList.remove('active');
+        if (other.content) other.content.style.display = 'none';
+      });
+      t.btn.classList.add('active');
+      if (t.content) t.content.style.display = 'block';
+      soundFx.playBlip(480, 0.05);
+
+      if (t.btn === dom.tabCapstoneTraining) {
+        studio.renderTrainingUI();
+      }
+    });
+  });
+
+  // Tool buttons
+  if (dom.btnToolBrush) {
+    dom.btnToolBrush.addEventListener('click', () => {
+      studio.setTool('brush');
+      dom.btnToolBrush.classList.add('active');
+      if (dom.btnToolEraser) dom.btnToolEraser.classList.remove('active');
+      soundFx.playBlip(500, 0.04);
+    });
+  }
+
+  if (dom.btnToolEraser) {
+    dom.btnToolEraser.addEventListener('click', () => {
+      studio.setTool('eraser');
+      dom.btnToolEraser.classList.add('active');
+      if (dom.btnToolBrush) dom.btnToolBrush.classList.remove('active');
+      soundFx.playBlip(360, 0.04);
+    });
+  }
+
+  // Brush size buttons
+  const sizeBtns = dom.capstoneModal.querySelectorAll('.size-btn');
+  sizeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      sizeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const sz = parseInt(btn.dataset.size, 10) || 16;
+      studio.setBrushSize(sz);
+      soundFx.playBlip(440, 0.04);
+    });
+  });
+
+  // Undo & Clear
+  if (dom.btnDoodleUndo) {
+    dom.btnDoodleUndo.addEventListener('click', () => studio.undo());
+  }
+
+  if (dom.btnDoodleClear) {
+    dom.btnDoodleClear.addEventListener('click', () => {
+      studio.clearCanvas(true);
+      soundFx.playBlip(300, 0.06);
+    });
+  }
+
+  // Presets
+  const presetBtns = dom.capstoneModal.querySelectorAll('.btn-preset-chip');
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.preset;
+      // Switch to sketch tab first if on other tab
+      if (dom.tabCapstoneSketch && !dom.tabCapstoneSketch.classList.contains('active')) {
+        dom.tabCapstoneSketch.click();
+      }
+      studio.loadPreset(preset);
+    });
+  });
+
+  // Pictionary Challenge Start
+  if (dom.btnStartPictionary) {
+    dom.btnStartPictionary.addEventListener('click', () => {
+      studio.startPictionaryChallenge();
+      // Switch to sketch tab so player can draw immediately
+      if (dom.tabCapstoneSketch) {
+        dom.tabCapstoneSketch.click();
+      }
+    });
+  }
+
+  // Training Lab Controls
+  if (dom.btnDoodleTrainStep) {
+    dom.btnDoodleTrainStep.addEventListener('click', () => {
+      studio.runTrainingEpochs(2);
+    });
+  }
+
+  if (dom.btnDoodleResetModel) {
+    dom.btnDoodleResetModel.addEventListener('click', () => {
+      if (confirm('Reset DoodleCNN to untrained random Gaussian noise? Predictions will become erratic until trained.')) {
+        studio.resetModel();
+      }
+    });
+  }
+
+  if (dom.btnDoodleSendCode) {
+    dom.btnDoodleSendCode.addEventListener('click', () => {
+      const pyCode = studio.generatePyTorchScript();
+      if (dom.codeEditorArea) dom.codeEditorArea.value = pyCode;
+      closeModal();
+      const codeTabBtn = document.querySelector('.tab-btn[data-tab="code"]');
+      if (codeTabBtn) codeTabBtn.click();
+      soundFx.playSuccess();
+    });
+  }
+
+  if (dom.btnDoodleExportWeights) {
+    dom.btnDoodleExportWeights.addEventListener('click', () => {
+      window.open(`${state.backendUrl}/api/export_weights`, '_blank');
+      soundFx.playSuccess();
+    });
+  }
+
+  if (dom.btnDoodleExportScript) {
+    dom.btnDoodleExportScript.addEventListener('click', () => {
+      window.open(`${state.backendUrl}/api/export_script`, '_blank');
+      soundFx.playSuccess();
+    });
+  }
+}
+
 function setupArchitectModal() {
   if (!dom.architectModal || !dom.architectCanvas) return;
 
@@ -15645,6 +15881,7 @@ function initApp() {
   setupAudioControls();
   setupDiplomaModal();
   setupArchitectModal();
+  setupCapstoneModal();
   updateDiplomaStatus();
   updateTutorBadge();
 

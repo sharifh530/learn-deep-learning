@@ -49,6 +49,10 @@
             <span>📐</span>
             <span class="btn-text">Architect</span>
           </button>
+          <button class="nav-btn btn-capstone" id="btn-open-capstone" title="DoodleVision AI Capstone Playroom">
+            <span>🎨</span>
+            <span class="btn-text">DoodleVision</span>
+          </button>
           <button class="nav-btn btn-audio" id="btn-toggle-sound" title="Toggle Sound FX (Mute/Unmute)">
             <span id="audio-icon">🔊</span>
             <span class="btn-text" id="audio-text">Audio</span>
@@ -94,12 +98,13 @@
             <span class="diploma-badge-arrow">➔</span>
           </div>
 
-          <div class="sidebar-capstone-banner">
+          <div class="sidebar-capstone-banner" id="sidebar-capstone-trigger" role="button" tabindex="0" title="Launch DoodleVision AI Capstone Playroom">
             <div class="capstone-icon">🎨</div>
             <div class="capstone-info">
               <h4>Real-World Capstone</h4>
               <p>DoodleVision AI (PyTorch CNN)</p>
             </div>
+            <span class="capstone-badge-arrow">➔</span>
           </div>
         </aside>
 
@@ -474,6 +479,249 @@
                   <button class="btn-copy-code" id="btn-copy-architect-code" title="Copy code">📋 Copy</button>
                 </div>
                 <pre class="architect-code-pre" id="architect-code-output"></pre>
+              </div>
+            </div>
+      <!-- DoodleVision AI Capstone Playroom Modal -->
+      <div class="modal-overlay capstone-modal-overlay" id="capstone-modal" style="display: none;">
+        <div class="capstone-modal-card">
+          <!-- Modal Header -->
+          <div class="capstone-modal-header">
+            <div class="capstone-modal-branding">
+              <span class="capstone-modal-icon">🎨</span>
+              <div class="capstone-modal-titles">
+                <h3>DoodleVision AI Capstone Playroom</h3>
+                <span class="capstone-subtitle">PyTorch CNN • QuickDraw 28×28 Grayscale Classifier & Conv1 Visualizer</span>
+              </div>
+            </div>
+            <div class="capstone-header-actions">
+              <div class="engine-badge-pill" id="doodle-engine-badge">
+                <span class="status-dot"></span>
+                <span id="doodle-engine-status-text">PyTorch Engine Ready</span>
+              </div>
+              <button class="modal-close" id="btn-close-capstone" title="Close Capstone (Esc)">&times;</button>
+            </div>
+          </div>
+
+          <!-- Capstone Toolbar: View Switcher & Presets -->
+          <div class="capstone-toolbar">
+            <div class="capstone-tabs-nav">
+              <button class="capstone-tab-btn active" data-tab="sketch" id="tab-capstone-sketch">
+                <span>✏️</span> Free Sketch & Vision
+              </button>
+              <button class="capstone-tab-btn" data-tab="pictionary" id="tab-capstone-pictionary">
+                <span>🎮</span> AI Pictionary Challenge
+              </button>
+              <button class="capstone-tab-btn" data-tab="training" id="tab-capstone-training">
+                <span>⚡</span> PyTorch Model & Weights
+              </button>
+            </div>
+
+            <div class="capstone-presets-bar">
+              <span class="presets-label">⚡ Test Doodles:</span>
+              <button class="btn-preset-chip" data-preset="cat" title="Load sample Cat sketch">🐱 Cat</button>
+              <button class="btn-preset-chip" data-preset="bicycle" title="Load sample Bicycle sketch">🚲 Bicycle</button>
+              <button class="btn-preset-chip" data-preset="star" title="Load sample Star sketch">⭐ Star</button>
+              <button class="btn-preset-chip" data-preset="pizza" title="Load sample Pizza sketch">🍕 Pizza</button>
+              <button class="btn-preset-chip" data-preset="umbrella" title="Load sample Umbrella sketch">☂️ Umbrella</button>
+            </div>
+          </div>
+
+          <!-- Capstone Body -->
+          <div class="capstone-body">
+            <!-- TAB 1: Free Sketch & Feature Maps -->
+            <div class="capstone-tab-content active" id="capstone-content-sketch">
+              <div class="capstone-studio-split">
+                <!-- Left: Drawing Stage -->
+                <div class="capstone-canvas-col">
+                  <div class="canvas-box-header">
+                    <span class="canvas-title">✍️ Drawing Canvas (280×280)</span>
+                    <div class="canvas-tools-group">
+                      <button class="tool-btn active" id="btn-tool-brush" title="White Ink Brush">🖌️</button>
+                      <button class="tool-btn" id="btn-tool-eraser" title="Dark Eraser">🧼</button>
+                      <div class="brush-size-group">
+                        <button class="size-btn" data-size="8" title="Fine (8px)">•</button>
+                        <button class="size-btn active" data-size="16" title="Medium (16px)">●</button>
+                        <button class="size-btn" data-size="26" title="Chunky (26px)">⬤</button>
+                      </div>
+                      <button class="tool-btn action-btn" id="btn-doodle-undo" title="Undo last stroke (Ctrl+Z)">↶</button>
+                      <button class="tool-btn action-btn" id="btn-doodle-clear" title="Clear canvas">🗑️</button>
+                    </div>
+                  </div>
+
+                  <div class="canvas-wrapper">
+                    <canvas id="doodle-canvas" width="280" height="280"></canvas>
+                  </div>
+
+                  <!-- Downsampled 28x28 Tensor Inspection -->
+                  <div class="doodle-tensor-row">
+                    <div class="tensor-preview-box">
+                      <canvas id="doodle-preview-28x28" width="56" height="56"></canvas>
+                      <div class="tensor-label">
+                        <strong>PyTorch 1×28×28 Tensor</strong>
+                        <span>Auto-centered & normalized float ∈ [0.0, 1.0]</span>
+                      </div>
+                    </div>
+                    <div class="tensor-hint-pill">
+                      <span>💡 <strong>Real-time inference:</strong> Evaluates dynamically as you draw.</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: Predictions & Conv1 Feature Maps -->
+                <div class="capstone-eval-col">
+                  <!-- Hero Prediction Card -->
+                  <div class="doodle-hero-prediction-card">
+                    <div class="doodle-hero-meta">
+                      <span class="doodle-hero-sub">Top Predicted Class</span>
+                      <h2 class="doodle-hero-title" id="doodle-hero-title">Awaiting Sketch...</h2>
+                    </div>
+                    <div class="doodle-hero-score">
+                      <span class="doodle-hero-conf" id="doodle-hero-conf">--%</span>
+                      <span class="doodle-badge badge-low" id="doodle-hero-badge">Ready for Input</span>
+                    </div>
+                  </div>
+
+                  <!-- Softmax Probabilities Breakdown -->
+                  <div class="doodle-probabilities-card">
+                    <div class="card-title">
+                      <span>📊</span> Softmax Probability Distribution (5 Classes)
+                    </div>
+                    <div class="doodle-prob-bars" id="doodle-prob-bars">
+                      <!-- Populated dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Conv1 Intermediate Feature Maps -->
+                  <div class="doodle-feature-maps-card">
+                    <div class="card-title">
+                      <span>🔬</span> Conv1 Kernel Activations (16 Filters, 3×3, ReLU)
+                      <span class="card-subtitle">What the neural network's early filters see</span>
+                    </div>
+                    <div class="doodle-feature-maps-grid" id="doodle-feature-maps-grid">
+                      <!-- 8 miniature feature map tiles -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 2: AI Pictionary Challenge -->
+            <div class="capstone-tab-content" id="capstone-content-pictionary" style="display: none;">
+              <div class="pictionary-stage">
+                <div class="doodle-challenge-banner" id="doodle-challenge-banner">
+                  <div class="challenge-branding">
+                    <span class="challenge-icon">🥋</span>
+                    <div class="challenge-info">
+                      <h4>Sensei Tensor's Pictionary Challenge</h4>
+                      <p>Can you sketch fast enough for the CNN to recognize it with &gt;65% confidence?</p>
+                    </div>
+                  </div>
+
+                  <div class="challenge-target-box">
+                    <span class="target-lbl">TARGET TO SKETCH:</span>
+                    <span class="target-val" id="doodle-challenge-target">Click "Start Challenge" below!</span>
+                  </div>
+
+                  <div class="challenge-timer-box">
+                    <span class="timer-lbl">TIME LEFT:</span>
+                    <span class="timer-val" id="doodle-challenge-timer">20s</span>
+                  </div>
+
+                  <button class="btn-primary btn-start-challenge" id="btn-start-pictionary">
+                    <span>🎮</span> Start Pictionary Round (+50 XP)
+                  </button>
+                </div>
+
+                <div class="pictionary-workspace-note">
+                  <p>💡 <em>Tip: Switch back to the "Free Sketch & Vision" tab to draw on the canvas, or keep drawing while the timer ticks down!</em></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 3: PyTorch Model & Training -->
+            <div class="capstone-tab-content" id="capstone-content-training" style="display: none;">
+              <div class="training-lab-grid">
+                <!-- Architecture Card -->
+                <div class="training-panel arch-spec-panel">
+                  <div class="panel-header">
+                    <span>📐</span> DoodleCNN PyTorch Architecture
+                  </div>
+                  <div class="arch-flow-diagram">
+                    <div class="flow-step">
+                      <span class="step-tag">Input</span>
+                      <strong>1 × 28 × 28</strong>
+                      <small>Grayscale</small>
+                    </div>
+                    <span class="flow-arrow">➔</span>
+                    <div class="flow-step">
+                      <span class="step-tag">Conv1 + Pool</span>
+                      <strong>16 × 14 × 14</strong>
+                      <small>3×3, ReLU, MaxPool2D</small>
+                    </div>
+                    <span class="flow-arrow">➔</span>
+                    <div class="flow-step">
+                      <span class="step-tag">Conv2 + Pool</span>
+                      <strong>32 × 7 × 7</strong>
+                      <small>3×3, ReLU, MaxPool2D</small>
+                    </div>
+                    <span class="flow-arrow">➔</span>
+                    <div class="flow-step">
+                      <span class="step-tag">Linear FC1</span>
+                      <strong>64 Neurons</strong>
+                      <small>Dropout(0.25)</small>
+                    </div>
+                    <span class="flow-arrow">➔</span>
+                    <div class="flow-step">
+                      <span class="step-tag">Logits FC2</span>
+                      <strong>5 Classes</strong>
+                      <small>Softmax</small>
+                    </div>
+                  </div>
+                  <div class="arch-meta-badges">
+                    <span class="param-badge">📊 105,445 Trainable Parameters</span>
+                    <span class="param-badge" id="doodle-model-status-text">Live PyTorch Model (Trained)</span>
+                  </div>
+                </div>
+
+                <!-- Training Controls Card -->
+                <div class="training-panel training-controls-panel">
+                  <div class="panel-header">
+                    <span>⚡</span> Live Training & Gradient Descent
+                  </div>
+                  <div class="training-actions-row">
+                    <button class="btn-primary" id="btn-doodle-train-step">
+                      <span>⚡</span> Train PyTorch CNN (2 Epochs)
+                    </button>
+                    <button class="btn-secondary" id="btn-doodle-reset-model" title="Reset weights to random noise to demonstrate untrained CNN">
+                      <span>↺</span> Reset to Random Weights
+                    </button>
+                    <button class="btn-secondary" id="btn-doodle-send-code" title="Send full PyTorch DoodleCNN training code to Python Lab">
+                      <span>▶</span> Send Code to Python Lab
+                    </button>
+                    <button class="btn-secondary" id="btn-doodle-export-weights" title="Download doodle_cnn.pth state dict">
+                      <span>💾</span> Download .pth
+                    </button>
+                    <button class="btn-secondary" id="btn-doodle-export-script" title="Download standalone serve_doodle.py script">
+                      <span>📜</span> Download Script
+                    </button>
+                  </div>
+
+                  <!-- Epoch History Table -->
+                  <div class="training-table-wrapper">
+                    <table class="training-history-table">
+                      <thead>
+                        <tr>
+                          <th>Iteration</th>
+                          <th>Cross-Entropy Loss</th>
+                          <th>Validation Accuracy</th>
+                        </tr>
+                      </thead>
+                      <tbody id="doodle-training-history-body">
+                        <!-- Populated dynamically -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
