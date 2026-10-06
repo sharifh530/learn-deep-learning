@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 15)
+## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 16)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -451,9 +451,30 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 🔀 Quest 16: Mixture-of-Experts & Dynamic Routing (Sparse Top-k Gating, Load Balancing & Switch Transformers)
+- **Tagline:** MoE & Conditional Compute
+- **The Core Problem:**
+  Dense scaling requires every single parameter to execute FLOPs for every token. Scaling models from 7B to 70B+ parameters causes training costs and inference latency to explode linearly.
+- **The Solution:**
+  Decouple total parameter capacity from FLOP compute costs via **Conditional Compute**. Replace monolithic dense FFN layers with a pool of $N$ specialized expert FFNs. A lightweight learned gating router dynamically projects each token to only its Top-$k$ most relevant experts (e.g. $k=2$ of $N=8$, or $k=8$ of $N=256$), executing only a fraction of total parameters per forward pass while keeping full parameter memory capacity.
+- **Key Concepts:**
+  - **Sparse Top-k Gating:** Masking unselected expert logits to $-\infty$ before Softmax, ensuring active routing weights $g_i$ sum strictly to 1.0.
+  - **Router Collapse & Starvation:** The positive feedback failure mode where routers funnel all tokens to 1 or 2 early-learning experts, leaving remaining experts with zero gradient updates.
+  - **Auxiliary Load Balancing Loss:** $\mathcal{L}_{\text{aux}} = \alpha N \sum_{i=1}^N f_i P_i$, penalizing expert utilization concentration by minimizing the dot product of token frequency and routing probability vectors.
+  - **Expert Buffer Capacity & Token Dropping:** Fixed GPU buffer sizing ($\text{Capacity} = \lceil \frac{B \times S \times k}{N} \times C \rceil$) where overflow tokens safely bypass FFN layers via the residual stream ($y = x$).
+  - **Frontier Architectures:** Switch Transformer (Top-1 of 8, 12.5% active compute), Mixtral 8x7B (Top-2 of 8, 25% active compute), and DeepSeek-V3 (1 Shared + Top-8 of 256 fine-grained routed experts, 3.5% active compute).
+- **Interactive Playground:** 3-tab Mixture-of-Experts Lab:
+  - *Tab 1: Sparse Top-k Router:* Interactive prompt stream with token chip selection, dynamic temperature slider, 8-expert logit and probability matrix, active FFN glow indicators, and linear output synthesis formula.
+  - *Tab 2: Router Collapse & Load Balancing Simulator:* 500-step token routing run with auxiliary loss slider $\alpha \in [0.00, 0.08]$, Shannon entropy gauge ($H \le 3.0$ bits), starved expert monitor, and uniform target guide line.
+  - *Tab 3: Frontier Architecture Arena:* Live comparison of Switch Transformer, Mixtral 8x7B, and DeepSeek-V3 with batch size, sequence length, and capacity factor sliders, active FLOP savings calculator, and spiky burst traffic simulation.
+- **Python Lab Snippet:**
+  Runnable PyTorch implementation of `SparseMoELayer` with routing gating, top-$k$ dispatch, and auxiliary load balancing loss.
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 16: Mixture-of-Experts (MoE) & Dynamic Routing:** Sparse top-$k$ routing, expert load balancing, and switch transformers.
-- **Quest 17: Diffusion Models & Flow Matching:** Denoising score matching, continuous flow trajectories, and latent diffusion synthesis.
+- **Quest 17: Diffusion Models & Flow Matching:** Denoising score matching, continuous flow trajectories, CFG guidance, and latent diffusion synthesis.
+- **Quest 18: Audio & Speech AI:** Continuous neural audio codecs (EnCodec/Descript), Mel spectrograms, and autoregressive speech tokenizers.
 
 
 ---

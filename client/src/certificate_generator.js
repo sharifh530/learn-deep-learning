@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 15,
+    totalQuests = 16,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -215,18 +215,20 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'XII', icon: '🎛️', title: 'PEFT & LoRA', tag: 'Low-Rank & QLoRA' },
     { num: 'XIII', icon: '🧠', title: 'Reasoning & PRMs', tag: 'System 2 & GRPO' },
     { num: 'XIV', icon: '🛠️', title: 'Agentic Tool Use', tag: 'ReAct & Tool Dispatch' },
-    { num: 'XV', icon: '👁️', title: 'Multimodal VLMs', tag: 'Vision & Cross-Attention' }
+    { num: 'XV', icon: '👁️', title: 'Multimodal VLMs', tag: 'Vision & Cross-Attention' },
+    { num: 'XVI', icon: '🔀', title: 'Mixture of Experts', tag: 'Top-k Gating & MoE' }
   ];
 
   ctx.save();
 
-  // Symmetrical 3x5 grid (5 in row 1, 5 in row 2, 5 in row 3)
-  const row1 = quests.slice(0, 5);
-  const row2 = quests.slice(5, 10);
-  const row3 = quests.slice(10, 15);
+  // Symmetrical 4x4 grid (4 rows of 4 cards)
+  const row1 = quests.slice(0, 4);
+  const row2 = quests.slice(4, 8);
+  const row3 = quests.slice(8, 12);
+  const row4 = quests.slice(12, 16);
 
-  const cardWidth = 232;
-  const cardHeight = 84;
+  const cardWidth = 275;
+  const cardHeight = 74;
   const gap = 14;
 
   const renderRow = (rowItems, rowIdx, y) => {
@@ -234,7 +236,7 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     const startX = centerX - totalRowWidth / 2;
 
     rowItems.forEach((q, idx) => {
-      const globalIdx = rowIdx * 5 + idx;
+      const globalIdx = rowIdx * 4 + idx;
       const x = startX + idx * (cardWidth + gap);
       const isDone = completedQuests.includes(`quest-${globalIdx + 1}`) || completedQuests.length >= totalQuests;
 
@@ -248,39 +250,40 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
       ctx.stroke();
 
       // Quest number badge
-      ctx.font = '700 12px "Outfit", sans-serif';
+      ctx.font = '700 11.5px "Outfit", sans-serif';
       ctx.fillStyle = isDone ? '#34d399' : '#64748b';
       ctx.textAlign = 'left';
-      ctx.fillText(`QUEST ${q.num}`, x + 12, y + 20);
+      ctx.fillText(`QUEST ${q.num}`, x + 12, y + 18);
 
       // Icon + Status checkmark
-      ctx.font = '22px "Segoe UI Emoji", sans-serif';
-      ctx.fillText(q.icon, x + 12, y + 48);
+      ctx.font = '20px "Segoe UI Emoji", sans-serif';
+      ctx.fillText(q.icon, x + 12, y + 44);
 
       if (isDone) {
-        ctx.font = '700 13px "Outfit", sans-serif';
+        ctx.font = '700 12px "Outfit", sans-serif';
         ctx.fillStyle = '#10b981';
         ctx.textAlign = 'right';
-        ctx.fillText('✓ PASSED', x + cardWidth - 12, y + 20);
+        ctx.fillText('✓ PASSED', x + cardWidth - 12, y + 18);
       }
 
       // Quest Title
-      ctx.font = '600 14px "Outfit", sans-serif';
+      ctx.font = '600 13.5px "Outfit", sans-serif';
       ctx.fillStyle = isDone ? '#f8fafc' : '#94a3b8';
       ctx.textAlign = 'left';
-      ctx.fillText(q.title, x + 44, y + 48);
+      ctx.fillText(q.title, x + 42, y + 44);
 
       // Technical tag
-      ctx.font = '400 11px "JetBrains Mono", monospace';
+      ctx.font = '400 10px "JetBrains Mono", monospace';
       ctx.fillStyle = isDone ? '#67e8f9' : '#475569';
-      ctx.fillText(q.tag, x + 12, y + 70);
+      ctx.fillText(q.tag, x + 12, y + 62);
     });
   };
 
-  const startGridY = 478;
+  const startGridY = 465;
   renderRow(row1, 0, startGridY);
   renderRow(row2, 1, startGridY + cardHeight + gap);
   renderRow(row3, 2, startGridY + (cardHeight + gap) * 2);
+  renderRow(row4, 3, startGridY + (cardHeight + gap) * 3);
 
   ctx.restore();
 }

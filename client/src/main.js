@@ -119,7 +119,15 @@ const state = {
   vlmSelectedPatchIdx: 9, // default selected patch (0-indexed: 9 = Patch 10)
   vlmProjectorMode: 'mlp_llava', // 'linear' | 'mlp_llava' | 'perceiver'
   vlmShowBoundingBox: true,
-  vlmTokensGenerated: false
+  vlmTokensGenerated: false,
+  // Quest 16: Mixture-of-Experts state
+  moePromptIdx: 0,
+  moeActiveTab: 'routing_inspector', // 'routing_inspector' | 'load_balancer' | 'arch_arena'
+  moeTopK: 2,
+  moeSelectedTokenIdx: 2,
+  moeRoutingMode: 'top2_mixtral', // 'top1_switch' | 'top2_mixtral' | 'shared_deepseek'
+  moeAuxLossWeight: 0.01,
+  moeCapacityFactor: 1.25
 };
 
 const tutorService = new AITutorService();
@@ -737,6 +745,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'multimodal_vlm_lab':
       renderMultimodalVlmLabWidget(quest);
+      break;
+    case 'moe_routing_lab':
+      renderMoeRoutingLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -10588,6 +10599,918 @@ function renderMultimodalVlmLabWidget(quest) {
   updateBoundingBoxPosition();
 }
 
+
+// --- WIDGET 16: Mixture-of-Experts & Dynamic Routing Lab ---
+function renderMoeRoutingLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'moe-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const experts = config.experts || [
+    { id: 0, name: 'Math & Formal Logic', icon: '📐', desc: 'Calculus, differential equations, proofs, and algebraic manipulation' },
+    { id: 1, name: 'Python & Algorithmic Code', icon: '🐍', desc: 'NumPy, data structures, profiling, and software architecture' },
+    { id: 2, name: 'Creative & Literary Writing', icon: '✍️', desc: 'Metaphorical prose, poetry, dialogue, and storytelling' },
+    { id: 3, name: 'Multilingual & Translation', icon: '🌐', desc: 'Cross-lingual alignment, syntax, idioms' },
+    { id: 4, name: 'Science & Quantum Physics', icon: '⚛️', desc: 'Thermodynamics, quantum states, chemistry, and biology' },
+    { id: 5, name: 'Legal & Regulatory Analysis', icon: '⚖️', desc: 'Compliance, commercial contracts, statutory precedents' },
+    { id: 6, name: 'Historical & Humanities Factoids', icon: '🏛️', desc: 'Chronology, archival history, philosophy, and sociology' },
+    { id: 7, name: 'Common Sense & Pragmatics', icon: '💡', desc: 'Spatial intuition, daily conversational cues, and sanity checks' }
+  ];
+  const prompts = config.prompts || [];
+  const architectures = config.architectures || [];
+
+  let promptIdx = state.moePromptIdx || 0;
+  if (promptIdx >= prompts.length) promptIdx = 0;
+  let activeTab = state.moeActiveTab || 'routing_inspector';
+  let topK = state.moeTopK || 2;
+  let selectedTokenIdx = state.moeSelectedTokenIdx ?? 2;
+  let routingMode = state.moeRoutingMode || 'top2_mixtral';
+  let auxLossWeight = state.moeAuxLossWeight ?? 0.01;
+  let capacityFactor = state.moeCapacityFactor ?? 1.25;
+  let routerTemperature = 1.0;
+  let batchSize = 16;
+  let seqLen = 1024;
+
+  let xpRoutingClaimed = false;
+  let xpAuxClaimed = false;
+  let xpArchClaimed = false;
+
+  // Simulator state for Tab 2
+  let simStepsRan = false;
+  let isSimulating = false;
+  let simExpertCounts = [62, 63, 62, 63, 62, 63, 62, 63];
+  let simExpertProbs = [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125];
+  let simEntropy = 3.0;
+  let simAuxLoss = 0.010;
+
+  const currentPrompt = () => prompts[promptIdx] || {
+    id: 'stem_math_code',
+    title: 'Differential Equation in Python',
+    category: 'STEM & Algorithmic Computing',
+    tokens: ['Solve', 'the', 'differential', 'equation', 'dy/dx', '+', '2y', '=', 'e^(-x)', 'in', 'Python', 'NumPy.'],
+    expectedTopK: { 'differential': [0, 4], 'equation': [0, 4], 'dy/dx': [0, 4], 'Python': [1, 0], 'NumPy.': [1, 0] }
+  };
+
+  function getRouterLogitsForToken(token) {
+    const curP = currentPrompt();
+    const cleanTok = token.replace(/[^a-zA-Z0-9_.\-\+]/g, '');
+    const expMap = curP.expectedTopK || {};
+    
+    // Baseline logits
+    const logits = [-0.6, -0.4, -1.1, -0.3, -0.8, -1.2, -1.0, 0.4];
+    
+    for (const [key, pair] of Object.entries(expMap)) {
+      if (cleanTok.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(cleanTok.toLowerCase())) {
+        logits[pair[0]] += 4.6;
+        logits[pair[1]] += 3.3;
+        for (let i = 0; i < 8; i++) {
+          if (i !== pair[0] && i !== pair[1]) logits[i] -= 1.2;
+        }
+        return logits;
+      }
+    }
+
+    const lower = token.toLowerCase();
+    if (['solve', 'calculate', 'dy/dx', '2y', '=', '+', '1d', 'equation'].some(k => lower.includes(k))) {
+      logits[0] += 4.0;
+      logits[4] += 2.8;
+    } else if (['python', 'numpy', 'code', 'function'].some(k => lower.includes(k))) {
+      logits[1] += 4.3;
+      logits[0] += 2.1;
+    } else if (['haiku', 'obsidian', 'temple', 'compose', 'evocative', 'rain.'].some(k => lower.includes(k))) {
+      logits[2] += 4.2;
+      logits[6] += 2.5;
+    } else if (['french', 'english', 'majeure', 'force', 'contracts', 'clauses'].some(k => lower.includes(k))) {
+      logits[5] += 4.1;
+      logits[3] += 3.6;
+    } else if (['wave', 'particle', 'energy', 'box.', 'ground-state'].some(k => lower.includes(k))) {
+      logits[4] += 4.5;
+      logits[0] += 2.7;
+    } else {
+      logits[7] += 3.4;
+      logits[3] += 1.8;
+    }
+
+    return logits;
+  }
+
+  function computeRouting(token) {
+    const rawLogits = getRouterLogitsForToken(token);
+    const scaledLogits = rawLogits.map(z => z / Math.max(0.2, routerTemperature));
+    const maxLogit = Math.max(...scaledLogits);
+    const exps = scaledLogits.map(z => Math.exp(z - maxLogit));
+    const sumExps = exps.reduce((a, b) => a + b, 0);
+    const fullProbs = exps.map(e => e / sumExps);
+
+    // Rank indices descending by probability
+    const indexed = fullProbs.map((p, idx) => ({ idx, p, logit: rawLogits[idx] }));
+    indexed.sort((a, b) => b.p - a.p);
+
+    const topIndices = indexed.slice(0, topK).map(item => item.idx);
+    const topProbSum = topIndices.reduce((sum, idx) => sum + fullProbs[idx], 0);
+
+    // Compute normalized gating weights
+    const gatingWeights = fullProbs.map((p, idx) => {
+      if (topIndices.includes(idx)) {
+        return p / topProbSum;
+      }
+      return 0.0;
+    });
+
+    return {
+      rawLogits,
+      fullProbs,
+      topIndices,
+      gatingWeights,
+      indexed
+    };
+  }
+
+  container.innerHTML = `
+    <div class="moe-lab-header">
+      <div class="moe-title-row">
+        <div class="moe-title-badge">
+          <span class="moe-icon">🔀</span>
+          <div>
+            <h3>Mixture-of-Experts (MoE) & Dynamic Routing Lab</h3>
+            <p class="moe-subtitle">Master Sparse Top-k gating, load balancing auxiliary losses, and frontier conditional compute architectures (Mixtral 8x7B, Switch Transformer & DeepSeek-V3).</p>
+          </div>
+        </div>
+        <div class="moe-tab-nav">
+          <button class="moe-tab-btn ${activeTab === 'routing_inspector' ? 'active' : ''}" data-tab="routing_inspector">🎯 Sparse Top-k Router</button>
+          <button class="moe-tab-btn ${activeTab === 'load_balancer' ? 'active' : ''}" data-tab="load_balancer">⚖️ Load Balancing Simulator</button>
+          <button class="moe-tab-btn ${activeTab === 'arch_arena' ? 'active' : ''}" data-tab="arch_arena">🏛️ Frontier Architecture Arena</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Prompts Bar -->
+    <div class="moe-scenario-bar">
+      <span class="scenario-bar-label">📜 Select Input Prompt:</span>
+      <div class="scenario-chips" id="moe-prompt-chips">
+        ${prompts.map((p, idx) => `
+          <button class="scenario-chip ${idx === promptIdx ? 'active' : ''}" data-prompt-idx="${idx}">
+            <span class="sc-icon">${idx === 0 ? '📐' : idx === 1 ? '✍️' : idx === 2 ? '⚖️' : '⚛️'}</span>
+            <span class="sc-title">${p.title}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: SPARSE TOP-K ROUTER INSPECTOR -->
+    <div class="moe-tab-panel" id="panel-routing-inspector" style="display: ${activeTab === 'routing_inspector' ? 'block' : 'none'};">
+      <div class="moe-routing-layout">
+        <!-- Token Sequence Stream Bar -->
+        <div class="moe-card token-stream-card">
+          <div class="card-header-flex">
+            <div>
+              <h4>Prompt Token Sequence & Dynamic Dispatch Stream</h4>
+              <p class="card-hint">Click any token to observe its real-time router projection across all 8 specialized FFN experts.</p>
+            </div>
+            <div class="token-stream-badge">
+              <span class="badge-dot pulse"></span>
+              <span id="active-token-readout">Active Token: "${currentPrompt().tokens[selectedTokenIdx] || ''}"</span>
+            </div>
+          </div>
+          <div class="token-chips-wrapper" id="token-chips-wrapper">
+            <!-- Dynamically populated tokens -->
+          </div>
+        </div>
+
+        <!-- Controls & Top-K Parameter Row -->
+        <div class="moe-controls-bar">
+          <div class="control-group">
+            <span class="ctrl-label">Top-K Selection:</span>
+            <div class="topk-pill-group">
+              <button class="topk-pill ${topK === 1 ? 'active' : ''}" data-k="1">Top-1 (Switch)</button>
+              <button class="topk-pill ${topK === 2 ? 'active' : ''}" data-k="2">Top-2 (Mixtral)</button>
+              <button class="topk-pill ${topK === 3 ? 'active' : ''}" data-k="3">Top-3 (Exploratory)</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label class="ctrl-label" for="moe-temp-slider">Router Softmax Temp (T): <strong id="temp-val-display">${routerTemperature.toFixed(2)}</strong></label>
+            <input type="range" id="moe-temp-slider" min="0.2" max="2.0" step="0.1" value="${routerTemperature}" class="moe-slider">
+          </div>
+
+          <div class="control-metric-pill">
+            <span class="metric-name">Active Compute:</span>
+            <span class="metric-val highlight" id="active-compute-pct">${((topK / 8) * 100).toFixed(0)}% FLOPs</span>
+            <span class="metric-sub" id="flops-saved-pct">(${(((8 - topK) / 8) * 100).toFixed(0)}% Saved)</span>
+          </div>
+        </div>
+
+        <!-- 8-Expert Grid Matrix -->
+        <div class="expert-matrix-container">
+          <div class="matrix-header">
+            <h4>8 Specialized FFN Experts Routing Matrix</h4>
+            <span class="matrix-sub">Top-${topK} highlighted in emerald/cyan • Non-Top-${topK} masked to -∞ with 0 FLOPs executed</span>
+          </div>
+          <div class="expert-cards-grid" id="expert-cards-grid">
+            <!-- Dynamically populated 8 expert cards -->
+          </div>
+        </div>
+
+        <!-- Output Synthesis & Mathematical Dispatch Box -->
+        <div class="moe-card dispatch-synthesis-card">
+          <div class="card-header-flex">
+            <div>
+              <h4>Weighted Linear Combination & Output Synthesis</h4>
+              <p class="card-hint">How the activated experts' feed-forward outputs are blended into the token residual stream.</p>
+            </div>
+            <button class="btn-claim-xp" id="btn-claim-routing-xp">🏆 Claim +25 XP</button>
+          </div>
+          <div class="synthesis-details" id="synthesis-details-box">
+            <!-- Dynamically populated equation and explanation -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ROUTER COLLAPSE & LOAD BALANCING SIMULATOR -->
+    <div class="moe-tab-panel" id="panel-load-balancer" style="display: ${activeTab === 'load_balancer' ? 'block' : 'none'};">
+      <div class="moe-load-layout">
+        <div class="moe-card intro-theory-card">
+          <div class="theory-grid">
+            <div class="theory-item">
+              <span class="theory-icon">💀</span>
+              <h5>The Router Collapse Phenomenon</h5>
+              <p>Without regularizing the router, a catastrophic positive feedback loop occurs: 1 or 2 experts randomly receive higher initial gradients, learn faster, and monopolize 90%+ of tokens. The remaining experts starve with zero updates!</p>
+            </div>
+            <div class="theory-item">
+              <span class="theory-icon">⚖️</span>
+              <h5>The Auxiliary Load Balancing Loss</h5>
+              <p><code>L_aux = α · N · Σ (f_i · P_i)</code> penalizes non-uniform expert loads. The dot product of two probability vectors is minimized when both are uniform (1/N), forcing tokens to distribute evenly without degrading model quality.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Simulator Interactive Controls -->
+        <div class="moe-card sim-controls-card">
+          <div class="sim-ctrl-row">
+            <div class="sim-slider-group">
+              <div class="slider-title-row">
+                <label for="aux-loss-slider">Auxiliary Loss Weight (α): <strong id="aux-val-display">${auxLossWeight.toFixed(3)}</strong></label>
+                <div class="preset-buttons">
+                  <button class="preset-btn" data-alpha="0.000">α = 0.00 (Collapse!)</button>
+                  <button class="preset-btn" data-alpha="0.010">α = 0.01 (Mixtral Standard)</button>
+                  <button class="preset-btn" data-alpha="0.050">α = 0.05 (Strict Balance)</button>
+                </div>
+              </div>
+              <input type="range" id="aux-loss-slider" min="0.000" max="0.080" step="0.005" value="${auxLossWeight}" class="moe-slider">
+            </div>
+
+            <div class="sim-actions-col">
+              <button class="btn-primary" id="btn-run-sim-steps">
+                <span class="sim-btn-icon">⚡</span> Run 500 Token Routing Steps
+              </button>
+              <button class="btn-ghost" id="btn-reset-sim">↺ Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Load Distribution & Metrics -->
+        <div class="sim-results-grid">
+          <!-- Left: 8 Expert Distribution Bars -->
+          <div class="moe-card expert-dist-card">
+            <div class="card-header-flex">
+              <h4>Expert Utilization Breakdown (500 Dispatched Tokens)</h4>
+              <span class="target-line-legend">-- Target Uniform: 12.5% (62.5 tokens)</span>
+            </div>
+            <div class="dist-bars-container" id="dist-bars-container">
+              <!-- Dynamically populated bars -->
+            </div>
+          </div>
+
+          <!-- Right: Health Dashboard & Status -->
+          <div class="moe-card health-dashboard-card">
+            <div class="card-header-flex">
+              <h4>Router Health & Stability Telemetry</h4>
+              <button class="btn-claim-xp" id="btn-claim-aux-xp">🏆 Claim +25 XP</button>
+            </div>
+
+            <div class="health-metrics-list">
+              <div class="telemetry-box" id="health-status-badge">
+                <span class="telemetry-label">Router State</span>
+                <span class="telemetry-val" id="telemetry-status-text">Balanced Stability</span>
+              </div>
+
+              <div class="telemetry-box">
+                <span class="telemetry-label">Routing Entropy H (Max 3.0 bits)</span>
+                <div class="gauge-bar-wrapper">
+                  <div class="gauge-bar-fill" id="entropy-bar-fill" style="width: 100%;"></div>
+                </div>
+                <span class="telemetry-num" id="entropy-num-display">3.00 bits / 3.00</span>
+              </div>
+
+              <div class="telemetry-box">
+                <span class="telemetry-label">Computed Aux Loss Penalty (L_aux)</span>
+                <span class="telemetry-num highlight" id="aux-loss-penalty-display">0.0100</span>
+              </div>
+
+              <div class="telemetry-box">
+                <span class="telemetry-label">Starved / Dead Experts (&lt; 2% load)</span>
+                <span class="telemetry-num" id="starved-count-display">0 of 8</span>
+              </div>
+            </div>
+
+            <div class="telemetry-takeaway" id="telemetry-takeaway-box">
+              <p>Auxiliary loss is active (α = 0.01). The router maintains high entropy across all 8 experts, avoiding starvation and ensuring full capacity utilization.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: FRONTIER ARCHITECTURE ARENA -->
+    <div class="moe-tab-panel" id="panel-arch-arena" style="display: ${activeTab === 'arch_arena' ? 'block' : 'none'};">
+      <div class="moe-arena-layout">
+        <!-- Architecture Cards Selector -->
+        <div class="arch-selector-grid">
+          ${architectures.map((arch, idx) => `
+            <div class="arch-card ${arch.id === routingMode ? 'selected' : ''}" data-arch-id="${arch.id}">
+              <div class="arch-card-header">
+                <span class="arch-badge">${idx === 0 ? 'Google Switch' : idx === 1 ? 'Mistral AI' : 'DeepSeek AI'}</span>
+                <h5>${arch.name}</h5>
+              </div>
+              <div class="arch-specs">
+                <div class="spec-pair">
+                  <span class="k">Active Routing:</span>
+                  <span class="v">${arch.activeRatio}</span>
+                </div>
+                <div class="spec-pair">
+                  <span class="k">Total Parameters:</span>
+                  <span class="v">${arch.totalParams}</span>
+                </div>
+                <div class="spec-pair">
+                  <span class="k">Active Parameters:</span>
+                  <span class="v highlight">${arch.activeParams}</span>
+                </div>
+              </div>
+              <p class="arch-desc">${arch.desc}</p>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Dynamic Parameter & Capacity Factor Controls -->
+        <div class="moe-card arch-details-card">
+          <div class="card-header-flex">
+            <div>
+              <h4 id="arena-current-title">Mixtral 8x7B Architecture Diagnostics</h4>
+              <p class="card-hint">Simulate real-world inference batching, VRAM requirements, and capacity factor buffer sizing.</p>
+            </div>
+            <button class="btn-claim-xp" id="btn-claim-arch-xp">🏆 Claim +30 XP</button>
+          </div>
+
+          <div class="arena-controls-row">
+            <div class="arena-ctrl-item">
+              <label for="arena-batch-slider">Batch Size (B): <strong id="arena-batch-display">${batchSize}</strong></label>
+              <input type="range" id="arena-batch-slider" min="1" max="64" step="1" value="${batchSize}" class="moe-slider">
+            </div>
+
+            <div class="arena-ctrl-item">
+              <label for="arena-seq-slider">Sequence Length (S): <strong id="arena-seq-display">${seqLen}</strong></label>
+              <input type="range" id="arena-seq-slider" min="256" max="4096" step="256" value="${seqLen}" class="moe-slider">
+            </div>
+
+            <div class="arena-ctrl-item">
+              <label for="arena-cap-slider">Capacity Factor (C): <strong id="arena-cap-display">${capacityFactor.toFixed(2)}</strong></label>
+              <input type="range" id="arena-cap-slider" min="1.0" max="2.0" step="0.05" value="${capacityFactor}" class="moe-slider">
+            </div>
+          </div>
+
+          <!-- Dynamic Calculations Grid -->
+          <div class="arena-calc-grid" id="arena-calc-grid">
+            <!-- Dynamically populated telemetry -->
+          </div>
+
+          <!-- Spiky Traffic Simulation Button -->
+          <div class="spiky-sim-bar">
+            <div class="spiky-info">
+              <strong>Buffer Underflow & Token Dropping Test:</strong>
+              <span>Inject random traffic spikes to test if tokens exceed expert capacity buffers.</span>
+            </div>
+            <button class="btn-secondary" id="btn-test-spiky-traffic">💥 Inject Spiky Traffic Burst</button>
+          </div>
+
+          <div class="spiky-result-card" id="spiky-result-card" style="display: none;">
+            <!-- Populated on click -->
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  dom.interactiveContainer.innerHTML = '';
+  dom.interactiveContainer.appendChild(container);
+
+  // --- TAB NAVIGATION ---
+  const tabButtons = container.querySelectorAll('.moe-tab-btn');
+  const tabPanels = {
+    routing_inspector: container.querySelector('#panel-routing-inspector'),
+    load_balancer: container.querySelector('#panel-load-balancer'),
+    arch_arena: container.querySelector('#panel-arch-arena')
+  };
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetTab = btn.dataset.tab;
+      activeTab = targetTab;
+      state.moeActiveTab = targetTab;
+      tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      Object.entries(tabPanels).forEach(([key, panel]) => {
+        if (panel) panel.style.display = key === targetTab ? 'block' : 'none';
+      });
+      soundFx.playBlip(540, 0.05);
+    });
+  });
+
+  // --- PROMPT SELECTOR ---
+  const promptChips = container.querySelectorAll('#moe-prompt-chips .scenario-chip');
+  promptChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      promptIdx = parseInt(chip.dataset.promptIdx, 10);
+      state.moePromptIdx = promptIdx;
+      selectedTokenIdx = 0;
+      state.moeSelectedTokenIdx = 0;
+      promptChips.forEach(c => c.classList.toggle('active', c === chip));
+      soundFx.playBlip(600 + promptIdx * 50, 0.05);
+      renderTokensAndRouting();
+    });
+  });
+
+  // --- TAB 1 LOGIC & RENDERING ---
+  const tokensWrapper = container.querySelector('#token-chips-wrapper');
+  const activeTokenReadout = container.querySelector('#active-token-readout');
+  const expertCardsGrid = container.querySelector('#expert-cards-grid');
+  const synthesisDetailsBox = container.querySelector('#synthesis-details-box');
+  const topkPills = container.querySelectorAll('.topk-pill');
+  const tempSlider = container.querySelector('#moe-temp-slider');
+  const tempValDisplay = container.querySelector('#temp-val-display');
+  const activeComputePct = container.querySelector('#active-compute-pct');
+  const flopsSavedPct = container.querySelector('#flops-saved-pct');
+  const btnClaimRoutingXp = container.querySelector('#btn-claim-routing-xp');
+
+  topkPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      topK = parseInt(pill.dataset.k, 10);
+      state.moeTopK = topK;
+      topkPills.forEach(p => p.classList.toggle('active', p === pill));
+      activeComputePct.textContent = `${((topK / 8) * 100).toFixed(0)}% FLOPs`;
+      flopsSavedPct.textContent = `(${(((8 - topK) / 8) * 100).toFixed(0)}% Saved)`;
+      soundFx.playBlip(700, 0.05);
+      renderRoutingView();
+    });
+  });
+
+  if (tempSlider) {
+    tempSlider.addEventListener('input', (e) => {
+      routerTemperature = parseFloat(e.target.value);
+      if (tempValDisplay) tempValDisplay.textContent = routerTemperature.toFixed(2);
+      renderRoutingView();
+    });
+  }
+
+  function renderTokensAndRouting() {
+    const curP = currentPrompt();
+    tokensWrapper.innerHTML = '';
+
+    curP.tokens.forEach((tok, idx) => {
+      const chip = document.createElement('button');
+      chip.className = `token-chip ${idx === selectedTokenIdx ? 'active' : ''}`;
+      chip.innerHTML = `<span class="tok-text">${tok}</span><span class="tok-idx">t${idx}</span>`;
+      chip.addEventListener('click', () => {
+        selectedTokenIdx = idx;
+        state.moeSelectedTokenIdx = idx;
+        container.querySelectorAll('.token-chip').forEach((c, i) => c.classList.toggle('active', i === idx));
+        soundFx.playBlip(620 + idx * 20, 0.04);
+        renderRoutingView();
+      });
+      tokensWrapper.appendChild(chip);
+    });
+
+    renderRoutingView();
+  }
+
+  function renderRoutingView() {
+    const curP = currentPrompt();
+    const token = curP.tokens[selectedTokenIdx] || curP.tokens[0];
+    if (activeTokenReadout) {
+      activeTokenReadout.textContent = `Active Token: "${token}" (Index ${selectedTokenIdx})`;
+    }
+
+    const { rawLogits, fullProbs, topIndices, gatingWeights, indexed } = computeRouting(token);
+
+    // Render Expert Cards
+    expertCardsGrid.innerHTML = '';
+    experts.forEach((exp, idx) => {
+      const isSelected = topIndices.includes(idx);
+      const gateW = gatingWeights[idx];
+      const probPct = (fullProbs[idx] * 100).toFixed(1);
+      const rawZ = rawLogits[idx].toFixed(2);
+
+      const card = document.createElement('div');
+      card.className = `expert-card ${isSelected ? 'active-expert' : 'idle-expert'}`;
+      card.innerHTML = `
+        <div class="exp-card-header">
+          <div class="exp-title-flex">
+            <span class="exp-icon">${exp.icon}</span>
+            <div>
+              <h6 class="exp-name">${exp.name}</h6>
+              <span class="exp-id">Expert E${exp.id}</span>
+            </div>
+          </div>
+          ${isSelected ? `<span class="topk-badge">TOP-${topIndices.indexOf(idx) + 1} ACTIVE</span>` : `<span class="idle-badge">IDLE (0 FLOPs)</span>`}
+        </div>
+
+        <div class="exp-meter-section">
+          <div class="meter-info">
+            <span class="meter-label">Router Probability P(e):</span>
+            <span class="meter-val">${probPct}%</span>
+          </div>
+          <div class="meter-bar-track">
+            <div class="meter-bar-fill ${isSelected ? 'accent-fill' : ''}" style="width: ${probPct}%;"></div>
+          </div>
+        </div>
+
+        <div class="exp-meta-row">
+          <span class="meta-item">Raw Logit: <code>${rawZ > 0 ? '+' : ''}${rawZ}</code></span>
+          <span class="meta-item ${isSelected ? 'highlight' : ''}">Gating Weight (g_i): <strong>${isSelected ? (gateW * 100).toFixed(1) + '%' : '0.0%'}</strong></span>
+        </div>
+
+        <div class="exp-desc-snip">${exp.desc}</div>
+      `;
+      expertCardsGrid.appendChild(card);
+    });
+
+    // Render Synthesis Details Box
+    const activeExperts = topIndices.map(idx => ({
+      exp: experts[idx],
+      weight: gatingWeights[idx]
+    }));
+
+    const mathTerms = activeExperts.map(ae => `${(ae.weight * 100).toFixed(1)}% × FFN_${ae.exp.id}(x)`).join(' + ');
+
+    synthesisDetailsBox.innerHTML = `
+      <div class="synth-eq-banner">
+        <code class="synth-eq">y = ${mathTerms}</code>
+      </div>
+      <div class="synth-explanation">
+        <div class="synth-col">
+          <h6>Dynamic Expert Dispatch</h6>
+          <p>Token <strong>"${token}"</strong> routes primarily to <strong>${activeExperts[0].exp.icon} ${activeExperts[0].exp.name}</strong> (${(activeExperts[0].weight * 100).toFixed(1)}% weight)${activeExperts[1] ? ` and secondarily to <strong>${activeExperts[1].exp.icon} ${activeExperts[1].exp.name}</strong> (${(activeExperts[1].weight * 100).toFixed(1)}% weight)` : ''}.</p>
+        </div>
+        <div class="synth-col">
+          <h6>FLOP Compute Savings</h6>
+          <p>By executing only <strong>${topK} of 8 experts</strong>, this Transformer achieves the parameter representation of an 8x larger model while consuming only <strong>${((topK / 8) * 100).toFixed(0)}%</strong> of standard dense inference compute!</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (btnClaimRoutingXp) {
+    btnClaimRoutingXp.addEventListener('click', () => {
+      if (!xpRoutingClaimed) {
+        xpRoutingClaimed = true;
+        awardXp(25, 'Sparse Top-k Router Conquered');
+        btnClaimRoutingXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimRoutingXp.disabled = true;
+        btnClaimRoutingXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // --- TAB 2 LOGIC: SIMULATOR ---
+  const auxSlider = container.querySelector('#aux-loss-slider');
+  const auxValDisplay = container.querySelector('#aux-val-display');
+  const presetButtons = container.querySelectorAll('.preset-btn');
+  const btnRunSimSteps = container.querySelector('#btn-run-sim-steps');
+  const btnResetSim = container.querySelector('#btn-reset-sim');
+  const distBarsContainer = container.querySelector('#dist-bars-container');
+  const healthStatusBadge = container.querySelector('#health-status-badge');
+  const telemetryStatusText = container.querySelector('#telemetry-status-text');
+  const entropyBarFill = container.querySelector('#entropy-bar-fill');
+  const entropyNumDisplay = container.querySelector('#entropy-num-display');
+  const auxLossPenaltyDisplay = container.querySelector('#aux-loss-penalty-display');
+  const starvedCountDisplay = container.querySelector('#starved-count-display');
+  const telemetryTakeawayBox = container.querySelector('#telemetry-takeaway-box');
+  const btnClaimAuxXp = container.querySelector('#btn-claim-aux-xp');
+
+  function updateSimulatorUI() {
+    const totalTokens = simExpertCounts.reduce((a, b) => a + b, 0) || 500;
+    distBarsContainer.innerHTML = '';
+
+    let starvedCount = 0;
+    simExpertCounts.forEach((cnt, idx) => {
+      const pct = (cnt / totalTokens) * 100;
+      const isStarved = pct < 2.0;
+      const isOverloaded = pct > 45.0;
+      if (isStarved) starvedCount++;
+
+      const barRow = document.createElement('div');
+      barRow.className = 'dist-bar-row';
+      barRow.innerHTML = `
+        <div class="bar-expert-meta">
+          <span class="be-icon">${experts[idx].icon}</span>
+          <span class="be-name">${experts[idx].name}</span>
+          <span class="be-tokens">${cnt} tokens (${pct.toFixed(1)}%)</span>
+        </div>
+        <div class="bar-track-wrapper">
+          <div class="bar-target-guideline" style="left: 12.5%;" title="Target: 12.5%"></div>
+          <div class="bar-fill ${isOverloaded ? 'overloaded' : isStarved ? 'starved' : 'balanced'}" style="width: ${Math.min(100, pct * 1.3)}%;"></div>
+        </div>
+      `;
+      distBarsContainer.appendChild(barRow);
+    });
+
+    // Update telemetry
+    entropyNumDisplay.textContent = `${simEntropy.toFixed(2)} bits / 3.00`;
+    entropyBarFill.style.width = `${((simEntropy / 3.0) * 100).toFixed(0)}%`;
+    auxLossPenaltyDisplay.textContent = simAuxLoss.toFixed(4);
+    starvedCountDisplay.textContent = `${starvedCount} of 8 experts`;
+
+    if (starvedCount >= 4 || simEntropy < 1.6) {
+      healthStatusBadge.className = 'telemetry-box danger-box';
+      telemetryStatusText.textContent = '⚠️ SEVERE ROUTER COLLAPSE';
+      entropyBarFill.style.background = '#ef4444';
+      telemetryTakeawayBox.innerHTML = `
+        <p class="danger-txt"><strong>Router Collapse Active!</strong> With α = ${auxLossWeight.toFixed(3)}, Expert 0 and 1 have monopolized the router. ${starvedCount} experts are completely starved and receiving zero gradients, wasting parameter capacity!</p>
+      `;
+    } else if (starvedCount > 0) {
+      healthStatusBadge.className = 'telemetry-box warning-box';
+      telemetryStatusText.textContent = '⚡ MODERATE LOAD IMBALANCE';
+      entropyBarFill.style.background = '#f59e0b';
+      telemetryTakeawayBox.innerHTML = `
+        <p class="warn-txt"><strong>Mild Imbalance:</strong> Increase α slightly (e.g. to 0.010) to evenly distribute tokens across all 8 experts.</p>
+      `;
+    } else {
+      healthStatusBadge.className = 'telemetry-box success-box';
+      telemetryStatusText.textContent = '✅ BALANCED STABILITY';
+      entropyBarFill.style.background = '#10b981';
+      telemetryTakeawayBox.innerHTML = `
+        <p class="success-txt"><strong>Optimal Load Distribution:</strong> Auxiliary loss L_aux is penalizing routing concentration. All 8 experts are actively engaged with near-uniform 12.5% load!</p>
+      `;
+    }
+  }
+
+  function runSimulation() {
+    if (isSimulating) return;
+    isSimulating = true;
+    btnRunSimSteps.disabled = true;
+    btnRunSimSteps.innerHTML = `<span class="sim-btn-icon spin">🔄</span> Simulating 500 Steps...`;
+
+    soundFx.playBlip(440, 0.08);
+
+    setTimeout(() => {
+      // Calculate outcome based on auxLossWeight
+      if (auxLossWeight <= 0.002) {
+        // Severe Collapse
+        simExpertCounts = [365, 95, 12, 8, 6, 5, 5, 4];
+        simEntropy = 1.15;
+        simAuxLoss = 0.000;
+      } else if (auxLossWeight < 0.008) {
+        // Partial Collapse
+        simExpertCounts = [210, 140, 45, 35, 25, 20, 15, 10];
+        simEntropy = 2.15;
+        simAuxLoss = auxLossWeight * 8 * 0.18;
+      } else if (auxLossWeight <= 0.03) {
+        // Balanced Stability (Mixtral Standard)
+        simExpertCounts = [64, 61, 63, 62, 65, 60, 62, 63];
+        simEntropy = 2.97;
+        simAuxLoss = auxLossWeight * 8 * 0.125 * 0.125 * 8;
+      } else {
+        // High penalty: perfectly uniform
+        simExpertCounts = [62, 63, 62, 63, 62, 63, 62, 63];
+        simEntropy = 3.00;
+        simAuxLoss = auxLossWeight * 8 * 0.125;
+      }
+
+      simStepsRan = true;
+      isSimulating = false;
+      btnRunSimSteps.disabled = false;
+      btnRunSimSteps.innerHTML = `<span class="sim-btn-icon">⚡</span> Run 500 Token Routing Steps`;
+      soundFx.playLevelUp();
+      updateSimulatorUI();
+    }, 450);
+  }
+
+  if (auxSlider) {
+    auxSlider.addEventListener('input', (e) => {
+      auxLossWeight = parseFloat(e.target.value);
+      state.moeAuxLossWeight = auxLossWeight;
+      if (auxValDisplay) auxValDisplay.textContent = auxLossWeight.toFixed(3);
+      runSimulation();
+    });
+  }
+
+  presetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      auxLossWeight = parseFloat(btn.dataset.alpha);
+      state.moeAuxLossWeight = auxLossWeight;
+      if (auxSlider) auxSlider.value = auxLossWeight;
+      if (auxValDisplay) auxValDisplay.textContent = auxLossWeight.toFixed(3);
+      soundFx.playBlip(580, 0.05);
+      runSimulation();
+    });
+  });
+
+  if (btnRunSimSteps) {
+    btnRunSimSteps.addEventListener('click', runSimulation);
+  }
+
+  if (btnResetSim) {
+    btnResetSim.addEventListener('click', () => {
+      auxLossWeight = 0.01;
+      state.moeAuxLossWeight = 0.01;
+      if (auxSlider) auxSlider.value = 0.01;
+      if (auxValDisplay) auxValDisplay.textContent = '0.010';
+      simExpertCounts = [62, 63, 62, 63, 62, 63, 62, 63];
+      simEntropy = 3.0;
+      simAuxLoss = 0.010;
+      soundFx.playBlip(500, 0.04);
+      updateSimulatorUI();
+    });
+  }
+
+  if (btnClaimAuxXp) {
+    btnClaimAuxXp.addEventListener('click', () => {
+      if (!xpAuxClaimed) {
+        xpAuxClaimed = true;
+        awardXp(25, 'Auxiliary Load Balancing Conquered');
+        btnClaimAuxXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimAuxXp.disabled = true;
+        btnClaimAuxXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // --- TAB 3 LOGIC: ARCHITECTURE ARENA ---
+  const archCards = container.querySelectorAll('.arch-card');
+  const arenaTitle = container.querySelector('#arena-current-title');
+  const batchSlider = container.querySelector('#arena-batch-slider');
+  const batchDisplay = container.querySelector('#arena-batch-display');
+  const seqSlider = container.querySelector('#arena-seq-slider');
+  const seqDisplay = container.querySelector('#arena-seq-display');
+  const capSlider = container.querySelector('#arena-cap-slider');
+  const capDisplay = container.querySelector('#arena-cap-display');
+  const arenaCalcGrid = container.querySelector('#arena-calc-grid');
+  const btnTestSpiky = container.querySelector('#btn-test-spiky-traffic');
+  const spikyResultCard = container.querySelector('#spiky-result-card');
+  const btnClaimArchXp = container.querySelector('#btn-claim-arch-xp');
+
+  archCards.forEach(card => {
+    card.addEventListener('click', () => {
+      routingMode = card.dataset.archId;
+      state.moeRoutingMode = routingMode;
+      archCards.forEach(c => c.classList.toggle('selected', c === card));
+      soundFx.playBlip(650, 0.05);
+      renderArenaDiagnostics();
+    });
+  });
+
+  if (batchSlider) {
+    batchSlider.addEventListener('input', (e) => {
+      batchSize = parseInt(e.target.value, 10);
+      if (batchDisplay) batchDisplay.textContent = batchSize;
+      renderArenaDiagnostics();
+    });
+  }
+
+  if (seqSlider) {
+    seqSlider.addEventListener('input', (e) => {
+      seqLen = parseInt(e.target.value, 10);
+      if (seqDisplay) seqDisplay.textContent = seqLen;
+      renderArenaDiagnostics();
+    });
+  }
+
+  if (capSlider) {
+    capSlider.addEventListener('input', (e) => {
+      capacityFactor = parseFloat(e.target.value);
+      state.moeCapacityFactor = capacityFactor;
+      if (capDisplay) capDisplay.textContent = capacityFactor.toFixed(2);
+      renderArenaDiagnostics();
+    });
+  }
+
+  function renderArenaDiagnostics() {
+    const totalTokens = batchSize * seqLen;
+    let numExperts = 8;
+    let k = 2;
+    let totalParams = 46.7;
+    let activeParams = 12.9;
+    let name = 'Mixtral 8x7B (Top-2 of 8)';
+    let vramFp16 = 93.4;
+    let vramQuant = 26.5;
+
+    if (routingMode === 'top1_switch') {
+      name = 'Switch Transformer (Top-1 of 8)';
+      numExperts = 8;
+      k = 1;
+      totalParams = 26.0;
+      activeParams = 3.25;
+      vramFp16 = 52.0;
+      vramQuant = 14.8;
+    } else if (routingMode === 'shared_deepseek') {
+      name = 'DeepSeek-V3 (1 Shared + Top-8 of 256)';
+      numExperts = 256;
+      k = 8;
+      totalParams = 671.0;
+      activeParams = 37.0;
+      vramFp16 = 671.0;
+      vramQuant = 185.0;
+    }
+
+    if (arenaTitle) arenaTitle.textContent = `${name} Diagnostics & Buffer Analysis`;
+
+    // Tokens per expert capacity limit: ceil((Tokens * k / numExperts) * capacityFactor)
+    const averageLoadPerExpert = Math.ceil((totalTokens * k) / numExperts);
+    const capacityLimit = Math.ceil(averageLoadPerExpert * capacityFactor);
+    const flopSavingsPct = (((totalParams - activeParams) / totalParams) * 100).toFixed(1);
+
+    arenaCalcGrid.innerHTML = `
+      <div class="calc-metric-box">
+        <span class="calc-label">Total Batch Tokens (B × S)</span>
+        <span class="calc-val">${totalTokens.toLocaleString()} tokens</span>
+        <span class="calc-sub">${batchSize} batches × ${seqLen} seq len</span>
+      </div>
+
+      <div class="calc-metric-box">
+        <span class="calc-label">Buffer Capacity Per Expert</span>
+        <span class="calc-val highlight">${capacityLimit.toLocaleString()} tokens</span>
+        <span class="calc-sub">Avg Load ${averageLoadPerExpert.toLocaleString()} × C=${capacityFactor.toFixed(2)}</span>
+      </div>
+
+      <div class="calc-metric-box">
+        <span class="calc-label">GPU Memory Footprint</span>
+        <span class="calc-val">${vramQuant.toFixed(0)} GB (4-bit)</span>
+        <span class="calc-sub">Full FP16: ~${vramFp16.toFixed(0)} GB VRAM</span>
+      </div>
+
+      <div class="calc-metric-box">
+        <span class="calc-label">Inference FLOP Savings</span>
+        <span class="calc-val success-val">${flopSavingsPct}% SAVED</span>
+        <span class="calc-sub">${activeParams}B active of ${totalParams}B total</span>
+      </div>
+    `;
+  }
+
+  if (btnTestSpiky) {
+    btnTestSpiky.addEventListener('click', () => {
+      soundFx.playBlip(750, 0.08);
+      const totalTokens = batchSize * seqLen;
+      let numExperts = routingMode === 'shared_deepseek' ? 256 : 8;
+      let k = routingMode === 'top1_switch' ? 1 : routingMode === 'shared_deepseek' ? 8 : 2;
+      const averageLoad = Math.ceil((totalTokens * k) / numExperts);
+      const capacityLimit = Math.ceil(averageLoad * capacityFactor);
+
+      // Random peak spike on busiest expert
+      const spikeMultiplier = 1.05 + Math.random() * 0.45;
+      const peakExpertLoad = Math.ceil(averageLoad * spikeMultiplier);
+      const droppedTokens = Math.max(0, peakExpertLoad - capacityLimit);
+
+      spikyResultCard.style.display = 'block';
+      if (droppedTokens > 0) {
+        spikyResultCard.className = 'spiky-result-card warning';
+        spikyResultCard.innerHTML = `
+          <h6>⚠️ Buffer Overflow Detected: ${droppedTokens.toLocaleString()} Tokens Dropped</h6>
+          <p>Peak expert experienced <strong>${peakExpertLoad.toLocaleString()} tokens</strong>, exceeding capacity limit of <strong>${capacityLimit.toLocaleString()}</strong>.</p>
+          <div class="dropped-solution">
+            <span class="drop-tag">Residual Pass-Through</span>
+            <p>In MoE architectures, dropped tokens are NOT lost or corrupted! They simply bypass the FFN layer via the residual skip connection: <code>y = x</code>. To eliminate drops, increase Capacity Factor C to <strong>${(spikeMultiplier + 0.05).toFixed(2)}</strong>.</p>
+          </div>
+        `;
+      } else {
+        spikyResultCard.className = 'spiky-result-card success';
+        spikyResultCard.innerHTML = `
+          <h6>✅ Perfect Buffer Clearance: 0 Tokens Dropped</h6>
+          <p>Peak expert experienced <strong>${peakExpertLoad.toLocaleString()} tokens</strong>, safely below the capacity ceiling of <strong>${capacityLimit.toLocaleString()} tokens</strong> (Buffer headroom: +${(capacityLimit - peakExpertLoad).toLocaleString()} tokens).</p>
+        `;
+      }
+    });
+  }
+
+  if (btnClaimArchXp) {
+    btnClaimArchXp.addEventListener('click', () => {
+      if (!xpArchClaimed) {
+        xpArchClaimed = true;
+        awardXp(30, 'Frontier MoE Architectures Mastered');
+        btnClaimArchXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimArchXp.disabled = true;
+        btnClaimArchXp.style.opacity = '0.6';
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // Initial tab renders
+  renderTokensAndRouting();
+  updateSimulatorUI();
+  renderArenaDiagnostics();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -10804,6 +11727,13 @@ const questPrompts = {
     { label: '🔌 Linear vs 2-Layer MLP Multimodal Projectors', prompt: 'Why did LLaVA-1.5 upgrade from a single linear matrix to a 2-layer GeLU MLP projector? Explain nonlinear manifold warping.' },
     { label: '📍 How do VLMs predict Bounding Boxes?', prompt: 'Explain spatial grounding in multimodal models: how are bounding box coordinates normalized to [0, 1000] and generated as text tokens without separate detection heads?' },
     { label: '🎯 Quiz me on Multimodal VLMs & Vision Transformers', prompt: 'Give me a challenging question about Vision Transformers, CLIP contrastive loss, multimodal projectors, or visual spatial grounding!' }
+  ],
+  'quest-16': [
+    { label: '🔀 Why does Sparse MoE beat Dense Scaling?', prompt: 'Explain how Mixture-of-Experts decouples total parameter capacity from FLOP compute costs, and why Mixtral 8x7B runs at 13B speed while matching 70B models.' },
+    { label: '⚖️ What is Router Collapse and how does Aux Loss fix it?', prompt: 'Walk through why routers naturally starve unselected experts in a positive feedback loop, and explain the mathematical formulation of auxiliary load balancing loss.' },
+    { label: '📦 How does Token Dropping and Capacity Factor work?', prompt: 'Explain the role of Expert Capacity buffers in distributed multi-GPU clusters, and what happens when tokens exceed capacity.' },
+    { label: '🏛️ Switch Transformer vs Mixtral vs DeepSeek-V3', prompt: 'Compare the architectural design choices between Top-1 routing (Switch), Top-2 of 8 (Mixtral), and Shared + Top-8 of 256 fine-grained routing (DeepSeek-V3).' },
+    { label: '🎯 Quiz me on Mixture-of-Experts & Dynamic Routing', prompt: 'Give me a challenging question about MoE router gating, expert parallelism, capacity factors, or auxiliary load balancing!' }
   ]
 };
 

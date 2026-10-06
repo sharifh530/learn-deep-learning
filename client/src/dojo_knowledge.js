@@ -671,6 +671,47 @@ print(f"Unified Multimodal Stream: {multimodal_sequence.shape} (16 image + 6 tex
         explanation: "Osu! Pretrained vision encoders and text LLMs operate in different dimensionalities and latent geometries. The lightweight MLP projector warps visual features into the language model's native semantic space, enabling zero-shot instruction following at minimal fine-tuning cost!"
       }
     },
+
+    'quest-16': {
+      title: 'Mixture-of-Experts: Sparse Routing, Top-k Gating & Load Balancing',
+      eli10: `🔀 **The Specialist Triage & The Parallel Consult Board (Mixture-of-Experts):**\n\nHow does a 47-billion parameter model like Mixtral 8x7B generate words as fast as a tiny 13-billion model while outscoring massive dense giants?\n\n1. **The Flaw of Dense Models:** In standard transformers, every single neuron in every Feed-Forward layer fires for every single comma, noun, and period. That wastes immense compute on trivial tokens!\n2. **Conditional Compute:** In an MoE layer, the single dense FFN is replaced by an ensemble of 8 specialized expert networks. For each token, a lightweight **Router (Gating Network)** inspects the token embedding and routes it to only the **Top-2** most qualified experts!\n3. **Decoupling Memory from FLOPs:** The model retains the encyclopedic knowledge capacity of all 8 experts (47B parameters stored in GPU VRAM), but burns the electricity and FLOPs of only 2 active experts (13B parameters per forward pass)!\n4. **The Catastrophe of Router Collapse:** Without strict regulation, the router develops favorites—routing 95% of tokens to Expert 1 while Experts 2-8 starve and die! An **Auxiliary Load Balancing Loss** ($L_{\\text{aux}} = \\alpha N \\sum f_i P_i$) acts like an antitrust regulator, penalizing non-uniform traffic and forcing all experts to specialize.\n5. **Capacity Factor & Dropped Tokens:** In distributed GPU clusters, expert buffers have fixed capacities. Overflow tokens bypass the expert via the residual skip stream, preventing communication bottlenecks!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+# 1. Simulate 8 Experts & Router Gating
+num_experts, top_k, d_model = 8, 2, 4096
+router = nn.Linear(d_model, num_experts, bias=False)
+
+# 2. Forward pass for 4 tokens
+tokens = torch.randn(4, d_model) # [4 tokens, 4096 dim]
+logits = router(tokens)          # [4, 8] raw expert logits
+
+# 3. Top-k Gating & Masking
+topk_vals, topk_indices = torch.topk(logits, top_k, dim=-1)
+# Mask non-top-k logits with -inf
+mask = torch.full_like(logits, float('-inf'))
+mask.scatter_(1, topk_indices, topk_vals)
+routing_weights = F.softmax(mask, dim=-1) # Sparse weights sum to 1.0!
+
+print(f"Top-2 Selected Experts per Token:\n{topk_indices.tolist()}")
+print(f"Sparse Softmax Weights:\n{routing_weights.round(decimals=3).tolist()}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Sparse Mixture-of-Experts (MoE)**\n\nIn a sparse MoE model with 8 experts per layer where each token activates Top-2 experts (e.g. Mixtral 8x7B), what fraction of the expert FFN parameters execute FLOPs during a single token generation step?",
+        options: [
+            "A) Exactly 25% (2 of 8 experts run, while 6 experts remain idle in VRAM)",
+            "B) 100% of parameters run because all experts must verify the answer",
+            "C) 0% because the router skips all math",
+            "D) 50% because only odd-numbered experts execute"
+        ],
+        answer: "A",
+        explanation: "Osu! In a Top-2 of 8 architecture, exactly 2/8 = 25% of the expert parameters are activated per token! This allows the model to store 47B parameters of knowledge while maintaining the blazing fast inference speed of a 13B dense model."
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -818,6 +859,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('vlm') || hasPhrase('multimodal') || hasPhrase('vision') || hasPhrase('vit') || hasPhrase('clip') || hasPhrase('patch') || hasPhrase('cross attention') || hasPhrase('llava') || hasPhrase('perceiver') || hasPhrase('grounding') || hasPhrase('quest 15')) {
     return DOJO_KNOWLEDGE.quests['quest-15'].eli10;
+  }
+  if (hasPhrase('moe') || hasPhrase('mixture of experts') || hasPhrase('router') || hasPhrase('gating') || hasPhrase('top-k') || hasPhrase('switch transformer') || hasPhrase('mixtral') || hasPhrase('deepseek-v3') || hasPhrase('load balance') || hasPhrase('capacity factor') || hasPhrase('quest 16')) {
+    return DOJO_KNOWLEDGE.quests['quest-16'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

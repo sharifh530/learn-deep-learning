@@ -3057,6 +3057,247 @@ function q15SpatialGrounding() {
   };
 }
 
+
+// ==========================================
+// QUEST 16: MIXTURE-OF-EXPERTS & DYNAMIC ROUTING
+// ==========================================
+
+function q16DenseVsSparse() {
+  let g = '';
+  g += T(320, 18, 'Dense Transformers vs Sparse Mixture-of-Experts: Decoupling Capacity from FLOPs', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Dense FFN
+  g += rect(30, 42, 260, 140, { fill: 'rgba(239, 68, 68, 0.08)', stroke: C.rose, rx: 8 });
+  g += T(160, 60, 'Dense Transformer Layer', { size: 11, weight: 700, fill: C.rose });
+  g += T(160, 76, 'Every token activates 100% of parameters', { size: 8.5, fill: C.muted });
+
+  g += rect(65, 92, 190, 42, { fill: 'rgba(239, 68, 68, 0.2)', stroke: C.rose, sw: 1.5, rx: 6 });
+  g += T(160, 108, 'Unified Dense FFN (70B)', { size: 10, weight: 700, fill: '#fca5a5' });
+  g += T(160, 122, 'Active FLOPs = 100% (High Latency)', { size: 8, mono: true, fill: C.muted });
+  g += T(160, 160, 'Scaling cost: 2x Params = 2x FLOPs 🐢', { size: 8.5, fill: C.rose, weight: 600 });
+
+  // Right: Sparse MoE
+  g += rect(350, 42, 260, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(480, 60, 'Sparse MoE Layer (e.g. Mixtral 8x7B)', { size: 11, weight: 700, fill: C.emerald });
+  g += T(480, 76, 'Tokens route to Top-2 of 8 Experts', { size: 8.5, fill: C.muted });
+
+  // 8 small expert boxes
+  for (let i = 0; i < 8; i++) {
+    const ex = 365 + (i % 4) * 58;
+    const ey = 90 + Math.floor(i / 4) * 28;
+    const isActive = i === 1 || i === 4;
+    g += rect(ex, ey, 52, 22, {
+      fill: isActive ? 'rgba(16, 185, 129, 0.35)' : 'rgba(30, 41, 59, 0.6)',
+      stroke: isActive ? C.emerald : 'rgba(255, 255, 255, 0.1)',
+      sw: isActive ? 1.5 : 1,
+      rx: 3
+    });
+    g += T(ex + 26, ey + 14, `Exp ${i + 1}`, {
+      size: 7.5,
+      mono: true,
+      weight: isActive ? 700 : 400,
+      fill: isActive ? '#6ee7b7' : C.muted
+    });
+  }
+  g += T(480, 160, 'Active FLOPs = 25% (4x Inference Speedup) ⚡', { size: 8.5, fill: C.emerald, weight: 700 });
+
+  g += T(320, 204, 'MoE gives models the knowledge capacity of 47B+ parameters while spending the FLOP budget of a nimble 13B model.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By activating only a sparse subset of expert FFNs for each token, MoE models achieve massive parameter scaling without latency explosion.'
+  };
+}
+
+function q16TopKGating() {
+  let g = '';
+  g += T(320, 18, 'Top-k Softmax Gating: Logit Masking & Token Dispatching', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Input Token
+  g += rect(30, 60, 95, 80, { fill: 'rgba(56, 189, 248, 0.15)', stroke: C.cyan, rx: 6 });
+  g += T(77, 85, 'Token Vector x', { size: 9.5, weight: 700, fill: C.cyan });
+  g += T(77, 100, '"differential"', { size: 8.5, mono: true, fill: '#7dd3fc' });
+  g += T(77, 116, 'dim = 4096', { size: 7.5, mono: true, fill: C.muted });
+
+  // Arrow to Router
+  g += arrow(125, 100, 160, 100, 'cyan', 2);
+
+  // 2. Router Projection
+  g += rect(165, 50, 120, 100, { fill: 'rgba(139, 92, 246, 0.15)', stroke: C.violet, rx: 6 });
+  g += T(225, 70, 'Gating Router W_g', { size: 9.5, weight: 700, fill: C.violet });
+  g += T(225, 88, 'Compute 8 Logits', { size: 8, fill: C.muted });
+  g += T(225, 104, 'H = x · W_g', { size: 8.5, mono: true, fill: '#ddd6fe' });
+  g += T(225, 126, 'Keep Top-2 Only', { size: 8.5, weight: 600, fill: C.amber });
+
+  // Arrow to TopK Masking
+  g += arrow(285, 100, 320, 100, 'violet', 2);
+
+  // 3. Logits Masking & Normalized Softmax
+  g += rect(325, 45, 150, 110, { fill: 'rgba(15, 23, 42, 0.85)', stroke: 'rgba(255, 255, 255, 0.15)', rx: 6 });
+  g += T(400, 64, 'Top-2 Softmax Gating', { size: 9, weight: 700, fill: C.text });
+
+  // Winning Experts
+  g += rect(335, 76, 130, 22, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald, rx: 3 });
+  g += T(400, 90, 'Exp 1 (Math): g₁ = 0.68', { size: 7.5, mono: true, weight: 700, fill: '#6ee7b7' });
+
+  g += rect(335, 102, 130, 22, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald, rx: 3 });
+  g += T(400, 116, 'Exp 5 (Physics): g₂ = 0.32', { size: 7.5, mono: true, weight: 700, fill: '#6ee7b7' });
+
+  g += T(400, 142, 'Exp 2,3,4,6,7,8 ➔ -∞ (0.00)', { size: 7, mono: true, fill: '#64748b' });
+
+  // Arrow to Dispatch
+  g += arrow(475, 100, 505, 100, 'emerald', 2);
+
+  // 4. Output Combine
+  g += rect(510, 55, 105, 90, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(562, 75, 'Weighted Output', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(562, 94, 'y = g₁·E₁(x) +', { size: 8, mono: true, fill: '#ecfdf5' });
+  g += T(562, 110, '    g₂·E₅(x)', { size: 8, mono: true, fill: '#ecfdf5' });
+  g += T(562, 130, 'Normalized Σ = 1.0', { size: 7.5, fill: C.muted });
+
+  g += T(320, 204, 'The router projects tokens into expert logits, masks all but top-k entries to -infinity, and normalizes with softmax.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By masking non-top-k logits to negative infinity, tokens are evaluated only by the most capable expert sub-networks.'
+  };
+}
+
+function q16LoadBalancingLoss() {
+  let g = '';
+  g += T(320, 18, 'Router Collapse Catastrophe vs Auxiliary Load Balancing Loss', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Router Collapse (No aux loss)
+  g += rect(30, 42, 260, 140, { fill: 'rgba(239, 68, 68, 0.08)', stroke: C.rose, rx: 8 });
+  g += T(160, 60, '❌ Router Collapse (No L_aux)', { size: 10.5, weight: 700, fill: C.rose });
+  g += T(160, 76, 'Self-reinforcing starvation cycle', { size: 8, fill: C.muted });
+
+  // Imbalanced Bar Chart
+  g += rect(55, 95, 20, 65, { fill: '#ef4444', rx: 2 });
+  g += T(65, 90, '94%', { size: 7, mono: true, fill: '#fca5a5' });
+  for (let i = 1; i < 8; i++) {
+    const bx = 55 + i * 26;
+    g += rect(bx, 155, 20, 5, { fill: 'rgba(100, 116, 139, 0.4)', rx: 2 });
+    g += T(bx + 10, 150, '1%', { size: 6.5, mono: true, fill: '#64748b' });
+  }
+  g += T(160, 172, 'Exp 1 is overloaded • Experts 2-8 die!', { size: 8, fill: C.rose, weight: 600 });
+
+  // Right: Balanced with L_aux
+  g += rect(350, 42, 260, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(480, 60, '✅ Balanced Load (With L_aux)', { size: 10.5, weight: 700, fill: C.emerald });
+  g += T(480, 76, 'L_aux = α · E · Σ(f_i · P_i) forces uniformity', { size: 8, mono: true, fill: C.muted });
+
+  // Uniform Bar Chart
+  for (let i = 0; i < 8; i++) {
+    const bx = 375 + i * 26;
+    const h = 38 + (i % 3) * 6;
+    g += rect(bx, 160 - h, 20, h, { fill: '#10b981', rx: 2 });
+    g += T(bx + 10, 155 - h, '12%', { size: 7, mono: true, fill: '#6ee7b7' });
+  }
+  g += T(480, 172, 'Uniform traffic • All 8 experts specialize!', { size: 8, fill: C.emerald, weight: 600 });
+
+  g += T(320, 204, 'The auxiliary load balancing loss penalizes non-uniform routing, preventing a single celebrity expert from monopolizing training.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Without auxiliary load balancing, routers collapse into a dense regime where only 1 or 2 experts receive gradient updates while others starve.'
+  };
+}
+
+function q16TokenDroppingCapacity() {
+  let g = '';
+  g += T(320, 18, 'Distributed Expert Capacity & Token Dropping Bypasses', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Incoming Batch Tokens
+  g += rect(30, 45, 130, 135, { fill: 'rgba(15, 23, 42, 0.85)', stroke: C.cyan, rx: 6 });
+  g += T(95, 66, 'Incoming Tokens T', { size: 10, weight: 700, fill: C.cyan });
+  g += T(95, 82, 'Batch: 24 Tokens', { size: 8.5, mono: true, fill: C.muted });
+
+  for (let i = 0; i < 6; i++) {
+    g += rect(45, 96 + i * 12, 100, 9, { fill: 'rgba(56, 189, 248, 0.2)', rx: 2 });
+  }
+
+  // Arrow to Expert Buffer
+  g += arrow(165, 112, 205, 112, 'cyan', 2);
+
+  // Center: Expert Buffer with Capacity Limit
+  g += rect(210, 42, 220, 145, { fill: 'rgba(30, 41, 59, 0.7)', stroke: C.amber, rx: 8 });
+  g += T(320, 58, 'Expert Buffer (Capacity Factor C = 1.0)', { size: 9, weight: 700, fill: C.amber });
+  g += T(320, 72, 'Capacity = C · (T / E) = 1.0 · (24 / 4) = 6 Tokens', { size: 7.5, mono: true, fill: C.muted });
+
+  // 6 Accepted slots
+  for (let i = 0; i < 6; i++) {
+    g += rect(225, 82 + i * 11, 80, 8, { fill: 'rgba(16, 185, 129, 0.3)', stroke: C.emerald, rx: 2 });
+  }
+  g += T(265, 155, 'Accepted (6/6)', { size: 7.5, fill: C.emerald, weight: 600 });
+
+  // 3 Overflow / Dropped Tokens
+  for (let i = 0; i < 3; i++) {
+    g += rect(335, 82 + i * 11, 80, 8, { fill: 'rgba(239, 68, 68, 0.3)', stroke: C.rose, rx: 2 });
+  }
+  g += T(375, 122, 'Overflow Tokens (3)', { size: 7, fill: C.rose, weight: 600 });
+  g += T(375, 134, 'DROPPED! ⚠️', { size: 8, weight: 700, fill: C.rose });
+
+  // Arrow to Output & Residual Bypass
+  g += arrow(435, 100, 470, 85, 'emerald', 1.5);
+  g += arrow(435, 130, 470, 140, 'rose', 1.5);
+
+  // Right: Output Handling
+  g += rect(475, 45, 135, 135, { fill: 'rgba(15, 23, 42, 0.85)', stroke: C.border, rx: 6 });
+  g += T(542, 66, 'Token Dispatching', { size: 9.5, weight: 700, fill: C.text });
+  g += T(542, 88, 'Processed Tokens:', { size: 8, fill: C.emerald });
+  g += T(542, 100, 'y = FFN_e(x) + x', { size: 8, mono: true, fill: '#6ee7b7' });
+
+  g += T(542, 126, 'Dropped Tokens:', { size: 8, fill: C.rose });
+  g += T(542, 138, 'y = x (Residual Bypass)', { size: 8, mono: true, fill: '#fca5a5' });
+
+  g += T(320, 204, 'Fixed buffer capacities ensure deterministic GPU communication. Tokens exceeding capacity are safely bypassed via residual skip connections.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Capacity factor controls the buffer ceiling per expert. Overflow tokens bypass the expert via residual stream to prevent distributed pipeline delays.'
+  };
+}
+
+function q16ModernMoeArchitectures() {
+  let g = '';
+  g += T(320, 18, 'The MoE Paradigm Shift: Switch Transformers, Mixtral 8x7B & DeepSeek-V3', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Switch Transformer (Top-1)
+  g += rect(30, 42, 180, 140, { fill: 'rgba(30, 41, 59, 0.6)', stroke: C.cyan, rx: 6 });
+  g += T(120, 60, '1. Switch (Top-1)', { size: 10, weight: 700, fill: C.cyan });
+  g += T(120, 76, 'Google (Fedus et al., 2021)', { size: 7.5, fill: C.muted });
+  g += rect(45, 90, 150, 40, { fill: 'rgba(56, 189, 248, 0.12)', stroke: 'rgba(56, 189, 248, 0.3)', rx: 4 });
+  g += T(120, 105, 'k = 1 of 8 Experts', { size: 8.5, mono: true, weight: 700, fill: '#7dd3fc' });
+  g += T(120, 120, 'Zero weighting arithmetic', { size: 7.5, fill: C.muted });
+  g += T(120, 155, 'High token drop vulnerability', { size: 7.5, fill: C.rose });
+
+  // 2. Mixtral 8x7B (Top-2)
+  g += rect(230, 42, 180, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 6 });
+  g += T(320, 60, '2. Mixtral 8x7B (Top-2) ★', { size: 10, weight: 700, fill: C.emerald });
+  g += T(320, 76, 'Mistral AI (2023)', { size: 7.5, fill: C.muted });
+  g += rect(245, 90, 150, 40, { fill: 'rgba(16, 185, 129, 0.2)', stroke: C.emerald, rx: 4 });
+  g += T(320, 105, 'k = 2 of 8 Experts', { size: 8.5, mono: true, weight: 700, fill: '#6ee7b7' });
+  g += T(320, 120, '47B Total • 13B Active FLOPs', { size: 7.5, mono: true, fill: '#a7f3d0' });
+  g += T(320, 155, 'The sparse industry standard', { size: 7.5, fill: C.emerald, weight: 600 });
+
+  // 3. DeepSeek-V3 (Shared + Routed)
+  g += rect(430, 42, 180, 140, { fill: 'rgba(139, 92, 246, 0.12)', stroke: C.violet, rx: 6 });
+  g += T(520, 60, '3. DeepSeek-V3', { size: 10, weight: 700, fill: C.violet });
+  g += T(520, 76, 'DeepSeek (2024)', { size: 7.5, fill: C.muted });
+  g += rect(445, 90, 150, 40, { fill: 'rgba(139, 92, 246, 0.2)', stroke: C.violet, rx: 4 });
+  g += T(520, 104, '1 Shared + Top-8 of 256', { size: 8, mono: true, weight: 700, fill: '#ddd6fe' });
+  g += T(520, 118, '671B Total • 37B Active FLOPs', { size: 7.5, mono: true, fill: '#c4b5fd' });
+  g += T(520, 155, 'Fine-grained expert segmentation', { size: 7.5, fill: '#a78bfa', weight: 600 });
+
+  g += T(320, 204, 'MoE architectures evolved from single-expert routing to multi-expert synthesis and fine-grained micro-specialists with shared anchors.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Modern frontier architectures like DeepSeek-V3 combine dedicated shared experts with hundreds of fine-grained routed micro-experts.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -3073,7 +3314,8 @@ const VISUALS = {
   'quest-12': [q12VramExplosion, q12MatrixDecomposition, q12AdapterSwitching, q12WeightMerging, q12QloraQuantization],
   'quest-13': [q13System1VsSystem2, q13TreeOfThoughts, q13OrmVsPrm, q13GrpoArchitecture, q13TestTimeComputeScaling],
   'quest-14': [q14LlmToolBridge, q14ReactLoopCycle, q14JsonSchemaValidation, q14AgentSandboxSecurity, q14MultiAgentSwarm],
-  'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding]
+  'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding],
+  'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures]
 };
 
 let activeCleanups = [];

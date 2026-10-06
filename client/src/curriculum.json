@@ -3209,6 +3209,373 @@
           "breakdown": "f_v = Pretrained Vision Encoder, MLP = 2-layer GeLU multimodal projector, E_t = Text tokenizer embedding matrix, LLM = Auto-regressive transformer generating text & bounding box tokens."
         }
       }
+    },
+    {
+      "id": "quest-16",
+      "number": 16,
+      "title": "Mixture-of-Experts & Dynamic Routing",
+      "subtitle": "Sparse Top-k Gating, Load Balancing & Switch Transformers",
+      "tag": "MoE & Conditional Compute",
+      "icon": "🔀",
+      "xp": 300,
+      "story": "Master conditional compute. Discover how frontier LLMs like Mixtral 8x7B, Grok-1, and DeepSeek-V3 achieve colossal parameter capacity (100B–670B+) while activating only a small fraction (e.g. 2 of 8 experts, or 8 of 256 routed experts) per token, keeping FLOP inference latency equivalent to nimble lightweight models.",
+      "mentalModel": "A specialized hospital consult board: when a patient enters, a triage router assesses their symptoms and dispatches them only to the 2 most relevant specialists (e.g. Cardiologist + Neurologist), rather than requiring all 8 doctors to examine every patient simultaneously.",
+      "interactiveType": "moe_routing_lab",
+      "interactiveConfig": {
+        "experts": [
+          {
+            "id": 0,
+            "name": "Math & Formal Logic",
+            "icon": "📐",
+            "desc": "Calculus, differential equations, proofs, and algebraic manipulation"
+          },
+          {
+            "id": 1,
+            "name": "Python & Algorithmic Code",
+            "icon": "🐍",
+            "desc": "NumPy, data structures, profiling, and software architecture"
+          },
+          {
+            "id": 2,
+            "name": "Creative & Literary Writing",
+            "icon": "✍️",
+            "desc": "Metaphorical prose, poetry, dialogue, and storytelling"
+          },
+          {
+            "id": 3,
+            "name": "Multilingual & Translation",
+            "icon": "🌐",
+            "desc": "Cross-lingual alignment, Romance/Germanic/Asian syntax, idioms"
+          },
+          {
+            "id": 4,
+            "name": "Science & Quantum Physics",
+            "icon": "⚛️",
+            "desc": "Thermodynamics, quantum states, chemistry, and biology"
+          },
+          {
+            "id": 5,
+            "name": "Legal & Regulatory Analysis",
+            "icon": "⚖️",
+            "desc": "Compliance, commercial contracts, statutory precedents"
+          },
+          {
+            "id": 6,
+            "name": "Historical & Humanities Factoids",
+            "icon": "🏛️",
+            "desc": "Chronology, archival history, philosophy, and sociology"
+          },
+          {
+            "id": 7,
+            "name": "Common Sense & Pragmatics",
+            "icon": "💡",
+            "desc": "Spatial intuition, daily conversational cues, and sanity checks"
+          }
+        ],
+        "prompts": [
+          {
+            "id": "stem_math_code",
+            "title": "Differential Equation in Python",
+            "category": "STEM & Algorithmic Computing",
+            "text": "Solve the differential equation dy/dx + 2y = e^(-x) in Python NumPy.",
+            "tokens": [
+              "Solve",
+              "the",
+              "differential",
+              "equation",
+              "dy/dx",
+              "+",
+              "2y",
+              "=",
+              "e^(-x)",
+              "in",
+              "Python",
+              "NumPy."
+            ],
+            "expectedTopK": {
+              "differential": [
+                0,
+                4
+              ],
+              "equation": [
+                0,
+                4
+              ],
+              "dy/dx": [
+                0,
+                4
+              ],
+              "Python": [
+                1,
+                0
+              ],
+              "NumPy.": [
+                1,
+                0
+              ]
+            }
+          },
+          {
+            "id": "creative_haiku",
+            "title": "Obsidian Temple Haiku",
+            "category": "Creative & Literary Arts",
+            "text": "Compose an evocative haiku describing an obsidian temple amidst rain.",
+            "tokens": [
+              "Compose",
+              "an",
+              "evocative",
+              "haiku",
+              "describing",
+              "an",
+              "obsidian",
+              "temple",
+              "amidst",
+              "rain."
+            ],
+            "expectedTopK": {
+              "evocative": [
+                2,
+                7
+              ],
+              "haiku": [
+                2,
+                7
+              ],
+              "obsidian": [
+                2,
+                6
+              ],
+              "temple": [
+                2,
+                6
+              ],
+              "rain.": [
+                2,
+                7
+              ]
+            }
+          },
+          {
+            "id": "legal_french",
+            "title": "Force Majeure in French & English",
+            "category": "Multilingual & Commercial Law",
+            "text": "Explain Force Majeure clauses in commercial contracts in French and English.",
+            "tokens": [
+              "Explain",
+              "Force",
+              "Majeure",
+              "clauses",
+              "in",
+              "commercial",
+              "contracts",
+              "in",
+              "French",
+              "and",
+              "English."
+            ],
+            "expectedTopK": {
+              "Force": [
+                5,
+                3
+              ],
+              "Majeure": [
+                5,
+                3
+              ],
+              "clauses": [
+                5,
+                3
+              ],
+              "contracts": [
+                5,
+                7
+              ],
+              "French": [
+                3,
+                5
+              ],
+              "English.": [
+                3,
+                5
+              ]
+            }
+          },
+          {
+            "id": "quantum_box",
+            "title": "Particle in a 1D Box",
+            "category": "Theoretical Physics & Mechanics",
+            "text": "Calculate the ground-state wave function energy for a particle in a 1D box.",
+            "tokens": [
+              "Calculate",
+              "the",
+              "ground-state",
+              "wave",
+              "function",
+              "energy",
+              "for",
+              "a",
+              "particle",
+              "in",
+              "a",
+              "1D",
+              "box."
+            ],
+            "expectedTopK": {
+              "Calculate": [
+                0,
+                4
+              ],
+              "ground-state": [
+                4,
+                0
+              ],
+              "wave": [
+                4,
+                0
+              ],
+              "function": [
+                0,
+                4
+              ],
+              "particle": [
+                4,
+                0
+              ],
+              "1D": [
+                4,
+                0
+              ],
+              "box.": [
+                4,
+                7
+              ]
+            }
+          }
+        ],
+        "architectures": [
+          {
+            "id": "top1_switch",
+            "name": "Switch Transformer (Top-1)",
+            "activeRatio": "1 of 8 Experts (12.5% Active)",
+            "totalParams": "26 Billion",
+            "activeParams": "3.2 Billion",
+            "desc": "Maximum FLOP efficiency; each token routes to strictly one expert with high token dropping risk."
+          },
+          {
+            "id": "top2_mixtral",
+            "name": "Mixtral 8x7B (Top-2 of 8)",
+            "activeRatio": "2 of 8 Experts (25% Active)",
+            "totalParams": "46.7 Billion",
+            "activeParams": "12.9 Billion",
+            "desc": "The gold-standard sparse architecture; 2 experts per token provide rich multi-perspective synthesis."
+          },
+          {
+            "id": "shared_deepseek",
+            "name": "DeepSeek-V3 (1 Shared + Top-8 of 256)",
+            "activeRatio": "1 Shared + 8 of 256 Routed (3.5% Active)",
+            "totalParams": "671 Billion",
+            "activeParams": "37 Billion",
+            "desc": "Fine-grained expert granularity; 1 shared expert captures universal common sense, while 8 routed micro-experts specialize."
+          }
+        ]
+      },
+      "codeSnippet": "# Sparse Top-k Mixture-of-Experts (MoE) in PyTorch\nimport torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass SparseMoELayer(nn.Module):\n    def __init__(self, d_model=4096, d_ffn=14336, num_experts=8, top_k=2, aux_loss_weight=0.01):\n        super().__init__()\n        self.num_experts = num_experts\n        self.top_k = top_k\n        self.aux_loss_weight = aux_loss_weight\n        \n        # Gating Router Network\n        self.router = nn.Linear(d_model, num_experts, bias=False)\n        \n        # Expert Feed-Forward Networks\n        self.experts = nn.ModuleList([\n            nn.Sequential(\n                nn.Linear(d_model, d_ffn, bias=False),\n                nn.SiLU(),\n                nn.Linear(d_ffn, d_model, bias=False)\n            ) for _ in range(num_experts)\n        ])\n        \n    def forward(self, x):\n        # x: [batch * seq_len, d_model]\n        router_logits = self.router(x)  # [num_tokens, num_experts]\n        router_probs = F.softmax(router_logits, dim=-1)\n        \n        # Select top-k experts\n        topk_weights, topk_indices = torch.topk(router_probs, self.top_k, dim=-1)\n        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True) # Normalize\n        \n        # Auxiliary Load Balancing Loss: L_aux = alpha * N * sum(f_i * P_i)\n        # f_i = fraction of tokens routed to expert i\n        # P_i = average routing probability allocated to expert i\n        f = torch.zeros(self.num_experts, device=x.device)\n        f.scatter_add_(0, topk_indices.flatten(), torch.ones_like(topk_indices.flatten(), dtype=torch.float))\n        f = f / (x.size(0) * self.top_k)\n        P = router_probs.mean(dim=0)\n        aux_loss = self.aux_loss_weight * self.num_experts * torch.sum(f * P)\n        \n        # Dispatch tokens to selected experts\n        out = torch.zeros_like(x)\n        for k in range(self.top_k):\n            expert_idx = topk_indices[:, k]\n            weight = topk_weights[:, k].unsqueeze(-1)\n            for e in range(self.num_experts):\n                mask = (expert_idx == e)\n                if mask.any():\n                    out[mask] += weight[mask] * self.experts[e](x[mask])\n                    \n        return out, aux_loss\n\n# Verification\nx = torch.randn(12, 4096)  # 12 tokens\nmoe = SparseMoELayer(d_model=4096, d_ffn=14336, num_experts=8, top_k=2)\ny, aux_loss = moe(x)\nprint(f'MoE Output Shape: {y.shape} (12 tokens processed)')\nprint(f'Auxiliary Load Balancing Loss: {aux_loss.item():.6f}')",
+      "quiz": [
+        {
+          "question": "A model has 8 expert FFNs with 7 billion parameters each (plus 10 billion shared attention/embedding parameters, totaling ~66B parameters). If each token dynamically routes to Top-2 experts, what is the active parameter count per forward token pass?",
+          "options": [
+            "~24 Billion parameters (10B shared + 2 × 7B active)",
+            "~66 Billion parameters (all parameters are activated)",
+            "~7 Billion parameters (only 1 expert runs)",
+            "~14 Billion parameters (shared attention is skipped)"
+          ],
+          "correct": 0,
+          "explanation": "In sparse MoE, only the selected top-k experts execute FLOPs! Total active compute = Shared Attention (10B) + Top-2 Experts (2 × 7B = 14B) = ~24B parameters. The remaining 6 experts (42B parameters) remain idle in GPU VRAM for that token."
+        },
+        {
+          "question": "What is 'Router Collapse' (or expert starvation) in Mixture-of-Experts training, and how does the Auxiliary Load Balancing Loss (L_aux) prevent it?",
+          "options": [
+            "A positive feedback loop where the router sends almost all tokens to 1 or 2 experts, starving the remaining experts. L_aux penalizes non-uniform expert utilization by minimizing N * sum(f_i * P_i).",
+            "A hardware crash where GPUs run out of CUDA cores. L_aux downsizes the model to 8-bit precision.",
+            "The loss of positional embeddings during causal attention. L_aux adds RoPE rotary angles.",
+            "Gradient underflow in low-rank LoRA adapters. L_aux scales rank r by alpha."
+          ],
+          "correct": 0,
+          "explanation": "Without load balancing, slight early weight advantages cause the router to send more tokens to an expert, making it improve faster and attract even more tokens while other experts receive zero gradients. The auxiliary loss L_aux = alpha * N * sum(f_i * P_i) is minimized when tokens are distributed uniformly across all N experts."
+        },
+        {
+          "question": "In distributed MoE systems, what is the 'Capacity Factor' (C), and what happens when the number of tokens routed to an expert exceeds its allocated capacity?",
+          "options": [
+            "The Capacity Factor determines the maximum token buffer size per expert. Excess overflow tokens are dropped (bypassing the expert via residual skip connections).",
+            "The Capacity Factor specifies the temperature scaling factor of the softmax router.",
+            "The Capacity Factor measures the ratio of FP16 to INT8 quantized weights in VRAM.",
+            "The Capacity Factor dictates the number of layers in each expert FFN."
+          ],
+          "correct": 0,
+          "explanation": "To prevent stragglers and unbalanced communication across GPU nodes, each expert allocates a fixed token buffer: Capacity = C * (Total Tokens / Num Experts). If C=1.0 and 30% of tokens choose Expert 1, excess tokens exceeding capacity are 'dropped'—they bypass the expert FFN and pass directly to the next layer via residual connection."
+        }
+      ],
+      "lesson": {
+        "title": "Mixture-of-Experts & Dynamic Routing",
+        "subtitle": "Conditional Compute, Sparse Top-k Gating & Load Balancing",
+        "sections": [
+          {
+            "heading": "The Scaling Limit of Dense Models & Conditional Compute",
+            "analogy": "A hospital that employs 100 specialized doctors. In a dense model, all 100 doctors examine every single patient with a minor headache. In a sparse MoE model, a receptionist directs the patient only to the neurologist.",
+            "deepDive": "In standard dense Transformers (like GPT-3 or LLaMA-2), every single parameter in every Feed-Forward Network (FFN) is activated for every token generated. Doubling model parameter count doubles FLOPs and inference latency proportionally.\n\nMixture-of-Experts (MoE, Shazeer et al., 2017) decouples parameter capacity from FLOP computation through Conditional Compute. In an MoE layer, the standard dense FFN is replaced by an ensemble of E parallel independent FFNs called 'experts'.\n\nA lightweight gating network (Router) evaluates the token's hidden state and dynamically routes it to only the top-k most relevant experts (e.g. k=2 out of E=8). Because (E - k) experts remain inactive for that token, the model gains the capacity of a massive network while maintaining the speed and FLOP budget of a small model.",
+            "formulaCard": {
+              "name": "Sparse MoE Output Equation",
+              "equation": "y = \\sum_{i=1}^E G(x)_i \\cdot \\text{FFN}_i(x), \\quad \\text{where } \\|G(x)\\|_0 = k \\ll E",
+              "breakdown": "x = Token hidden vector, E = Total number of experts, FFN_i = i-th expert feedforward network, G(x)_i = Gating coefficient (non-zero for only k experts)."
+            }
+          },
+          {
+            "heading": "Softmax Gating & Top-k Dispatching",
+            "analogy": "An audition where 8 musicians play, but the judge selects only the top 2 highest-scoring performers to play the duet.",
+            "deepDive": "How does the router choose which experts receive a token? The gating network computes a linear projection from token hidden dimension d to expert logits: H(x) = x · W_g, where W_g in R^(d x E).\n\nTo ensure sparsity, the router keeps only the top-k highest logit values and masks all remaining (E - k) logits to -infinity: TopK(H(x), k)_i = H(x)_i if H(x)_i is in the top-k, else -infinity.\n\nA softmax is then applied over the masked logits: G(x) = Softmax(TopK(H(x), k)). This yields a normalized probability distribution where only k experts receive positive non-zero weights summing to 1.0. Tokens are dispatched, evaluated by the k experts in parallel, and combined via weighted sum.",
+            "formulaCard": {
+              "name": "Top-k Softmax Gating Function",
+              "equation": "G(x) = \\text{Softmax}\\Big( \\text{TopK}(x W_g + \\epsilon, \\; k) \\Big), \\quad \\epsilon \\sim \\mathcal{N}(0, \\sigma^2)",
+              "breakdown": "W_g = Router weight matrix, TopK = Keeps k largest entries and sets others to -inf, epsilon = Optional Gaussian exploration noise during pretraining."
+            }
+          },
+          {
+            "heading": "The Catastrophe of Router Collapse & Auxiliary Load Balancing",
+            "analogy": "A popular restaurant where 1 waiter is overwhelmed with 100 tables while 7 other waiters sit idle in the break room playing cards.",
+            "deepDive": "During early training, random weight initialization may make Expert 1 slightly better at common syntax. The router naturally routes more tokens to Expert 1. In turn, Expert 1 receives more gradient updates, grows even more competent, and attracts even more tokens.\n\nThis self-reinforcing vicious cycle is called Router Collapse: 1 or 2 'celebrity' experts process 95% of the dataset, while the remaining experts starve and never learn ('dead experts'). The model collapses into a dense network with underutilized VRAM.\n\nTo enforce uniform expert specialization, modern MoE models inject an Auxiliary Load Balancing Loss L_aux: L_aux = alpha * E * sum_{i=1}^E (f_i * P_i), where f_i is the fraction of tokens routed to expert i, and P_i is the average probability mass allocated to expert i. By Cauchy-Schwarz inequality, this loss is strictly minimized when f_i = 1/E and P_i = 1/E for all experts.",
+            "formulaCard": {
+              "name": "Auxiliary Load Balancing Loss",
+              "equation": "\\mathcal{L}_{\\text{aux}} = \\alpha \\cdot E \\sum_{i=1}^E f_i \\cdot P_i, \\quad f_i = \\frac{1}{T} \\sum_{t=1}^T \\mathbb{I}(\\text{token } t \\to i), \\; P_i = \\frac{1}{T} \\sum_{t=1}^T G(x_t)_i",
+              "breakdown": "E = Number of experts, T = Total tokens in batch, f_i = Empirical routing frequency, P_i = Mean routing probability mass, alpha = Loss scaling hyperparameter (typically 0.01 to 0.05)."
+            }
+          },
+          {
+            "heading": "Capacity Factor & Token Dropping in Distributed Hardware",
+            "analogy": "An airline flight where every expert has exactly 20 passenger seats. If 25 passengers try to board, 5 must take the standby bypass train.",
+            "deepDive": "In distributed multi-GPU training (Expert Parallelism), different experts reside on different physical GPUs. If expert routing were completely dynamic, GPU communication would suffer severe pipeline bubbles due to straggler nodes waiting for overloaded experts.\n\nTo ensure deterministic tensor shapes, engineers define an Expert Capacity buffer: Capacity = C * (T / E), where C is the Capacity Factor (typically 1.0 to 1.5), T is total tokens, and E is number of experts.\n\nIf more than Capacity tokens are routed to a single expert, the excess tokens are dropped! Dropped tokens skip expert FFN computation entirely and pass directly through the residual skip connection: y_t = x_t. While token dropping saves GPU synchronization, high dropping rates degrade perplexity, motivating careful tuning of C.",
+            "formulaCard": {
+              "name": "Expert Token Capacity Formula",
+              "equation": "\\text{Capacity} = \\left\\lceil C \\times \\frac{\\text{Batch Size} \\times \\text{Seq Len}}{E} \\right\\rceil",
+              "breakdown": "C = Capacity factor (e.g. 1.25 allows 25% overflow headroom), E = Total experts. Overflow tokens beyond Capacity are bypassed via residual stream."
+            }
+          },
+          {
+            "heading": "Modern Architectures: Switch Transformers, Mixtral 8x7B & DeepSeek-V3",
+            "analogy": "The evolution of sports teams: from a single star player (Switch Top-1), to dynamic tag-team pairs (Mixtral Top-2), to a massive synchronized squad of 256 micro-specialists led by an all-rounder anchor (DeepSeek-V3).",
+            "deepDive": "The MoE landscape has evolved through distinct architectural breakthroughs:\n\n1. Switch Transformer (Fedus et al., 2021): Pioneered Top-1 routing (k=1). Simplified communication and eliminated weighting math, proving models could scale past 1 Trillion parameters efficiently.\n\n2. Mixtral 8x7B (Mistral AI, 2023): Popularized Top-2 routing (k=2) across E=8 experts. With 47B total parameters and 13B active parameters per token, it matched or outperformed dense LLaMA-2 70B while running 3x faster.\n\n3. DeepSeek-V3 (DeepSeek, 2024): Introduced Fine-Grained Expert Segmentation with Shared Experts. Instead of 8 large experts, it deploys 256 micro-experts and activates top-8 per token. Critically, 1 expert is designated as a Shared Expert that runs unconditionally for every token, capturing universal linguistic common sense while the 8 routed micro-experts handle granular specialization.",
+            "formulaCard": {
+              "name": "Shared + Routed Fine-Grained MoE (DeepSeek-V3)",
+              "equation": "y = \\text{FFN}_{\\text{shared}}(x) + \\sum_{i \\in \\text{Top-8}} g_i \\cdot \\text{FFN}_{i}(x)",
+              "breakdown": "FFN_shared = Dedicated shared expert capturing general linguistic knowledge, Top-8 = Fine-grained routed experts selected from 256 micro-experts."
+            }
+          }
+        ],
+        "formula": {
+          "name": "Unified Sparse Mixture-of-Experts Layer",
+          "equation": "y = x + \\sum_{i=1}^k g_i \\cdot \\text{FFN}_{\\sigma(i)}(x), \\quad \\sigma = \\text{arg-top-k}(x W_g), \\; g = \\text{Softmax}(\\{ x W_{g, \\sigma(i)} \\})",
+          "breakdown": "x = Token input, W_g = Router projection weights, sigma = Set of k chosen expert indices, FFN = SwiGLU expert feedforward network."
+        }
+      }
     }
   ]
 }
