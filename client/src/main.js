@@ -149,7 +149,15 @@ const state = {
   worldCurrentFrame: 4,
   worldMotionScale: 2.5,
   worldSimAction: 'accelerate', // 'steer_left' | 'accelerate' | 'steer_right' | 'brake'
-  worldRolloutSteps: 5
+  worldRolloutSteps: 5,
+  // Quest 20: Embodied AI & Robotics Foundation Models state
+  robotScenarioIdx: 0,
+  robotActiveTab: 'vla_teleop', // 'vla_teleop' | 'action_chunking' | 'diffusion_policy'
+  robotChunkSizeIdx: 1, // 0: k=10, 1: k=50, 2: k=100
+  robotEePos: [0.35, -0.15, 0.22],
+  robotGripperState: 0.0,
+  robotPathMode: 'diffusion_policy', // 'mse_average' | 'diffusion_policy'
+  robotDenoiseStep: 16
 };
 
 const tutorService = new AITutorService();
@@ -779,6 +787,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'world_model_video_lab':
       renderWorldModelVideoLabWidget(quest);
+      break;
+    case 'embodied_robotics_lab':
+      renderEmbodiedRoboticsLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -13934,6 +13945,648 @@ function renderWorldModelVideoLabWidget(quest) {
 }
 
 
+
+// --- WIDGET 20: Embodied AI & Robotics Lab ---
+function renderEmbodiedRoboticsLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'embodied-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [
+    {
+      id: 'kitchen_manipulation',
+      title: 'Pick and Place Golden Apple into Fruit Bowl',
+      category: 'Household Dexterous Manipulation',
+      prompt: 'Pick up the ripe golden apple from the cutting board and place it gently inside the porcelain fruit bowl without bruising.',
+      targetCoords: [0.35, -0.15, 0.22],
+      controlHz: 50,
+      successRate: '96.4%'
+    },
+    {
+      id: 'tabletop_assembly',
+      title: 'Precision Electronic Connector Insertion',
+      category: 'High-Precision Industrial Contact',
+      prompt: 'Align the 12-pin ribbon cable connector with the PCB header slot with sub-millimeter precision and insert until locked.',
+      targetCoords: [0.18, 0.24, 0.08],
+      controlHz: 100,
+      successRate: '94.8%'
+    },
+    {
+      id: 'dual_arm_folding',
+      title: 'Bimanual Cloth Folding & Fabric Smoothing',
+      category: 'Deformable Object Manipulation',
+      prompt: 'Grasp the two top corners of the linen towel with both robotic grippers, lift simultaneously, and fold symmetrically across the center axis.',
+      targetCoords: [0.0, 0.32, 0.15],
+      controlHz: 50,
+      successRate: '91.2%'
+    },
+    {
+      id: 'hazardous_valve',
+      title: 'Industrial High-Pressure Valve Turning',
+      category: 'Heavy Torque & Contact Dynamics',
+      prompt: 'Grasp the circular valve wheel with high-friction silicone pads, exert 15 Nm rotational torque counter-clockwise to shut off flow.',
+      targetCoords: [-0.25, 0.18, 0.45],
+      controlHz: 50,
+      successRate: '98.1%'
+    }
+  ];
+
+  const chunkConfigs = [
+    { label: 'k = 10 (Fast Reactive • 0.2s)', k: 10, rmse: '0.024 m', smoothness: '84%' },
+    { label: 'k = 50 (Standard ACT • 1.0s) ★', k: 50, rmse: '0.011 m', smoothness: '97%' },
+    { label: 'k = 100 (Long Horizon • 2.0s)', k: 100, rmse: '0.019 m', smoothness: '92%' }
+  ];
+
+  let scenarioIdx = state.robotScenarioIdx || 0;
+  if (scenarioIdx >= scenarios.length) scenarioIdx = 0;
+  let activeTab = state.robotActiveTab || 'vla_teleop';
+  let chunkIdx = state.robotChunkSizeIdx ?? 1;
+  let eePos = state.robotEePos ? [...state.robotEePos] : [0.35, -0.15, 0.22];
+  let gripperState = state.robotGripperState ?? 0.0;
+  let pathMode = state.robotPathMode || 'diffusion_policy';
+  let denoiseStep = state.robotDenoiseStep ?? 16;
+  let isExecutingTrajectory = false;
+
+  let xpVlaClaimed = false;
+  let xpActClaimed = false;
+  let xpDiffPolicyClaimed = false;
+
+  const currentSc = scenarios[scenarioIdx];
+  const curChunk = chunkConfigs[chunkIdx];
+
+  // Helper: map coordinate [-0.5, 0.5] to discrete token bin [0, 255]
+  function coordToBin(val, min = -0.5, max = 0.5) {
+    const clamped = Math.max(min, Math.min(max, val));
+    return Math.floor(((clamped - min) / (max - min)) * 255);
+  }
+
+  // Generate Robot Arm Kinematics SVG
+  function generateRobotArmSvg() {
+    const startX = 60;
+    const startY = 160;
+    // Map End-Effector X, Y to canvas coordinates
+    const targetX = 260 + eePos[0] * 120;
+    const targetY = 160 - eePos[2] * 180;
+
+    // Inverse kinematics 2-joint visual approximation
+    const midX = (startX + targetX) / 2 + 15;
+    const midY = Math.min(startY, targetY) - 35;
+
+    let svgInner = '';
+
+    // Worktable surface
+    svgInner += `
+      <rect x="20" y="165" width="380" height="25" rx="3" fill="#0f172a" stroke="rgba(255,255,255,0.1)"/>
+      <line x1="20" y1="165" x2="400" y2="165" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="390" y="180" fill="#64748b" font-size="7.5" font-family="monospace" text-anchor="end">Worktable Manifold</text>
+    `;
+
+    // Target Goal Position (Apple / Connector)
+    const goalX = 260 + currentSc.targetCoords[0] * 120;
+    const goalY = 160 - currentSc.targetCoords[2] * 180;
+    svgInner += `
+      <circle cx="${goalX}" cy="${goalY}" r="12" fill="rgba(16, 185, 129, 0.25)" stroke="#10b981" stroke-width="1.8" stroke-dasharray="3,2"/>
+      <text x="${goalX}" y="${goalY + 3}" fill="#34d399" font-size="8" font-weight="bold" text-anchor="middle">🎯</text>
+      <text x="${goalX}" y="${goalY + 22}" fill="#34d399" font-size="7.5" font-family="monospace" text-anchor="middle">Goal</text>
+    `;
+
+    // Robot Base
+    svgInner += `
+      <rect x="${startX - 20}" y="${startY - 5}" width="40" height="15" rx="3" fill="#334155" stroke="#64748b"/>
+      <circle cx="${startX}" cy="${startY}" r="8" fill="#475569" stroke="#94a3b8" stroke-width="1.5"/>
+    `;
+
+    // Arm Link 1 (Base to Elbow)
+    svgInner += `
+      <line x1="${startX}" y1="${startY}" x2="${midX}" y2="${midY}" stroke="#60a5fa" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="${midX}" cy="${midY}" r="6" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+    `;
+
+    // Arm Link 2 (Elbow to Wrist)
+    svgInner += `
+      <line x1="${midX}" y1="${midY}" x2="${targetX}" y2="${targetY}" stroke="#38bdf8" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="${targetX}" cy="${targetY}" r="5" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/>
+    `;
+
+    // End-Effector Gripper
+    const gripGap = gripperState > 0.5 ? 4 : 12;
+    svgInner += `
+      <g>
+        <line x1="${targetX - gripGap}" y1="${targetY}" x2="${targetX - gripGap}" y2="${targetY + 14}" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+        <line x1="${targetX + gripGap}" y1="${targetY}" x2="${targetX + gripGap}" y2="${targetY + 14}" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+        <text x="${targetX}" y="${targetY - 10}" fill="#fde68a" font-size="7.5" font-family="monospace" font-weight="bold" text-anchor="middle">
+          EE (${eePos[0].toFixed(2)}, ${eePos[2].toFixed(2)})
+        </text>
+      </g>
+    `;
+
+    return `
+      <svg class="robot-arm-svg" viewBox="0 0 420 195" preserveAspectRatio="xMidYMid meet">
+        ${svgInner}
+      </svg>
+    `;
+  }
+
+  // Trajectory Diffusion vs MSE Arena SVG
+  function generateTrajectoryArenaSvg() {
+    let svgInner = '';
+    const startX = 60;
+    const startY = 100;
+    const goalX = 360;
+    const goalY = 100;
+
+    // Obstacle Box in Center
+    svgInner += `
+      <rect x="185" y="70" width="50" height="60" rx="6" fill="rgba(239, 68, 68, 0.25)" stroke="#ef4444" stroke-width="2"/>
+      <text x="210" y="102" fill="#fca5a5" font-size="8.5" font-weight="bold" text-anchor="middle">OBSTACLE</text>
+      <text x="210" y="116" fill="#fca5a5" font-size="6.8" font-family="monospace" text-anchor="middle">Rigid Barrier</text>
+    `;
+
+    // Start & Goal Dots
+    svgInner += `
+      <circle cx="${startX}" cy="${startY}" r="8" fill="#3b82f6" stroke="#93c5fd" stroke-width="2"/>
+      <text x="${startX}" y="${startY + 22}" fill="#60a5fa" font-size="8" font-family="monospace" text-anchor="middle">Start a_0</text>
+      
+      <circle cx="${goalX}" cy="${goalY}" r="9" fill="#10b981" stroke="#a7f3d0" stroke-width="2"/>
+      <text x="${goalX}" y="${goalY + 22}" fill="#34d399" font-size="8" font-family="monospace" text-anchor="middle">Target a_T</text>
+    `;
+
+    if (pathMode === 'mse_average') {
+      // MSE Straight line crashing into obstacle
+      svgInner += `
+        <line x1="${startX}" y1="${startY}" x2="185" y2="${startY}" stroke="#f87171" stroke-width="3" stroke-dasharray="4,2"/>
+        <circle cx="185" cy="${startY}" r="7" fill="#ef4444" stroke="#fff" stroke-width="2"/>
+        <text x="185" y="${startY - 14}" fill="#ef4444" font-size="9" font-weight="bold" text-anchor="middle">💥 CRASH!</text>
+        <text x="120" y="88" fill="#fca5a5" font-size="7.5" font-family="monospace">Mean of Modes: (Left+Right)/2</text>
+      `;
+    } else {
+      // Diffusion Policy Mode - Clean Curve around Obstacle
+      const denoiseProgress = (16 - denoiseStep) / 16;
+      const arcHeight = 45;
+      const isDenoised = denoiseStep <= 4;
+      const strokeColr = isDenoised ? '#10b981' : '#f59e0b';
+      const strokeW = isDenoised ? 3 : 2;
+
+      svgInner += `
+        <path d="M ${startX},${startY} Q 210,${startY - arcHeight} ${goalX},${goalY}" fill="none" stroke="${strokeColr}" stroke-width="${strokeW}" />
+        <text x="210" y="${startY - arcHeight - 8}" fill="${strokeColr}" font-size="8.5" font-weight="bold" text-anchor="middle" font-family="monospace">
+          Diffusion Policy Mode A (Clears Obstacle!)
+        </text>
+      `;
+
+      // Alternative mode ghost path (bimodal representation)
+      svgInner += `
+        <path d="M ${startX},${startY} Q 210,${startY + arcHeight} ${goalX},${goalY}" fill="none" stroke="rgba(56, 189, 248, 0.45)" stroke-width="1.8" stroke-dasharray="3,3"/>
+        <text x="210" y="${startY + arcHeight + 16}" fill="#38bdf8" font-size="7.5" font-family="monospace" text-anchor="middle">
+          Mode B (Counterfactual Valid Trajectory)
+        </text>
+      `;
+    }
+
+    return `
+      <svg class="arena-svg" viewBox="0 0 420 180" preserveAspectRatio="xMidYMid meet">
+        ${svgInner}
+      </svg>
+    `;
+  }
+
+  // HTML Structure
+  container.innerHTML = `
+    <div class="embodied-lab-header">
+      <div class="embodied-title-row">
+        <div class="embodied-title-badge">
+          <span class="embodied-icon">🤖</span>
+          <div>
+            <h3>Embodied AI & Robotics: VLA & Diffusion Policy Lab</h3>
+            <p class="embodied-subtitle">Explore physical foundation models: convert continuous 6-DoF kinematics into discrete VLA tokens, evaluate Action Chunking with Transformers (ACT), and execute multimodal trajectories with Diffusion Policy.</p>
+          </div>
+        </div>
+        <div class="embodied-tab-nav">
+          <button class="embodied-tab-btn ${activeTab === 'vla_teleop' ? 'active' : ''}" data-tab="vla_teleop">🦾 VLA Action Tokenizer</button>
+          <button class="embodied-tab-btn ${activeTab === 'action_chunking' ? 'active' : ''}" data-tab="action_chunking">📦 Action Chunking (ACT)</button>
+          <button class="embodied-tab-btn ${activeTab === 'diffusion_policy' ? 'active' : ''}" data-tab="diffusion_policy">⚡ Diffusion Policy Arena</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Selector Bar -->
+    <div class="embodied-scenario-bar">
+      <span class="sc-label">Robotic Manipulation Task:</span>
+      <div class="sc-btn-group">
+        ${scenarios.map((sc, i) => `
+          <button class="embodied-sc-btn ${i === scenarioIdx ? 'active' : ''}" data-sc-idx="${i}">
+            <span class="sc-badge-dot" style="background: ${i === 0 ? '#10b981' : (i === 1 ? '#38bdf8' : (i === 2 ? '#a855f7' : '#f59e0b'))};"></span>
+            ${sc.title}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: VLA ACTION TOKENIZER & TELEOP -->
+    <div class="embodied-tab-panel" id="panel-vla-teleop" style="display: ${activeTab === 'vla_teleop' ? 'block' : 'none'};">
+      <div class="embodied-grid-2col">
+        <!-- Left: Kinematics Visualizer & Teleop Sliders -->
+        <div class="embodied-card arm-card">
+          <div class="card-head">
+            <h4><span class="icon">🦾</span> 7-DoF Robot Arm End-Effector Control</h4>
+            <span class="badge category-badge">${currentSc.category}</span>
+          </div>
+          <p class="sc-desc">${currentSc.prompt}</p>
+
+          <div class="arm-viewport" id="arm-viewport">
+            ${generateRobotArmSvg()}
+          </div>
+
+          <!-- Coordinate Sliders -->
+          <div class="teleop-controls">
+            <div class="control-row">
+              <label for="ee-x-slider">X Position: <strong id="val-x">${eePos[0].toFixed(2)} m</strong></label>
+              <input type="range" id="ee-x-slider" min="-0.5" max="0.5" step="0.02" value="${eePos[0]}" class="embodied-slider">
+            </div>
+            <div class="control-row">
+              <label for="ee-z-slider">Z Height: <strong id="val-z">${eePos[2].toFixed(2)} m</strong></label>
+              <input type="range" id="ee-z-slider" min="0.05" max="0.5" step="0.02" value="${eePos[2]}" class="embodied-slider">
+            </div>
+            <div class="gripper-toggle-row">
+              <span class="lbl">Parallel Jaw Gripper:</span>
+              <button class="btn-gripper ${gripperState > 0.5 ? 'closed' : 'open'}" id="btn-toggle-gripper">
+                ${gripperState > 0.5 ? '🔒 Closed [1.0]' : '🔓 Open [0.0]'}
+              </button>
+            </div>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-vla-xp">
+              🦾 Claim +20 XP: VLA Action Tokenization Mastered
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: VLA 256 Action Token Bins -->
+        <div class="embodied-card tokens-card">
+          <div class="card-head">
+            <h4><span class="icon">🔤</span> VLA Vocabulary Token Discretization</h4>
+            <span class="badge vla-badge">256 Numerical Bins</span>
+          </div>
+
+          <div class="token-bins-display">
+            <div class="bin-item">
+              <span class="b-lbl">ΔX Position:</span>
+              <div class="token-chip rose">
+                <code>&lt;action_x_${coordToBin(eePos[0])}&gt;</code>
+              </div>
+              <span class="b-coord">${eePos[0].toFixed(3)} m</span>
+            </div>
+            <div class="bin-item">
+              <span class="b-lbl">ΔY Position:</span>
+              <div class="token-chip blue">
+                <code>&lt;action_y_${coordToBin(eePos[1])}&gt;</code>
+              </div>
+              <span class="b-coord">${eePos[1].toFixed(3)} m</span>
+            </div>
+            <div class="bin-item">
+              <span class="b-lbl">ΔZ Height:</span>
+              <div class="token-chip emerald">
+                <code>&lt;action_z_${coordToBin(eePos[2])}&gt;</code>
+              </div>
+              <span class="b-coord">${eePos[2].toFixed(3)} m</span>
+            </div>
+            <div class="bin-item">
+              <span class="b-lbl">Gripper State:</span>
+              <div class="token-chip amber">
+                <code>&lt;gripper_${gripperState > 0.5 ? '255' : '0'}&gt;</code>
+              </div>
+              <span class="b-coord">${gripperState > 0.5 ? 'Grip Closed' : 'Grip Open'}</span>
+            </div>
+          </div>
+
+          <div class="vla-stats-box">
+            <div class="stat-row">
+              <span class="s-lbl">Closed-Loop Control Rate:</span>
+              <strong>${currentSc.controlHz} Hz (20 ms loop)</strong>
+            </div>
+            <div class="stat-row">
+              <span class="s-lbl">Task Physical Success Rate:</span>
+              <strong class="success">${currentSc.successRate}</strong>
+            </div>
+            <div class="stat-row">
+              <span class="s-lbl">Pretrained VLA Backbone:</span>
+              <strong class="highlight">OpenVLA (Prismatic-7B)</strong>
+            </div>
+          </div>
+
+          <div class="vla-explainer-box">
+            <span class="box-title">Why Tokenize Motor Actions?</span>
+            <p>Discretizing physical continuous control into tokens allows standard LLMs to output robot movements as native text predictions, inheriting billions of parameters of pre-trained common sense!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ACTION CHUNKING (ACT) -->
+    <div class="embodied-tab-panel" id="panel-action-chunking" style="display: ${activeTab === 'action_chunking' ? 'block' : 'none'};">
+      <div class="act-layout">
+        <!-- ACT Header Card -->
+        <div class="embodied-card act-header-card">
+          <div class="card-head">
+            <h4><span class="icon">📦</span> Action Chunking with Transformers (ACT)</h4>
+            <span class="badge act-badge">Temporal Ensembling</span>
+          </div>
+          <p class="sc-desc">
+            Single-step policies suffer from <strong>covariate shift</strong>: a 1-millimeter error compounds until the robot misses the goal. ACT predicts an entire trajectory chunk <code>A_{t:t+k}</code> at once, blending overlapping chunks with exponential weights:
+          </p>
+
+          <!-- Chunk Size Selector -->
+          <div class="chunk-picker-row">
+            <span class="picker-lbl">Trajectory Horizon (k timesteps):</span>
+            <div class="chunk-btn-group">
+              ${chunkConfigs.map((cc, idx) => `
+                <button class="chunk-btn ${idx === chunkIdx ? 'active' : ''}" data-chunk-idx="${idx}">
+                  ${cc.label}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- ACT Metrics Grid -->
+          <div class="act-metrics-grid">
+            <div class="act-metric-box">
+              <span class="m-lbl">Trajectory Tracking RMSE</span>
+              <span class="m-val highlight" id="m-rmse-disp">${curChunk.rmse}</span>
+              <span class="m-sub">Sub-centimeter accuracy</span>
+            </div>
+            <div class="act-metric-box">
+              <span class="m-lbl">Kinematic Smoothness</span>
+              <span class="m-val success" id="m-smooth-disp">${curChunk.smoothness}</span>
+              <span class="m-sub">Jerk-free motion profile</span>
+            </div>
+            <div class="act-metric-box">
+              <span class="m-lbl">Temporal Ensemble Window</span>
+              <span class="m-val">${(curChunk.k * 0.02).toFixed(1)}s Horizon</span>
+              <span class="m-sub">Exponentially blended</span>
+            </div>
+            <div class="act-metric-box">
+              <span class="m-lbl">Covariate Shift Drift</span>
+              <span class="m-val success">&lt; 0.5% Drift</span>
+              <span class="m-sub">Eliminates error compounding</span>
+            </div>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-act-xp">
+              📦 Claim +25 XP: Action Chunking & ACT Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: DIFFUSION POLICY ARENA -->
+    <div class="embodied-tab-panel" id="panel-diffusion-policy" style="display: ${activeTab === 'diffusion_policy' ? 'block' : 'none'};">
+      <div class="diff-policy-layout">
+        <div class="embodied-card arena-card">
+          <div class="card-head">
+            <h4><span class="icon">⚡</span> Multimodal Trajectory Generation Arena</h4>
+            <div class="path-mode-picker">
+              <span class="lbl">Policy Formulation:</span>
+              <button class="mode-btn ${pathMode === 'mse_average' ? 'active danger' : ''}" data-mode="mse_average">MSE (Mean Crash)</button>
+              <button class="mode-btn ${pathMode === 'diffusion_policy' ? 'active success' : ''}" data-mode="diffusion_policy">Diffusion Policy ★</button>
+            </div>
+          </div>
+          <p class="sc-desc">
+            Observe the fatal flaw of MSE imitation learning: when demonstrations dodge both Left and Right around an obstacle, MSE calculates the arithmetic mean—driving straight into the obstacle! Diffusion Policy generates valid collision-free paths.
+          </p>
+
+          <div class="arena-viewport" id="arena-viewport">
+            ${generateTrajectoryArenaSvg()}
+          </div>
+
+          <!-- Denoising Scrubber -->
+          <div class="denoise-scrubber-box">
+            <div class="scrub-head">
+              <label for="denoise-slider">Diffusion Denoising Step (k): <strong id="step-disp">Step ${denoiseStep}</strong> / 16</label>
+              <span class="active-focus" id="step-focus-lbl">${denoiseStep <= 4 ? 'Clean Collision-Free Trajectory' : 'Iterative Action Denoising'}</span>
+            </div>
+            <input type="range" id="denoise-slider" min="0" max="16" value="${denoiseStep}" class="embodied-slider">
+          </div>
+
+          <div class="arena-footer-row">
+            <button class="btn-run-trajectory" id="btn-run-robot-trajectory">
+              <span class="icon">🚀</span> Execute Trajectory on Robot Arm
+            </button>
+            <button class="btn-claim-xp" id="btn-claim-diff-xp">
+              🤖 Claim +30 XP: Diffusion Policy & Embodied AI Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach to DOM
+  dom.interactiveContainer.innerHTML = '';
+  dom.interactiveContainer.appendChild(container);
+
+  // Tab switching
+  const tabBtns = container.querySelectorAll('.embodied-tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.getAttribute('data-tab');
+      state.robotActiveTab = activeTab;
+
+      container.querySelector('#panel-vla-teleop').style.display = activeTab === 'vla_teleop' ? 'block' : 'none';
+      container.querySelector('#panel-action-chunking').style.display = activeTab === 'action_chunking' ? 'block' : 'none';
+      container.querySelector('#panel-diffusion-policy').style.display = activeTab === 'diffusion_policy' ? 'block' : 'none';
+      soundFx.playBlip(620, 0.05);
+    });
+  });
+
+  // Scenario buttons
+  const scBtns = container.querySelectorAll('.embodied-sc-btn');
+  scBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      scenarioIdx = parseInt(btn.getAttribute('data-sc-idx'), 10);
+      state.robotScenarioIdx = scenarioIdx;
+      renderEmbodiedRoboticsLabWidget(quest);
+      soundFx.playBlip(500, 0.06);
+    });
+  });
+
+  // Teleoperation Sliders
+  const sliderX = container.querySelector('#ee-x-slider');
+  const sliderZ = container.querySelector('#ee-z-slider');
+
+  function updateTeleopUI() {
+    state.robotEePos = [...eePos];
+    const armVp = container.querySelector('#arm-viewport');
+    if (armVp) armVp.innerHTML = generateRobotArmSvg();
+
+    const valX = container.querySelector('#val-x');
+    if (valX) valX.textContent = `${eePos[0].toFixed(2)} m`;
+    const valZ = container.querySelector('#val-z');
+    if (valZ) valZ.textContent = `${eePos[2].toFixed(2)} m`;
+
+    const tokenChips = container.querySelectorAll('.token-bins-display code');
+    if (tokenChips.length >= 3) {
+      tokenChips[0].textContent = `<action_x_${coordToBin(eePos[0])}>`;
+      tokenChips[2].textContent = `<action_z_${coordToBin(eePos[2])}>`;
+    }
+  }
+
+  if (sliderX) {
+    sliderX.addEventListener('input', (e) => {
+      eePos[0] = parseFloat(e.target.value);
+      updateTeleopUI();
+      soundFx.playBlip(480, 0.02);
+    });
+  }
+
+  if (sliderZ) {
+    sliderZ.addEventListener('input', (e) => {
+      eePos[2] = parseFloat(e.target.value);
+      updateTeleopUI();
+      soundFx.playBlip(520, 0.02);
+    });
+  }
+
+  // Gripper toggle
+  const btnGripper = container.querySelector('#btn-toggle-gripper');
+  if (btnGripper) {
+    btnGripper.addEventListener('click', () => {
+      gripperState = gripperState > 0.5 ? 0.0 : 1.0;
+      state.robotGripperState = gripperState;
+      btnGripper.className = `btn-gripper ${gripperState > 0.5 ? 'closed' : 'open'}`;
+      btnGripper.textContent = gripperState > 0.5 ? '🔒 Closed [1.0]' : '🔓 Open [0.0]';
+      updateTeleopUI();
+      soundFx.playBlip(gripperState > 0.5 ? 700 : 380, 0.06);
+    });
+  }
+
+  // Chunk picker buttons
+  const chunkBtns = container.querySelectorAll('.chunk-btn');
+  chunkBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      chunkBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      chunkIdx = parseInt(btn.getAttribute('data-chunk-idx'), 10);
+      state.robotChunkSizeIdx = chunkIdx;
+
+      const rmseDisp = container.querySelector('#m-rmse-disp');
+      if (rmseDisp) rmseDisp.textContent = chunkConfigs[chunkIdx].rmse;
+      const smoothDisp = container.querySelector('#m-smooth-disp');
+      if (smoothDisp) smoothDisp.textContent = chunkConfigs[chunkIdx].smoothness;
+
+      soundFx.playBlip(600, 0.05);
+    });
+  });
+
+  // Path mode buttons
+  const modeBtns = container.querySelectorAll('.mode-btn');
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      pathMode = btn.getAttribute('data-mode');
+      state.robotPathMode = pathMode;
+
+      const arenaVp = container.querySelector('#arena-viewport');
+      if (arenaVp) arenaVp.innerHTML = generateTrajectoryArenaSvg();
+
+      soundFx.playBlip(pathMode === 'mse_average' ? 320 : 680, 0.05);
+    });
+  });
+
+  // Denoise slider
+  const denoiseSlider = container.querySelector('#denoise-slider');
+  if (denoiseSlider) {
+    denoiseSlider.addEventListener('input', (e) => {
+      denoiseStep = parseInt(e.target.value, 10);
+      state.robotDenoiseStep = denoiseStep;
+
+      const sDisp = container.querySelector('#step-disp');
+      if (sDisp) sDisp.textContent = `Step ${denoiseStep}`;
+      const fLbl = container.querySelector('#step-focus-lbl');
+      if (fLbl) fLbl.textContent = denoiseStep <= 4 ? 'Clean Collision-Free Trajectory' : 'Iterative Action Denoising';
+
+      const arenaVp = container.querySelector('#arena-viewport');
+      if (arenaVp) arenaVp.innerHTML = generateTrajectoryArenaSvg();
+
+      soundFx.playBlip(400 + (16 - denoiseStep) * 20, 0.02);
+    });
+  }
+
+  // Trajectory execution button
+  const btnRunTraj = container.querySelector('#btn-run-robot-trajectory');
+  if (btnRunTraj) {
+    btnRunTraj.addEventListener('click', () => {
+      if (isExecutingTrajectory) return;
+      isExecutingTrajectory = true;
+      btnRunTraj.disabled = true;
+      btnRunTraj.innerHTML = `<span class="icon spin">🔄</span> Executing 50Hz Motor Commands...`;
+      soundFx.playBlip(720, 0.08);
+
+      setTimeout(() => {
+        isExecutingTrajectory = false;
+        btnRunTraj.disabled = false;
+        btnRunTraj.innerHTML = `<span class="icon">🚀</span> Execute Trajectory on Robot Arm`;
+        if (pathMode === 'mse_average') {
+          soundFx.playQuizWrong();
+          alert('⚠️ COLLISION DETECTED! MSE mode-averaging crashed into the rigid obstacle. Switch to Diffusion Policy to execute a safe trajectory!');
+        } else {
+          soundFx.playLevelUp();
+          confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+        }
+      }, 600);
+    });
+  }
+
+  // Claim XP buttons
+  const btnClaimVlaXp = container.querySelector('#btn-claim-vla-xp');
+  if (btnClaimVlaXp) {
+    btnClaimVlaXp.addEventListener('click', () => {
+      if (!xpVlaClaimed) {
+        xpVlaClaimed = true;
+        awardXp(20, 'VLA Action Tokenization Conquered');
+        btnClaimVlaXp.textContent = '✓ +20 XP Claimed!';
+        btnClaimVlaXp.disabled = true;
+        btnClaimVlaXp.style.opacity = '0.6';
+        confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimActXp = container.querySelector('#btn-claim-act-xp');
+  if (btnClaimActXp) {
+    btnClaimActXp.addEventListener('click', () => {
+      if (!xpActClaimed) {
+        xpActClaimed = true;
+        awardXp(25, 'Action Chunking with Transformers Conquered');
+        btnClaimActXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimActXp.disabled = true;
+        btnClaimActXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimDiffXp = container.querySelector('#btn-claim-diff-xp');
+  if (btnClaimDiffXp) {
+    btnClaimDiffXp.addEventListener('click', () => {
+      if (!xpDiffPolicyClaimed) {
+        xpDiffPolicyClaimed = true;
+        awardXp(30, 'Diffusion Policy & Embodied AI Conquered');
+        btnClaimDiffXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimDiffXp.disabled = true;
+        btnClaimDiffXp.style.opacity = '0.6';
+        confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+      }
+    });
+  }
+}
+
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -14178,6 +14831,13 @@ const questPrompts = {
     { label: '⚡ How does Decoupled 3D DiT Attention work?', prompt: 'Compare monolithic 3D attention vs decoupled spatial self-attention (within frame) and temporal self-attention (across time) in modern architectures like Sora and CogVideoX.' },
     { label: '🕹️ What is an Action-Conditioned World Model?', prompt: 'Explain how world models (Dreamer, GAIA-1, V-JEPA) predict future latent environment states s_{t+1} conditioned on physical agent action vectors a_t.' },
     { label: '🎯 Quiz me on World Models & Video DiT', prompt: 'Give me a challenging question about 3D DiT factorized attention, spacetime tubelets, action conditioning, or Fréchet Video Distance (FVD)!' }
+  ],
+  'quest-20': [
+    { label: '🤖 What is Moravec\'s Paradox in robotics?', prompt: 'Explain Moravec\'s Paradox: why can LLMs pass bar exams and write code, while a robotic hand picking up a slippery cup remains one of the hardest challenges in AI?' },
+    { label: '🦾 How do VLA models turn motion into tokens?', prompt: 'Walk through how Vision-Language-Action (VLA) models (RT-2, OpenVLA) discretize 6-DoF continuous coordinates into 256 vocabulary tokens to predict robot motor commands.' },
+    { label: '📦 Why does Action Chunking (ACT) beat single-step?', prompt: 'Explain the compounding error problem (covariate shift) in single-step imitation learning, and how Action Chunking with Transformers (ACT) and temporal ensembling solve it.' },
+    { label: '⚡ Why does MSE crash and Diffusion Policy succeed?', prompt: 'Contrast Mean Squared Error (MSE) regression against Diffusion Policy in multimodal demonstrations: why does averaging alternative paths cause fatal obstacle collisions?' },
+    { label: '🎯 Quiz me on Embodied AI & Robotics', prompt: 'Give me a challenging question about VLA action binning, Action Chunking, Diffusion Policy score matching, or Sim-to-Real domain randomization!' }
   ]
 };
 

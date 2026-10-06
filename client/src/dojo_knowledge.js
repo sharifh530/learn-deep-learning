@@ -897,6 +897,66 @@ print(f"3D DiT Block Output: {out.shape}")
         explanation: "Osu! Full 3D attention across all spacetime tokens causes quadratic memory explosion $\mathcal{O}((T \times S)^2)$. Decoupling spatial attention within frames and temporal attention across frames keeps computational complexity manageable while enforcing both crisp textures and fluid temporal motion!"
       }
     },
+    'quest-20': {
+      title: 'Quest 20: Embodied AI & Robotics Foundation Models',
+      eli10: `🤖 **Embodied AI & Robotics Explained Like You're 10:**
+
+Imagine an AI that can write Shakespearean sonnets, but if you give it a plastic fork, it can't figure out how to pick up a strawberry without smashing it!
+
+1. **Moravec's Paradox:** Tasks that feel hard to adults (math, chess, programming) are relatively easy for computers. But tasks a 3-year-old child does effortlessly (picking up a slippery cup, stepping over a toy) have taken 50 years to solve in AI!
+2. **Giving LLMs Robotic Hands (VLA / RT-2):** Instead of only outputting words, **Vision-Language-Action (VLA)** models turn robot movements into numbers ($X, Y, Z$ position, tilt, gripper pinch). We chop movement into 256 number bins and teach the model to 'speak' robot actions like text tokens!
+3. **Musical Chords (Action Chunking / ACT):** If a robot tries to move millimeter-by-millimeter one step at a time, tiny errors snowball until it misses the table completely. **Action Chunking** plans 50 steps at once (like a pianist playing a whole musical phrase without stopping).
+4. **The Tree in the Road (Diffusion Policy):** If half the human demonstrations go left around a tree and half go right, normal AI calculates the average: driving straight forward and crashing directly into the tree! **Diffusion Policy** uses image-style denoising to carve out one real, clear path without averaging.
+5. **The Video Game Gym (Sim-to-Real):** Robots practice in super-fast physics video games thousands of times with crazy random friction and crazy lighting, so the real physical world looks completely familiar on day one!`,
+
+      snippet: `\`\`\`python
+# 1D Temporal CNN Diffusion Policy Action Head in PyTorch
+import torch
+import torch.nn as nn
+
+class DiffusionPolicyActionHead(nn.Module):
+    def __init__(self, action_dim=7, obs_dim=512, chunk_len=16, hidden_dim=256):
+        super().__init__()
+        self.obs_proj = nn.Linear(obs_dim, hidden_dim)
+        self.time_emb = nn.Sequential(
+            nn.Linear(1, hidden_dim),
+            nn.Mish(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+        self.net = nn.Sequential(
+            nn.Conv1d(action_dim + hidden_dim, hidden_dim, kernel_size=5, padding=2),
+            nn.Mish(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=5, padding=2),
+            nn.Mish(),
+            nn.Conv1d(hidden_dim, action_dim, kernel_size=5, padding=2)
+        )
+
+    def forward(self, noisy_actions, timestep, obs_features):
+        B, T, D = noisy_actions.shape
+        cond = (self.obs_proj(obs_features) + self.time_emb(timestep)).unsqueeze(1).repeat(1, T, 1)
+        x = torch.cat([noisy_actions, cond], dim=-1).transpose(1, 2)
+        return self.net(x).transpose(1, 2)
+
+policy = DiffusionPolicyActionHead()
+noisy_act = torch.randn(2, 16, 7) # Batch=2, 16 action steps, 7-DoF
+t = torch.tensor([[0.5], [0.5]])
+obs = torch.randn(2, 512)
+eps_pred = policy(noisy_act, t, obs)
+print(f"Predicted Trajectory Noise: {eps_pred.shape}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Embodied AI & Diffusion Policy**\n\nWhy does Diffusion Policy dramatically outperform standard Mean Squared Error (MSE) imitation learning in contact-rich manipulation tasks?",
+        options: [
+            "A) It completely eliminates the need for camera sensors",
+            "B) MSE averages multimodal demonstrations (e.g. dodging left vs right) into an unviable middle collision trajectory; Diffusion Policy models the entire multimodal distribution without averaging",
+            "C) Diffusion policy runs 1,000x faster than standard linear regression",
+            "D) Robots only have one joint motor"
+        ],
+        answer: "B",
+        explanation: "Osu! In complex physical manipulation, multiple distinct trajectories are valid. MSE regression forces the model to predict the conditional expectation $E[a|s]$, which averages distinct modes and causes catastrophic collisions. Diffusion Policy samples from the true multimodal distribution, committing cleanly to one viable action trajectory!"
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -1056,6 +1116,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('video') || hasPhrase('world model') || hasPhrase('dit') || hasPhrase('sora') || hasPhrase('tubelet') || hasPhrase('temporal attention') || hasPhrase('spatial attention') || hasPhrase('dreamer') || hasPhrase('gaia') || hasPhrase('v-jepa') || hasPhrase('action condition') || hasPhrase('fvd') || hasPhrase('quest 19')) {
     return DOJO_KNOWLEDGE.quests['quest-19'].eli10;
+  }
+  if (hasPhrase('robot') || hasPhrase('robotics') || hasPhrase('embodied') || hasPhrase('vla') || hasPhrase('rt-2') || hasPhrase('openvla') || hasPhrase('act') || hasPhrase('action chunk') || hasPhrase('diffusion policy') || hasPhrase('end effector') || hasPhrase('sim to real') || hasPhrase('gripper') || hasPhrase('quest 20')) {
+    return DOJO_KNOWLEDGE.quests['quest-20'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

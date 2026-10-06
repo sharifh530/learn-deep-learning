@@ -4178,6 +4178,274 @@ function q19AutoregressiveRollout() {
   };
 }
 
+
+// ==========================================
+// QUEST 20: EMBODIED AI & ROBOTICS VISUALS
+// ==========================================
+
+function q20SensorimotorGrounding() {
+  let g = '';
+  g += T(320, 18, 'The Sensorimotor Frontier: Disembodied LLM vs Embodied 6-DoF Action Space', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Disembodied LLM (Abstract Token Space)
+  g += rect(25, 42, 275, 140, { fill: 'rgba(59, 130, 246, 0.08)', stroke: C.blue, rx: 8 });
+  g += T(162, 60, '1. Disembodied LLM: Token Prediction', { size: 9.5, weight: 700, fill: C.blue });
+  g += T(162, 74, 'Abstract text tokens • Moravec Paradox • No Physics', { size: 7.5, fill: C.muted });
+
+  // Floating text tokens
+  const tokens = ['"pick"', '"apple"', '"carefully"', '"bowl"'];
+  tokens.forEach((tok, idx) => {
+    const tx = 55 + idx * 58;
+    g += rect(tx, 96, 52, 22, { fill: 'rgba(59, 130, 246, 0.2)', stroke: C.blue, rx: 4 });
+    g += T(tx + 26, 107, tok, { size: 7.5, mono: true, fill: '#93c5fd' });
+  });
+
+  g += rect(35, 135, 255, 34, { fill: 'rgba(15, 23, 42, 0.65)', rx: 4 });
+  g += T(162, 147, '⚠️ Hallucinates physics: Does not feel mass or friction', { size: 7.5, weight: 700, fill: '#fca5a5' });
+  g += T(162, 160, 'Predictions have zero physical consequences', { size: 7, fill: C.muted });
+
+  // Center Arrow
+  g += arrow(305, 112, 330, 112, 'amber', 2);
+
+  // Right: Embodied 6-DoF End-Effector Space
+  g += rect(335, 42, 280, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(475, 60, '2. Embodied Agent: 7-DoF Control Space', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(475, 74, 'Continuous high-frequency closed loop (50 Hz)', { size: 7.5, fill: '#6ee7b7' });
+
+  // 6-DoF Coordinate Axes Visualization
+  g += circ(420, 108, 18, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald });
+  g += arrow(420, 108, 445, 108, 'rose', 1.8);
+  g += arrow(420, 108, 420, 85, 'emerald', 1.8);
+  g += arrow(420, 108, 405, 122, 'blue', 1.8);
+  g += T(452, 108, 'X', { size: 7.5, mono: true, fill: C.rose });
+  g += T(420, 78, 'Z', { size: 7.5, mono: true, fill: C.emerald });
+  g += T(398, 126, 'Y', { size: 7.5, mono: true, fill: C.blue });
+
+  // Gripper icon & state
+  g += rect(480, 92, 45, 32, { fill: 'rgba(245, 158, 11, 0.2)', stroke: C.amber, rx: 4 });
+  g += T(502, 104, 'Gripper', { size: 7.5, weight: 600, fill: C.amber });
+  g += T(502, 116, 'g ∈ [0, 1]', { size: 7, mono: true, fill: '#fef08a' });
+
+  g += rect(345, 135, 260, 34, { fill: 'rgba(15, 23, 42, 0.65)', rx: 4 });
+  g += T(475, 147, '⚡ Action a_t = [Δx, Δy, Δz, Δr, Δp, Δy, grip]', { size: 7.5, mono: true, weight: 700, fill: '#34d399' });
+  g += T(475, 160, 'Real-time torque impedance & collision safety', { size: 7, fill: C.muted });
+
+  g += T(320, 204, 'Physical embodiment shifts intelligence from disembodied symbol manipulation to continuous 6-DoF closed-loop motor execution with real-world physical feedback.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Embodied AI bridges the gap between semantic language understanding and physical 7-DoF motor control.'
+  };
+}
+
+function q20VlaTokenization() {
+  let g = '';
+  g += T(320, 18, 'Vision-Language-Action (VLA): Action Tokenization in Pretrained VLMs', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Camera RGB Image & Language Prompt
+  g += rect(20, 45, 130, 132, { fill: 'rgba(59, 130, 246, 0.1)', stroke: C.blue, rx: 6 });
+  g += T(85, 62, '1. Multimodal Inputs', { size: 8.5, weight: 700, fill: C.blue });
+  g += rect(32, 75, 106, 44, { fill: '#020617', stroke: 'rgba(255,255,255,0.15)', rx: 4 });
+  g += T(85, 93, 'RGB Camera Image', { size: 7.5, fill: '#93c5fd' });
+  g += T(85, 106, '224×224 Wrist / Static', { size: 6.5, mono: true, fill: C.dim });
+
+  g += rect(32, 126, 106, 40, { fill: 'rgba(168, 85, 247, 0.15)', stroke: C.violet, rx: 4 });
+  g += T(85, 142, '"Pick the golden apple"', { size: 7, mono: true, fill: '#e9d5ff' });
+  g += T(85, 156, 'Language Instruction', { size: 6.5, fill: C.muted });
+
+  // Arrow
+  g += arrow(155, 111, 185, 111, 'blue', 2);
+
+  // 2. VLM Transformer Backbone
+  g += rect(190, 45, 175, 132, { fill: 'rgba(168, 85, 247, 0.12)', stroke: C.violet, rx: 8 });
+  g += T(277, 66, '2. Pretrained VLM Backbone', { size: 9, weight: 700, fill: C.violet });
+  g += T(277, 82, 'RT-2 / OpenVLA (Prismatic-7B)', { size: 7.5, mono: true, fill: '#d8b4fe' });
+
+  g += rect(202, 95, 151, 32, { fill: 'rgba(168, 85, 247, 0.25)', rx: 4 });
+  g += T(277, 107, 'Vision-Language Self-Attention', { size: 7.5, weight: 600, fill: '#fff' });
+  g += T(277, 119, 'Inherits Web Common Sense', { size: 6.8, fill: '#e9d5ff' });
+
+  g += T(277, 145, 'Co-fine-tuned on Robot Data', { size: 7.5, fill: C.muted });
+  g += T(277, 160, '100,000+ Real Demonstrations', { size: 7, fill: C.dim });
+
+  // Arrow
+  g += arrow(370, 111, 400, 111, 'emerald', 2);
+
+  // 3. Discrete Action Bins (Text Tokens)
+  g += rect(405, 45, 215, 132, { fill: 'rgba(16, 185, 129, 0.1)', stroke: C.emerald, rx: 8 });
+  g += T(512, 64, '3. Action Token Vocabulary', { size: 9, weight: 700, fill: C.emerald });
+  g += T(512, 78, '256 Uniform Bins per Dimension', { size: 7.5, mono: true, fill: '#6ee7b7' });
+
+  // Sample Action Tokens
+  const actionTokens = [
+    { name: 'Δx', val: '<act_142>', colr: C.rose },
+    { name: 'Δy', val: '<act_098>', colr: C.blue },
+    { name: 'Δz', val: '<act_184>', colr: C.emerald },
+    { name: 'Grip', val: '<act_255>', colr: C.amber }
+  ];
+  actionTokens.forEach((at, idx) => {
+    const ay = 92 + idx * 18;
+    g += rect(418, ay - 6, 190, 16, { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(255,255,255,0.08)', rx: 3 });
+    g += T(435, ay + 2, at.name, { size: 7.5, weight: 700, fill: at.colr });
+    g += arrow(450, ay + 2, 470, ay + 2, 'muted', 1.2);
+    g += T(520, ay + 2, at.val, { size: 7, mono: true, fill: '#fff' });
+  });
+
+  g += T(512, 165, 'Robot actions predicted as standard text!', { size: 7.5, weight: 600, fill: '#34d399' });
+
+  g += T(320, 204, 'By discretizing continuous motor coordinates into text vocabulary tokens, VLAs allow frontier multimodal transformers to output physical robot actions seamlessly.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'VLA action tokenization: 6-DoF continuous coordinates are discretized into 256 vocabulary tokens predicted by pre-trained VLMs.'
+  };
+}
+
+function q20ActionChunkingACT() {
+  let g = '';
+  g += T(320, 18, 'Action Chunking with Transformers (ACT) vs Single-Step Drift', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Single-Step Markovian Policy (Drifting Error)
+  g += rect(25, 42, 280, 140, { fill: 'rgba(239, 68, 68, 0.06)', stroke: C.rose, rx: 8 });
+  g += T(165, 60, '1. Single-Step (a_t ~ π(s_t)) Drift', { size: 9.5, weight: 700, fill: C.rose });
+  g += T(165, 74, 'Errors compound sequentially • Covariate Shift', { size: 7.5, fill: C.muted });
+
+  // Drifting path
+  g += circ(50, 120, 5, { fill: C.blue });
+  g += T(50, 136, 'Start', { size: 7, fill: C.blue });
+  g += circ(260, 90, 6, { fill: C.emerald });
+  g += T(260, 106, 'Target', { size: 7, fill: C.emerald });
+
+  // Drifting squiggly path missing target
+  g += '<path d="M 50,120 Q 110,80 160,135 T 255,140" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="3,2" />';
+  g += circ(255, 140, 5, { fill: C.rose });
+  g += T(255, 155, 'Misses Target! ⚠️', { size: 7.5, weight: 700, fill: '#fca5a5' });
+
+  // Right: Action Chunking (ACT) + Temporal Ensembling
+  g += rect(335, 42, 280, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(475, 60, '2. Action Chunking (ACT) + Ensembling', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(475, 74, 'Predicts entire trajectory chunk k = 50 steps at once', { size: 7.5, fill: '#6ee7b7' });
+
+  // Clean smooth interpolated path hitting target
+  g += circ(360, 120, 5, { fill: C.blue });
+  g += T(360, 136, 'Start', { size: 7, fill: C.blue });
+  g += circ(570, 90, 6, { fill: C.emerald });
+  g += T(570, 106, 'Target', { size: 7, fill: C.emerald });
+
+  // Smooth arc
+  g += '<path d="M 360,120 Q 460,70 570,90" fill="none" stroke="#10b981" stroke-width="2.5" />';
+  g += T(470, 78, 'Smooth Action Chunk A_{t:t+50}', { size: 7.5, weight: 700, fill: '#34d399' });
+
+  // Temporal Ensembling banner
+  g += rect(345, 140, 260, 26, { fill: 'rgba(16, 185, 129, 0.15)', rx: 4 });
+  g += T(475, 153, 'Exponential weight blending: w_i = exp(-m·i)', { size: 7.5, mono: true, fill: '#a7f3d0' });
+
+  g += T(320, 204, 'Action Chunking predicts multi-step motion sequences simultaneously; temporal ensembling averages overlapping predictions to prevent compounding execution drift.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Action Chunking with Transformers (ACT) eliminates compounding single-step drift through multi-step trajectory prediction.'
+  };
+}
+
+function q20DiffusionPolicyMultimodal() {
+  let g = '';
+  g += T(320, 18, 'Diffusion Policy: Multimodal Action Distributions vs MSE Collapse', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: MSE Regression Failure (Averaging Bimodal Paths)
+  g += rect(25, 42, 280, 140, { fill: 'rgba(239, 68, 68, 0.06)', stroke: C.rose, rx: 8 });
+  g += T(165, 60, '1. MSE Regression: Mode Averaging Trap', { size: 9.5, weight: 700, fill: C.rose });
+  g += T(165, 74, 'Human demos dodge Left (50%) & Right (50%)', { size: 7.5, fill: C.muted });
+
+  // Start & Target
+  g += circ(50, 115, 5, { fill: C.blue });
+  g += circ(260, 115, 6, { fill: C.emerald });
+
+  // Obstacle in center
+  g += rect(145, 95, 30, 40, { fill: 'rgba(239, 68, 68, 0.4)', stroke: C.rose, rx: 4 });
+  g += T(160, 115, 'Obstacle', { size: 6.5, weight: 700, fill: '#fff' });
+
+  // MSE straight line hitting obstacle
+  g += line(55, 115, 145, 115, '#f87171', 2.5);
+  g += T(105, 105, 'MSE Average', { size: 7, fill: C.rose });
+  g += circ(145, 115, 5, { fill: C.rose });
+  g += T(165, 155, '💥 Crashes into Obstacle (Mean of modes!)', { size: 7.5, weight: 700, fill: '#fca5a5' });
+
+  // Right: Diffusion Policy (Commits to True Modes)
+  g += rect(335, 42, 280, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(475, 60, '2. Diffusion Policy: Expressive Modes', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(475, 74, 'Conditional denoising score matching p(A_t | O_t)', { size: 7.5, fill: '#6ee7b7' });
+
+  // Start & Target
+  g += circ(360, 115, 5, { fill: C.blue });
+  g += circ(570, 115, 6, { fill: C.emerald });
+
+  // Obstacle in center
+  g += rect(455, 95, 30, 40, { fill: 'rgba(255, 255, 255, 0.1)', stroke: 'rgba(255,255,255,0.3)', rx: 4 });
+  g += T(470, 115, 'Obstacle', { size: 6.5, fill: C.muted });
+
+  // Two curved collision-free modes
+  g += '<path d="M 365,115 Q 470,60 565,115" fill="none" stroke="#10b981" stroke-width="2.5" />';
+  g += T(470, 52, 'Mode A: Curve Left (Valid)', { size: 7.5, weight: 600, fill: '#34d399' });
+
+  g += '<path d="M 365,115 Q 470,170 565,115" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="3,2" />';
+  g += T(470, 178, 'Mode B: Curve Right (Valid)', { size: 7.5, fill: '#38bdf8' });
+
+  g += T(320, 204, 'Diffusion Policy models continuous multimodal distributions without averaging, allowing robots to commit cleanly to distinct collision-free execution paths.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Diffusion Policy captures multimodal human behaviors without mode-averaging collisions.'
+  };
+}
+
+function q20SimToRealDomainRandomization() {
+  let g = '';
+  g += T(320, 18, 'Bridging the Reality Gap: Sim-to-Real Domain Randomization & Safety Shield', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Simulator Domain Randomization (Isaac Gym / MuJoCo)
+  g += rect(25, 42, 260, 140, { fill: 'rgba(168, 85, 247, 0.1)', stroke: C.violet, rx: 8 });
+  g += T(155, 60, '1. GPU Physics Sim (Isaac Gym)', { size: 9.5, weight: 700, fill: C.violet });
+  g += T(155, 74, '4,096 parallel simulated robots • Domain Randomization', { size: 7.5, fill: '#d8b4fe' });
+
+  // Randomization tags
+  const randParams = [
+    { name: 'Friction: μ ∈ [0.2, 1.2]', colr: C.amber },
+    { name: 'Lighting: HDR Hue ±40%', colr: C.cyan },
+    { name: 'Mass: m ∈ [0.8, 1.5] kg', colr: C.rose },
+    { name: 'Latency: Δt ∈ [10, 40] ms', colr: C.emerald }
+  ];
+  randParams.forEach((rp, idx) => {
+    const ry = 92 + idx * 16;
+    g += rect(38, ry - 6, 234, 14, { fill: 'rgba(15, 23, 42, 0.65)', rx: 3 });
+    g += T(155, ry + 1, rp.name, { size: 7, mono: true, fill: rp.colr });
+  });
+
+  // Transfer Arrow
+  g += arrow(290, 112, 325, 112, 'emerald', 2);
+  g += T(308, 98, 'Zero-Shot', { size: 7.5, weight: 700, fill: C.emerald });
+
+  // 2. Physical Deployment & Safety Filter
+  g += rect(335, 42, 280, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(475, 60, '2. Physical Robot Deployment', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(475, 74, 'Real world is seen as just another simulation variation!', { size: 7.5, fill: '#6ee7b7' });
+
+  // Safety Shield Box
+  g += rect(350, 88, 250, 48, { fill: 'rgba(15, 23, 42, 0.8)', stroke: C.amber, rx: 6 });
+  g += T(475, 102, '🛡️ Operational Space Safety Shield', { size: 8.5, weight: 700, fill: C.amber });
+  g += T(475, 118, 'τ_cmd = min(τ_policy, τ_limit) • Force limit 20 N', { size: 7, mono: true, fill: '#fef08a' });
+
+  g += rect(350, 144, 250, 24, { fill: 'rgba(16, 185, 129, 0.15)', rx: 4 });
+  g += T(475, 156, '✓ 96.4% Zero-Shot Physical Success Rate', { size: 8, weight: 700, fill: '#34d399' });
+
+  g += T(320, 204, 'Domain randomization trains the policy over wide variations of friction, mass, and lighting, allowing zero-shot transfer from GPU simulators to physical robot hardware.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Sim-to-real transfer: Domain randomization in GPU simulators paired with operational space safety limiters.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -4198,7 +4466,8 @@ const VISUALS = {
   'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures],
   'quest-17': [q17ForwardReverseMarkov, q17ClosedFormJump, q17UnetTimeConditioned, q17CfgVectorExtrapolation, q17RectifiedFlowMatching],
   'quest-18': [q18WaveformToStft, q18MelFilterbanks, q18NeuralCodecPipeline, q18RvqQuantizationLadder, q18SpeechLlmTokenization],
-  'quest-19': [q19VideoCubePatchification, q19ThreeDDiTArchitecture, q19ActionConditionedWorldModel, q19TemporalConsistencyDrift, q19AutoregressiveRollout]
+  'quest-19': [q19VideoCubePatchification, q19ThreeDDiTArchitecture, q19ActionConditionedWorldModel, q19TemporalConsistencyDrift, q19AutoregressiveRollout],
+  'quest-20': [q20SensorimotorGrounding, q20VlaTokenization, q20ActionChunkingACT, q20DiffusionPolicyMultimodal, q20SimToRealDomainRandomization]
 };
 
 let activeCleanups = [];
