@@ -765,6 +765,80 @@ print(f"Noisy Latent Tensor Shape at t={t.tolist()}: {x_t.shape}")
         explanation: "Osu! Extreme guidance scales ($w > 15$) push predictions too far along the extrapolation vector $\\tilde{\\epsilon} = \\epsilon_u + w(\\epsilon_c - \\epsilon_u)$, causing latent values to exceed the training distribution. This produces heavily over-saturated, 'burned' contrast and geometric distortions!"
       }
     },
+    'quest-18': {
+      title: 'Quest 18: Audio & Speech AI (Neural Codecs & RVQ)',
+      eli10: `🎙️ **Audio & Neural Speech Codecs Explained Like You're 10:**
+
+Imagine trying to read a book where every single letter is split into 10,000 tiny pixels. That's raw audio!
+
+1. **The 44,100 Dilemma:** Standard music audio has 44,100 numbers every single second ($44.1\text{ kHz}$). If an LLM tried to read all those numbers with attention $O(L^2)$, the computer's memory would instantly explode!
+2. **The Mel Hearing Trick:** Human ears don't hear frequencies like a ruler; we are super sensitive to small pitch differences in deep human voices ($100\text{ Hz}$ to $1,000\text{ Hz}$), but barely notice differences above $10,000\text{ Hz}$. The **Mel Spectrogram** curves audio into 80 frequency bins that match human biology.
+3. **The Neural Audio Codec (SoundStream / EnCodec):** We train a 1D Convolutional Autoencoder that squashes 320 continuous audio samples into a single compact frame vector ($50\text{ frames/second}$).
+4. **Residual Vector Quantization (RVQ):** Instead of one giant impossible dictionary, we use a ladder of small codebooks:
+   - **Stage 1:** Grabs the main coarse sound (who is speaking and what words they say: 1.5 kbps).
+   - **Stage 2:** Calculates the leftover error (*residual*) and sharpens the timbre (3.0 kbps).
+   - **Stage 3 & 4:** Polishes room reverb, breath, and studio shine (6.0 kbps).
+5. **Speech as LLM Tokens (VALL-E / MusicGen):** Once audio is represented as discrete RVQ tokens, standard GPT transformers can "read" text prompts and "write" spoken voice or music using simple next-token prediction!`,
+
+      snippet: `\`\`\`python
+# Multi-Stage Residual Vector Quantization (RVQ) in PyTorch
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class ResidualVectorQuantizer(nn.Module):
+    def __init__(self, num_stages=4, codebook_size=1024, dim=128):
+        super().__init__()
+        self.num_stages = num_stages
+        self.codebooks = nn.ModuleList([
+            nn.Embedding(codebook_size, dim) for _ in range(num_stages)
+        ])
+        
+    def forward(self, z):
+        # z shape: [batch, time_steps, dim]
+        residual = z
+        quantized_out = torch.zeros_like(z)
+        indices = []
+        
+        for stage_idx, codebook in enumerate(self.codebooks):
+            cb_weights = codebook.weight # [K, D]
+            # Pairwise squared Euclidean distance: ||res - cb_k||^2
+            dists = (
+                torch.sum(residual**2, dim=-1, keepdim=True)
+                - 2 * torch.matmul(residual, cb_weights.t())
+                + torch.sum(cb_weights**2, dim=-1)
+            )
+            idx = torch.argmin(dists, dim=-1) # [batch, time_steps]
+            indices.append(idx)
+            
+            q_k = codebook(idx)
+            # Straight-Through Estimator (STE) for gradients
+            q_k_ste = residual + (q_k - residual).detach()
+            quantized_out = quantized_out + q_k_ste
+            residual = residual - q_k.detach()
+            
+        return quantized_out, torch.stack(indices, dim=1) # [B, num_stages, T]
+
+# Test RVQ on 50 Hz Latent Stream
+rvq = ResidualVectorQuantizer(num_stages=4, codebook_size=1024, dim=128)
+z_latent = torch.randn(2, 50, 128) # 2 audio clips of 1 second each
+z_q, token_codes = rvq(z_latent)
+print(f"Quantized Latent Shape: {z_q.shape}")
+print(f"Acoustic Token Streams: {token_codes.shape} (4 codebooks x 50 tokens/sec)")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Residual Vector Quantization (RVQ)**\n\nIn a 4-stage RVQ hierarchy (e.g. EnCodec/SoundStream), what is the input to the 2nd codebook stage ($C_2$)?",
+        options: [
+            "A) The raw continuous audio waveform x",
+            "B) The residual difference vector: r₁ = z - q₁ (the error left uncaptured by Codebook 1)",
+            "C) The discrete token index from the 1st codebook",
+            "D) The high-frequency linear FFT phase angle"
+        ],
+        answer: "B",
+        explanation: "Osu! In Residual Vector Quantization, each subsequent codebook $C_k$ quantizes the leftover error (residual) $r_{k-1} = r_{k-2} - q_{k-1}$! This allows multiple low-complexity codebooks to achieve high fidelity without needing an astronomically huge dictionary!"
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -918,6 +992,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('diffusion') || hasPhrase('ddpm') || hasPhrase('ddim') || hasPhrase('flow matching') || hasPhrase('score matching') || hasPhrase('cfg') || hasPhrase('classifier-free guidance') || hasPhrase('latent diffusion') || hasPhrase('rectified flow') || hasPhrase('quest 17')) {
     return DOJO_KNOWLEDGE.quests['quest-17'].eli10;
+  }
+  if (hasPhrase('audio') || hasPhrase('speech') || hasPhrase('codec') || hasPhrase('rvq') || hasPhrase('spectrogram') || hasPhrase('mel') || hasPhrase('soundstream') || hasPhrase('encodec') || hasPhrase('vall-e') || hasPhrase('musicgen') || hasPhrase('audiolm') || hasPhrase('vocoder') || hasPhrase('stft') || hasPhrase('quest 18')) {
+    return DOJO_KNOWLEDGE.quests['quest-18'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

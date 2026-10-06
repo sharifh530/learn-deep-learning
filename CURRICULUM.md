@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 17)
+## ⚡ Phase 3: The LLM Odyssey, Agents, Generative & Speech AI (Quests 7 - 18)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing] ➡️ [Quest 17: Diffusion Models & Flow Matching]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing] ➡️ [Quest 17: Diffusion Models & Flow Matching] ➡️ [Quest 18: Audio & Speech AI]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -492,9 +492,32 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+
+---
+
+### 🎙️ Quest 18: Audio & Speech AI (Neural Audio Codecs, Mel Spectrograms, RVQ & Speech Tokenizers)
+- **Tagline:** Neural Codecs & Speech Tokenizers
+- **The Core Problem:**
+  Audio signals are inherently continuous and sampled at blistering temporal frequencies (44.1 kHz or 24 kHz). Feeding 44,100 floating-point scalar amplitudes per second into attention mechanisms causes $\mathcal{O}(L^2)$ memory and computational complexity to explode (10 seconds = 441,000 steps $\to$ 194 billion pairwise attention operations).
+- **The Solution:**
+  Neural Audio Codecs (SoundStream, EnCodec, DAC) compress continuous audio waveforms into compact discrete acoustic tokens using 1D strided convolutions, dilated residual blocks, and multi-stage Residual Vector Quantization (RVQ). Audio is transformed into 50 frame vectors per second—a $300\times$ temporal reduction—allowing standard causal autoregressive Transformers (VALL-E, MusicGen, AudioLM) to process speech and music like natural language tokens.
+- **Key Concepts:**
+  - **The Fourier & Mel Bridge:** Short-Time Fourier Transform (STFT) windowing (25ms window, 10ms hop) and 80-bin triangular Mel filterbanks matching human cochlear psychoacoustics: $\text{Mel}(f) = 2595 \log_{10}(1 + f/700)$.
+  - **1D Strided Convolutional Autoencoder:** Strided convolutions downsample raw audio by $320\times$ into continuous latent space $\mathbf{z} \in \mathbb{R}^{T/320 \times D}$, followed by transposed convolutions for reconstruction.
+  - **Residual Vector Quantization (RVQ):** Multi-stage codebook hierarchy where codebook $C_k$ quantizes residual error $r_{k-1} = r_{k-2} - q_{k-1}$, collapsing error exponentially to achieve high fidelity with small codebook dictionaries.
+  - **Multi-Scale GAN & STFT Discriminators:** Multi-period and complex STFT loss functions penalizing both spectral magnitude discrepancies and perceptual phase artifacts.
+  - **Delay-Pattern Interleaving:** Staggering parallel RVQ codebook streams by 1 timestep to enable single-stream causal autoregressive generation across all acoustic tiers.
+- **Interactive Playground:** 3-tab Audio & Speech AI Lab:
+  - *Tab 1: Mel Spectrogram & Synthesizer:* Web Audio API synthesizer, 80-bin Mel spectrogram waterfall heatmap, resolution switcher (40, 80, 128 bins), and psychoacoustic formula card.
+  - *Tab 2: RVQ Ladder & Bitrates:* Multi-stage codebook toggle (1 to 8 stages), dynamic bitrate calculator (1.5 to 12.0 kbps), SNR/PESQ quality meters, and monotonic error decay visualization.
+  - *Tab 3: Acoustic LM & Delay Tokenizer:* 4-stream delay matrix grid, timeline step scrubber, causal attention receptive field arcs, and step-by-step rollout simulation.
+- **Python Lab Snippet:**
+  Runnable PyTorch implementation of `ResidualVectorQuantizer` with Straight-Through Estimators (STE).
+
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 18: Audio & Speech AI:** Continuous neural audio codecs (EnCodec/Descript), Mel spectrograms, and autoregressive speech tokenizers.
 - **Quest 19: World Models & Video Generation:** Spatio-temporal 3D DiT diffusion, latent video dynamics, and action-conditioned world models.
+- **Quest 20: Embodied AI & Robotics Foundation Models:** Vision-Language-Action (VLA) models, diffusion policy for robotic manipulation, and closed-loop sensory-motor control.
 
 
 ---

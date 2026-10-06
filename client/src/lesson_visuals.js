@@ -46,6 +46,7 @@ const rect = (x, y, w, h, { fill = 'none', stroke = 'none', rx = 6, sw = 1.2, ex
   `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
 const circ = (cx, cy, r, { fill = 'none', stroke = 'none', sw = 1.5, extra = '' } = {}) =>
   `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const circle = circ;
 const path = (d, { stroke = C.cyan, sw = 2, fill = 'none', extra = '' } = {}) =>
   `<path d="${d}" stroke="${stroke}" stroke-width="${sw}" fill="${fill}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
 
@@ -3573,6 +3574,318 @@ function q17RectifiedFlowMatching() {
   };
 }
 
+
+// ==========================================
+// QUEST 18: AUDIO & SPEECH AI VISUALS
+// ==========================================
+
+function q18WaveformToStft() {
+  let g = '';
+  g += T(320, 18, 'The Continuous Audio Dilemma vs Discrete Language Tokens', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left Card: Raw Continuous Audio
+  g += rect(25, 40, 280, 145, { fill: 'rgba(239, 68, 68, 0.06)', stroke: C.rose, rx: 8 });
+  g += T(165, 58, '1. Raw Audio: 44.1 kHz Continuous Wave', { size: 9.5, weight: 700, fill: C.rose });
+  g += T(165, 74, '44,100 discrete scalar samples per second', { size: 7.5, fill: C.muted });
+
+  // Oscillating waveform with sample dots
+  let waveD = 'M 40,115 ';
+  const points = [];
+  for (let x = 40; x <= 290; x += 5) {
+    const normX = (x - 40) / 250;
+    const y = 115 + Math.sin(normX * 18) * 22 * Math.cos(normX * 4) + Math.sin(normX * 36) * 8;
+    waveD += `L ${x.toFixed(1)},${y.toFixed(1)} `;
+    if (x % 15 === 0) points.push([x, y]);
+  }
+  g += `<path d="${waveD}" fill="none" stroke="${C.rose}" stroke-width="1.8" opacity="0.8" />`;
+  points.forEach(([px, py]) => {
+    g += circ(px, py, 2.5, { fill: C.amber });
+  });
+
+  g += rect(35, 142, 260, 32, { fill: 'rgba(15, 23, 42, 0.65)', rx: 5 });
+  g += T(165, 154, '💥 Attention O(L²) explodes: 44,100 steps / sec', { size: 8, weight: 700, fill: '#fca5a5' });
+  g += T(165, 166, '10 sec = 441,000 steps → 194B pairwise operations!', { size: 7, fill: C.muted });
+
+  // Middle Arrow
+  g += arrow(310, 112, 335, 112, 'muted', 2);
+
+  // Right Card: Tokenized Audio Bottleneck
+  g += rect(340, 40, 275, 145, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(477, 58, '2. Discrete Neural Codec: 50 Hz Latents', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(477, 74, '320× Compression: 50 frame vectors / sec', { size: 7.5, fill: '#6ee7b7' });
+
+  // Grid of Discrete Codec Tokens
+  const cols = 5;
+  const rows = 3;
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const bx = 370 + c * 44;
+      const by = 90 + r * 15;
+      const colr = r === 0 ? C.cyan : (r === 1 ? C.emerald : C.violet);
+      g += rect(bx, by, 36, 11, { fill: tint(colr, 0.2), stroke: colr, rx: 3 });
+      g += T(bx + 18, by + 6, `cb${r+1}`, { size: 6.5, mono: true, fill: colr });
+    }
+  }
+
+  g += rect(350, 142, 255, 32, { fill: 'rgba(15, 23, 42, 0.65)', rx: 5 });
+  g += T(477, 154, '⚡ Standard Transformers attend easily: 50 tokens / sec', { size: 8, weight: 700, fill: '#34d399' });
+  g += T(477, 166, '10 sec = 500 steps → Audio treated like text!', { size: 7, fill: C.muted });
+
+  g += T(320, 204, 'Raw audio sample rates overload transformer sequence lengths; neural codecs compress continuous waves 300× into discrete semantic-acoustic token streams.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Continuous audio (44.1 kHz) explodes O(L²) attention; Neural Codecs compress audio into 50 Hz discrete tokens.'
+  };
+}
+
+function q18MelFilterbanks() {
+  let g = '';
+  g += T(320, 18, 'The Fourier Bridge: STFT Slicing & The Log-Mel Filterbank', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Time Domain Hann Window Slicing
+  g += rect(25, 42, 165, 140, { fill: 'rgba(15, 23, 42, 0.6)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 6 });
+  g += T(107, 58, '1. Hann Windowing', { size: 9, weight: 700, fill: C.cyan });
+  g += T(107, 72, '25ms Frames • 10ms Hop', { size: 7.5, fill: C.muted });
+
+  // Bell-shaped Hann windows
+  for (let w = 0; w < 3; w++) {
+    const wx = 40 + w * 35;
+    g += `<path d="M ${wx},120 Q ${wx+25},78 ${wx+50},120" fill="rgba(34, 211, 238, 0.15)" stroke="${C.cyan}" stroke-width="1.5" />`;
+  }
+  g += line(35, 120, 175, 120, C.axis, 1);
+  g += T(107, 145, 'Hop Length: 160 spl', { size: 7.5, mono: true, fill: C.cyan });
+  g += T(107, 162, 'Overlapping slices', { size: 7, fill: C.muted });
+
+  // Arrow
+  g += arrow(195, 112, 225, 112, 'cyan', 2);
+
+  // 2. Linear FFT Spectrum
+  g += rect(230, 42, 175, 140, { fill: 'rgba(15, 23, 42, 0.6)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 6 });
+  g += T(317, 58, '2. FFT Magnitude Spectrum', { size: 9, weight: 700, fill: C.amber });
+  g += T(317, 72, '|FFT(x)|² Linear 0–22.05 kHz', { size: 7.5, mono: true, fill: C.muted });
+
+  // Linear frequencies (lots of high frequency waste)
+  g += line(245, 130, 390, 130, C.axis, 1);
+  const fftBars = [28, 42, 55, 38, 26, 18, 14, 11, 9, 8, 7, 6, 5, 4, 3, 3, 2];
+  fftBars.forEach((h, idx) => {
+    const bx = 248 + idx * 8;
+    g += rect(bx, 130 - h, 6, h, { fill: tint(C.amber, 0.7), rx: 1 });
+  });
+  g += T(265, 145, 'Low Pitch (Rich)', { size: 7, fill: C.amber });
+  g += T(370, 145, 'High Hz (Sparse)', { size: 7, fill: C.dim });
+  g += T(317, 162, 'Human ears hear log pitch', { size: 7, fill: C.muted });
+
+  // Arrow
+  g += arrow(410, 112, 440, 112, 'emerald', 2);
+
+  // 3. Mel Triangular Filterbank
+  g += rect(445, 42, 170, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 6 });
+  g += T(530, 58, '3. Log Mel Filterbanks', { size: 9, weight: 700, fill: C.emerald });
+  g += T(530, 72, '80 Triangular Bins', { size: 7.5, weight: 600, fill: '#6ee7b7' });
+
+  // Triangular filters denser at bottom, wider at top
+  const filters = [
+    [455, 470, 485],
+    [470, 488, 506],
+    [488, 510, 532],
+    [510, 538, 566],
+    [538, 574, 605]
+  ];
+  filters.forEach(([x1, x2, x3], idx) => {
+    g += `<polygon points="${x1},125 ${x2},90 ${x3},125" fill="rgba(52, 211, 153, 0.18)" stroke="${C.emerald}" stroke-width="1.2" />`;
+  });
+  g += line(450, 125, 605, 125, C.axis, 1);
+  g += T(530, 145, 'm = 2595·log₁₀(1 + f/700)', { size: 7.5, mono: true, fill: '#34d399' });
+  g += T(530, 162, 'Dense at bass, wide at treble', { size: 7, fill: C.muted });
+
+  g += T(320, 204, 'STFT slices the continuous waveform into short frames, and the Mel scale compresses linear frequencies to match human cochlear hearing acuity.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'STFT slices audio into 25ms windows; the 80-bin Mel filterbank aligns spectral resolution with human psychoacoustics.'
+  };
+}
+
+function q18NeuralCodecPipeline() {
+  let g = '';
+  g += T(320, 18, 'End-to-End Neural Audio Codec (SoundStream / EnCodec / DAC)', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Audio Input
+  g += rect(20, 52, 65, 88, { fill: 'rgba(239, 68, 68, 0.1)', stroke: C.rose, rx: 6 });
+  g += T(52, 80, 'Audio x', { size: 9, weight: 700, fill: C.rose });
+  g += T(52, 96, '24 kHz PCM', { size: 7, mono: true, fill: C.muted });
+  g += T(52, 115, 'T samples', { size: 7, fill: C.dim });
+
+  g += arrow(88, 96, 115, 96, 'rose', 2);
+
+  // 2. 1D Strided Conv Encoder
+  g += rect(118, 45, 110, 102, { fill: 'rgba(59, 130, 246, 0.12)', stroke: C.blue, rx: 6 });
+  g += T(173, 64, 'Conv1D Encoder', { size: 9, weight: 700, fill: C.blue });
+  g += T(173, 80, 'Strides [2, 4, 5, 8]', { size: 7.5, mono: true, fill: '#93c5fd' });
+  g += T(173, 98, 'Total Stride: 320×', { size: 8, weight: 600, fill: C.amber });
+  g += T(173, 116, 'Dilated ResBlocks', { size: 7, fill: C.muted });
+  g += T(173, 132, 'z ∈ ℝ^(T/320 × D)', { size: 7.5, mono: true, fill: C.cyan });
+
+  g += arrow(231, 96, 258, 96, 'blue', 2);
+
+  // 3. RVQ Bottleneck
+  g += rect(261, 40, 118, 112, { fill: 'rgba(168, 85, 247, 0.15)', stroke: C.violet, rx: 6 });
+  g += T(320, 58, 'RVQ Bottleneck', { size: 9, weight: 700, fill: C.violet });
+  g += T(320, 74, 'N_q = 8 Codebooks', { size: 7.5, weight: 600, fill: '#d8b4fe' });
+  // Miniature codebook stack
+  for (let k = 0; k < 4; k++) {
+    const ky = 88 + k * 12;
+    g += rect(272, ky, 96, 9, { fill: 'rgba(168, 85, 247, 0.25)', stroke: C.violet, rx: 2 });
+    g += T(320, ky + 4.5, `Codebook C${k+1} [1024]`, { size: 6.5, mono: true, fill: '#f3e8ff' });
+  }
+  g += T(320, 142, 'Discretized Tokens', { size: 7, fill: C.muted });
+
+  g += arrow(382, 96, 409, 96, 'emerald', 2);
+
+  // 4. 1D Transposed Conv Decoder
+  g += rect(412, 45, 110, 102, { fill: 'rgba(16, 185, 129, 0.12)', stroke: C.emerald, rx: 6 });
+  g += T(467, 64, 'Conv1D Decoder', { size: 9, weight: 700, fill: C.emerald });
+  g += T(467, 80, 'Transposed Convs', { size: 7.5, mono: true, fill: '#6ee7b7' });
+  g += T(467, 98, 'Upsample ×320', { size: 8, weight: 600, fill: C.amber });
+  g += T(467, 116, 'MRSTFT & GAN Loss', { size: 7, fill: C.muted });
+  g += T(467, 132, 'x̂ ∈ ℝ^T', { size: 7.5, mono: true, fill: '#34d399' });
+
+  g += arrow(525, 96, 552, 96, 'emerald', 2);
+
+  // 5. Output Waveform
+  g += rect(555, 52, 65, 88, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(587, 80, 'Recon x̂', { size: 9, weight: 700, fill: C.emerald });
+  g += T(587, 96, 'Hi-Fi Audio', { size: 7.5, fill: '#6ee7b7' });
+  g += T(587, 115, 'PESQ: 4.1★', { size: 7.5, weight: 700, fill: C.amber });
+
+  g += T(320, 204, 'Strided 1D convolutions condense the audio frame rate, RVQ extracts multi-tier discrete codes, and transposed convolutions restore studio-grade audio.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'SoundStream/EnCodec architecture: Strided conv encoder compresses time by 320×, RVQ discretizes, and transposed convs decode back to raw audio.'
+  };
+}
+
+function q18RvqQuantizationLadder() {
+  let g = '';
+  g += T(320, 18, 'Residual Vector Quantization (RVQ): The Multi-Stage Error Cascade', { size: 12.5, weight: 700, fill: C.text });
+
+  // Input Latent z
+  g += rect(20, 55, 70, 75, { fill: 'rgba(59, 130, 246, 0.12)', stroke: C.blue, rx: 6 });
+  g += T(55, 78, 'Latent z', { size: 9, weight: 700, fill: C.blue });
+  g += T(55, 94, '||z|| = 1.0', { size: 7.5, mono: true, fill: C.muted });
+  g += T(55, 110, 'Continuous', { size: 7, fill: C.dim });
+
+  // Stage 1
+  g += arrow(93, 92, 118, 92, 'blue', 2);
+  g += rect(120, 42, 105, 102, { fill: 'rgba(239, 68, 68, 0.1)', stroke: C.rose, rx: 6 });
+  g += T(172, 58, 'Stage 1: Codebook 1', { size: 8.5, weight: 700, fill: C.rose });
+  g += T(172, 74, 'Token: q₁ ∈ C₁', { size: 7.5, mono: true, fill: '#fca5a5' });
+  g += T(172, 90, 'Residual r₁ = z - q₁', { size: 7.5, mono: true, fill: C.amber });
+  g += T(172, 106, 'Error: ||r₁|| = 0.45', { size: 7, mono: true, fill: C.muted });
+  g += T(172, 126, '1.5 kbps • Robotic Speech', { size: 6.8, weight: 600, fill: '#fda4af' });
+
+  // Stage 2
+  g += arrow(228, 92, 253, 92, 'amber', 2);
+  g += rect(255, 42, 105, 102, { fill: 'rgba(245, 158, 11, 0.1)', stroke: C.amber, rx: 6 });
+  g += T(307, 58, 'Stage 2: Codebook 2', { size: 8.5, weight: 700, fill: C.amber });
+  g += T(307, 74, 'Token: q₂ ∈ C₂', { size: 7.5, mono: true, fill: '#fde68a' });
+  g += T(307, 90, 'Residual r₂ = r₁ - q₂', { size: 7.5, mono: true, fill: C.cyan });
+  g += T(307, 106, 'Error: ||r₂|| = 0.20', { size: 7, mono: true, fill: C.muted });
+  g += T(307, 126, '3.0 kbps • Clear Timbre', { size: 6.8, weight: 600, fill: '#fde047' });
+
+  // Stage 3
+  g += arrow(363, 92, 388, 92, 'cyan', 2);
+  g += rect(390, 42, 105, 102, { fill: 'rgba(34, 211, 238, 0.1)', stroke: C.cyan, rx: 6 });
+  g += T(442, 58, 'Stage 3: Codebook 3', { size: 8.5, weight: 700, fill: C.cyan });
+  g += T(442, 74, 'Token: q₃ ∈ C₃', { size: 7.5, mono: true, fill: '#a5f3fc' });
+  g += T(442, 90, 'Residual r₃ = r₂ - q₃', { size: 7.5, mono: true, fill: C.emerald });
+  g += T(442, 106, 'Error: ||r₃|| = 0.08', { size: 7, mono: true, fill: C.muted });
+  g += T(442, 126, '4.5 kbps • Natural Prosody', { size: 6.8, weight: 600, fill: '#67e8f9' });
+
+  // Stage 4
+  g += arrow(498, 92, 523, 92, 'emerald', 2);
+  g += rect(525, 42, 100, 102, { fill: 'rgba(16, 185, 129, 0.12)', stroke: C.emerald, rx: 6 });
+  g += T(575, 58, 'Stage 4: C₄', { size: 8.5, weight: 700, fill: C.emerald });
+  g += T(575, 74, 'Token: q₄ ∈ C₄', { size: 7.5, mono: true, fill: '#6ee7b7' });
+  g += T(575, 90, 'ẑ = q₁+q₂+q₃+q₄', { size: 7.5, mono: true, weight: 700, fill: '#34d399' });
+  g += T(575, 106, 'Error: ||r₄|| = 0.02', { size: 7, mono: true, fill: C.muted });
+  g += T(575, 126, '6.0 kbps • Hi-Fi Studio', { size: 6.8, weight: 700, fill: '#34d399' });
+
+  // Summation banner
+  g += rect(30, 155, 580, 26, { fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 4 });
+  g += T(320, 168, 'Reconstruction ẑ = ∑ₖ qₖ  •  Quantization Error norm shrinks exponentially across cascade stages', { size: 8, mono: true, fill: '#6ee7b7' });
+
+  g += T(320, 204, 'Each RVQ codebook quantizes the leftover residual of the previous stage, allowing fine-grained acoustic refinement without exponentially scaling codebook size.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'RVQ quantizes the residual error iteratively: Stage 1 encodes semantic content, while subsequent stages add high-frequency acoustic fidelity.'
+  };
+}
+
+function q18SpeechLlmTokenization() {
+  let g = '';
+  g += T(320, 18, 'Acoustic Language Models: Delay Pattern Interleaving & Autoregression', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Text Conditioning Prefix
+  g += rect(20, 42, 130, 135, { fill: 'rgba(59, 130, 246, 0.1)', stroke: C.blue, rx: 6 });
+  g += T(85, 60, '1. Text Prefix Tokens', { size: 9, weight: 700, fill: C.blue });
+  const textTokens = ['"Hello"', '"world"', '"how"', '"are"', '"you"'];
+  textTokens.forEach((tok, idx) => {
+    const ty = 80 + idx * 16;
+    g += rect(32, ty - 7, 106, 14, { fill: 'rgba(59, 130, 246, 0.2)', rx: 3 });
+    g += T(85, ty, tok, { size: 7.5, mono: true, fill: '#93c5fd' });
+  });
+
+  // Cross arrow
+  g += arrow(154, 105, 184, 105, 'blue', 2);
+
+  // Right: Staggered Delay Pattern Grid (MusicGen / VALL-E)
+  g += rect(188, 42, 432, 135, { fill: 'rgba(15, 23, 42, 0.65)', stroke: 'rgba(255, 255, 255, 0.1)', rx: 6 });
+  g += T(404, 58, '2. Delay Pattern Multi-Stream Acoustic Grid (Codebooks 1 to 4)', { size: 9, weight: 700, fill: C.emerald });
+
+  const streams = [
+    { label: 'CB 1 (Base)', delay: 0, color: C.rose },
+    { label: 'CB 2 (+1 step)', delay: 1, color: C.amber },
+    { label: 'CB 3 (+2 step)', delay: 2, color: C.cyan },
+    { label: 'CB 4 (+3 step)', delay: 3, color: C.emerald }
+  ];
+
+  const timeCols = 6;
+  streams.forEach((st, rIdx) => {
+    const ry = 78 + rIdx * 20;
+    g += T(235, ry + 6, st.label, { size: 7, weight: 600, fill: st.color, anchor: 'end' });
+    
+    for (let c = 0; c < timeCols; c++) {
+      const cx = 245 + c * 58;
+      if (c < st.delay) {
+        // Delay Pad token
+        g += rect(cx, ry, 50, 14, { fill: 'rgba(255, 255, 255, 0.03)', stroke: 'rgba(255, 255, 255, 0.1)', rx: 2 });
+        g += T(cx + 25, ry + 7, '<delay>', { size: 6.5, mono: true, fill: C.dim });
+      } else {
+        const tIdx = c - st.delay + 1;
+        g += rect(cx, ry, 50, 14, { fill: tint(st.color, 0.22), stroke: st.color, rx: 2 });
+        g += T(cx + 25, ry + 7, `t_${tIdx}^(c${rIdx+1})`, { size: 6.5, mono: true, fill: st.color });
+      }
+    }
+  });
+
+  // Time Axis along bottom
+  for (let c = 0; c < timeCols; c++) {
+    const cx = 245 + c * 58 + 25;
+    g += T(cx, 166, `Step ${c+1}`, { size: 6.5, mono: true, fill: C.muted });
+  }
+
+  g += T(320, 204, 'By delaying each RVQ codebook stream by 1 timestep, a single causal Transformer generates all RVQ levels simultaneously without collapsing autoregressive order.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Delay Pattern interleaving allows a standard causal Transformer to predict all parallel RVQ streams autoregressively.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -3591,7 +3904,8 @@ const VISUALS = {
   'quest-14': [q14LlmToolBridge, q14ReactLoopCycle, q14JsonSchemaValidation, q14AgentSandboxSecurity, q14MultiAgentSwarm],
   'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding],
   'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures],
-  'quest-17': [q17ForwardReverseMarkov, q17ClosedFormJump, q17UnetTimeConditioned, q17CfgVectorExtrapolation, q17RectifiedFlowMatching]
+  'quest-17': [q17ForwardReverseMarkov, q17ClosedFormJump, q17UnetTimeConditioned, q17CfgVectorExtrapolation, q17RectifiedFlowMatching],
+  'quest-18': [q18WaveformToStft, q18MelFilterbanks, q18NeuralCodecPipeline, q18RvqQuantizationLadder, q18SpeechLlmTokenization]
 };
 
 let activeCleanups = [];

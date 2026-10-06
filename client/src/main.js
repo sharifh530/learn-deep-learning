@@ -134,7 +134,14 @@ const state = {
   diffTimestep: 500,
   diffCfgScale: 7.5,
   diffSampler: 'flow_matching', // 'ddpm' | 'ddim' | 'flow_matching'
-  diffNumSteps: 20
+  diffNumSteps: 20,
+  // Quest 18: Audio & Speech AI (Neural Codecs & RVQ)
+  audioScenarioIdx: 0,
+  audioActiveTab: 'spectrogram_synth', // 'spectrogram_synth' | 'rvq_studio' | 'speech_lm'
+  audioRvqStages: 4,
+  audioMelBins: 80,
+  audioPlaybackActive: false,
+  audioPlaybackFreq: 440
 };
 
 const tutorService = new AITutorService();
@@ -758,6 +765,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'diffusion_flow_lab':
       renderDiffusionFlowLabWidget(quest);
+      break;
+    case 'audio_speech_lab':
+      renderAudioSpeechLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -12476,6 +12486,799 @@ function renderDiffusionFlowLabWidget(quest) {
 }
 
 
+
+// --- WIDGET 18: Audio & Speech AI (Neural Codecs & RVQ Lab) ---
+function renderAudioSpeechLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'audio-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [
+    {
+      id: 'speech_vowel',
+      title: 'Human Speech Formants (/a/ & /i/)',
+      category: 'Vocal Tract Acoustics',
+      description: 'Human vocal cords vibrate at pitch F0 (~120-240 Hz), shaped into distinctive formants (F1, F2, F3) by resonant mouth cavities.',
+      baseFreq: 220,
+      harmonics: [1.0, 0.75, 0.55, 0.35, 0.18, 0.08],
+      energyEnvelope: [0.2, 0.8, 1.0, 0.9, 0.85, 0.7, 0.4, 0.1],
+      codecBitrate4: '6.0 kbps',
+      pesqScore: '3.9★ / 4.5'
+    },
+    {
+      id: 'acoustic_guitar',
+      title: 'Acoustic Guitar Harmonic Arpeggio',
+      category: 'String Resonance & Timbre',
+      description: 'Plucked nylon string produces sharp percussive transient attack followed by rich decaying harmonic overtone cascades.',
+      baseFreq: 330,
+      harmonics: [1.0, 0.85, 0.65, 0.45, 0.30, 0.22, 0.15, 0.08],
+      energyEnvelope: [1.0, 0.6, 0.45, 0.35, 0.25, 0.18, 0.1, 0.05],
+      codecBitrate4: '6.0 kbps',
+      pesqScore: '4.1★ / 4.5'
+    },
+    {
+      id: 'synthetic_lead',
+      title: 'Cyberpunk Sawtooth Lead Synth',
+      category: 'Electronic & Band-Limited Synthesis',
+      description: 'Aggressive sawtooth wave with resonance sweeps across high harmonics, challenging standard audio codecs with dense frequency energy.',
+      baseFreq: 175,
+      harmonics: [1.0, 0.92, 0.82, 0.71, 0.62, 0.51, 0.43, 0.35],
+      energyEnvelope: [0.5, 0.9, 0.95, 0.88, 0.82, 0.75, 0.65, 0.4],
+      codecBitrate4: '6.0 kbps',
+      pesqScore: '3.8★ / 4.5'
+    },
+    {
+      id: 'ambient_urban',
+      title: 'Metropolitan Urban Rain & Traffic',
+      category: 'Broadband Environmental Noise',
+      description: 'Stochastic rain drops combined with low-frequency bus rumble. Non-harmonic broadband noise tests codec reconstruction limits.',
+      baseFreq: 110,
+      harmonics: [0.7, 0.65, 0.6, 0.58, 0.52, 0.48, 0.44, 0.4],
+      energyEnvelope: [0.6, 0.65, 0.62, 0.7, 0.68, 0.64, 0.6, 0.55],
+      codecBitrate4: '6.0 kbps',
+      pesqScore: '3.7★ / 4.5'
+    }
+  ];
+
+  let scenarioIdx = state.audioScenarioIdx || 0;
+  if (scenarioIdx >= scenarios.length) scenarioIdx = 0;
+  let activeTab = state.audioActiveTab || 'spectrogram_synth';
+  let rvqStages = state.audioRvqStages || 4;
+  let melBins = state.audioMelBins || 80;
+  let isPlayingAudio = false;
+  let audioCtxInstance = null;
+  let activeOscillators = [];
+  let isGeneratingTokens = false;
+  let tokenStep = 4; // default timeline step scrubber
+
+  let xpSpectrogramClaimed = false;
+  let xpRvqClaimed = false;
+  let xpLlmClaimed = false;
+
+  const currentSc = scenarios[scenarioIdx];
+
+  // Helper Web Audio API synthesizer
+  function toggleWebAudioPlayback() {
+    if (isPlayingAudio) {
+      stopWebAudio();
+      return;
+    }
+    try {
+      if (!audioCtxInstance) {
+        audioCtxInstance = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtxInstance.state === 'suspended') {
+        audioCtxInstance.resume();
+      }
+
+      const masterGain = audioCtxInstance.createGain();
+      masterGain.gain.setValueAtTime(0.15, audioCtxInstance.currentTime);
+      masterGain.connect(audioCtxInstance.destination);
+
+      activeOscillators = [];
+      const baseF = currentSc.baseFreq;
+      currentSc.harmonics.slice(0, 5).forEach((hAmp, idx) => {
+        const osc = audioCtxInstance.createOscillator();
+        const harmGain = audioCtxInstance.createGain();
+        osc.type = idx === 0 ? 'sine' : (scenarioIdx === 2 ? 'sawtooth' : 'sine');
+        osc.frequency.setValueAtTime(baseF * (idx + 1), audioCtxInstance.currentTime);
+        harmGain.gain.setValueAtTime(hAmp * 0.25, audioCtxInstance.currentTime);
+        osc.connect(harmGain);
+        harmGain.connect(masterGain);
+        osc.start();
+        activeOscillators.push(osc);
+      });
+
+      isPlayingAudio = true;
+      soundFx.playBlip(540, 0.05);
+      updatePlayButtonUI();
+
+      // Automatically stop after 3.5 seconds
+      setTimeout(() => {
+        if (isPlayingAudio) stopWebAudio();
+      }, 3500);
+    } catch (err) {
+      console.warn('Web Audio playback failed or blocked:', err);
+    }
+  }
+
+  function stopWebAudio() {
+    activeOscillators.forEach(osc => {
+      try { osc.stop(); osc.disconnect(); } catch (e) {}
+    });
+    activeOscillators = [];
+    isPlayingAudio = false;
+    updatePlayButtonUI();
+  }
+
+  function updatePlayButtonUI() {
+    const btn = container.querySelector('#btn-play-synth-audio');
+    if (btn) {
+      if (isPlayingAudio) {
+        btn.innerHTML = `<span class="icon">⏹</span> Stop Audio Tone`;
+        btn.classList.add('playing');
+      } else {
+        btn.innerHTML = `<span class="icon">▶</span> Play Synthesized Waveform (Web Audio)`;
+        btn.classList.remove('playing');
+      }
+    }
+  }
+
+  // Generate Spectrogram Heatmap SVG
+  function generateSpectrogramSvg() {
+    const numFrames = 32;
+    const numBins = melBins === 40 ? 20 : (melBins === 80 ? 32 : 44);
+    const cellW = 560 / numFrames;
+    const cellH = 160 / numBins;
+    let svgInner = '';
+
+    // Color gradient palette: [deep navy, purple, cyan, emerald, bright gold]
+    const palette = [
+      '#0a0f1d', '#1e1b4b', '#3b0764', '#1d4ed8', '#0284c7',
+      '#06b6d4', '#10b981', '#34d399', '#f59e0b', '#fef08a'
+    ];
+
+    for (let f = 0; f < numFrames; f++) {
+      const frameNorm = f / (numFrames - 1);
+      // Envelope multiplier
+      const envIdx = Math.min(Math.floor(frameNorm * currentSc.energyEnvelope.length), currentSc.energyEnvelope.length - 1);
+      const env = currentSc.energyEnvelope[envIdx];
+
+      for (let b = 0; b < numBins; b++) {
+        const binNorm = (numBins - 1 - b) / numBins; // 0 at bottom (bass), 1 at top (treble)
+        
+        // Simulating energy based on harmonics and scenario
+        let energy = 0;
+        currentSc.harmonics.forEach((h, hIdx) => {
+          const targetBin = ((hIdx + 1) * 0.18) % 1.0;
+          const dist = Math.abs(binNorm - targetBin);
+          if (dist < 0.12) {
+            energy += h * Math.exp(-dist * 25) * env;
+          }
+        });
+        // Background noise floor
+        energy += (Math.sin(f * 1.7 + b * 2.3) * 0.5 + 0.5) * 0.08;
+        if (scenarioIdx === 3) energy += (Math.random() * 0.25); // urban noise
+        energy = Math.max(0, Math.min(0.99, energy));
+
+        const colorIdx = Math.floor(energy * palette.length);
+        const cellColor = palette[Math.min(colorIdx, palette.length - 1)];
+
+        const x = 40 + f * cellW;
+        const y = 20 + b * cellH;
+        svgInner += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(cellW - 0.5).toFixed(1)}" height="${(cellH - 0.5).toFixed(1)}" fill="${cellColor}" rx="1"/>`;
+      }
+    }
+
+    // Axes and labels
+    svgInner += `
+      <line x1="38" y1="20" x2="38" y2="182" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+      <line x1="38" y1="182" x2="602" y2="182" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+      <text x="32" y="25" fill="#94a3b8" font-size="8.5" text-anchor="end" font-family="monospace">8 kHz</text>
+      <text x="32" y="100" fill="#94a3b8" font-size="8.5" text-anchor="end" font-family="monospace">1 kHz</text>
+      <text x="32" y="178" fill="#94a3b8" font-size="8.5" text-anchor="end" font-family="monospace">80 Hz</text>
+      <text x="40" y="196" fill="#64748b" font-size="8.5" font-family="monospace">0.0s (Frame 0)</text>
+      <text x="320" y="196" fill="#94a3b8" font-size="8.5" text-anchor="middle" font-family="monospace">Time Axis (50 Frames / sec • 20ms Hop)</text>
+      <text x="600" y="196" fill="#64748b" font-size="8.5" text-anchor="end" font-family="monospace">0.64s</text>
+    `;
+
+    return `
+      <svg class="spectrogram-svg" viewBox="0 0 620 205" preserveAspectRatio="xMidYMid meet">
+        ${svgInner}
+      </svg>
+    `;
+  }
+
+  // RVQ Calculation & Metrics
+  function getRvqMetrics(stages) {
+    // 50 frames/sec * stages * 10 bits = stages * 500 bps
+    const bitrateKbps = (stages * 1.5).toFixed(1);
+    const compRatio = (705.6 / (stages * 1.5)).toFixed(1); // vs 44.1kHz 16-bit uncompressed
+    const snrMap = { 1: 14.2, 2: 23.5, 4: 33.8, 8: 41.2 };
+    const pesqMap = { 1: '2.1 (Robotic)', 2: '3.1 (Intelligible)', 4: '3.9 (Natural)', 8: '4.4 (Studio Hi-Fi)' };
+    const residualErrors = {
+      1: [0.42],
+      2: [0.42, 0.18],
+      4: [0.42, 0.18, 0.07, 0.02],
+      8: [0.42, 0.18, 0.07, 0.02, 0.009, 0.004, 0.002, 0.001]
+    };
+
+    return {
+      bitrateKbps,
+      compRatio,
+      snr: snrMap[stages] || 33.8,
+      pesq: pesqMap[stages] || '3.9 (Natural)',
+      residuals: residualErrors[stages] || [0.42, 0.18, 0.07, 0.02]
+    };
+  }
+
+  // HTML Structure
+  container.innerHTML = `
+    <div class="audio-lab-header">
+      <div class="audio-title-row">
+        <div class="audio-title-badge">
+          <span class="audio-icon">🎙️</span>
+          <div>
+            <h3>Audio & Speech AI: Neural Codecs & RVQ Studio</h3>
+            <p class="audio-subtitle">Explore continuous-to-discrete audio tokenization: inspect 80-bin Mel spectrograms, reconstruct multi-stage RVQ codebook cascades, and simulate autoregressive speech token generation.</p>
+          </div>
+        </div>
+        <div class="audio-tab-nav">
+          <button class="audio-tab-btn ${activeTab === 'spectrogram_synth' ? 'active' : ''}" data-tab="spectrogram_synth">🌊 Mel Spectrogram & Synthesizer</button>
+          <button class="audio-tab-btn ${activeTab === 'rvq_studio' ? 'active' : ''}" data-tab="rvq_studio">🧱 RVQ Ladder & Bitrates</button>
+          <button class="audio-tab-btn ${activeTab === 'speech_lm' ? 'active' : ''}" data-tab="speech_lm">⏱️ Acoustic LM & Delay Tokenizer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Selector Bar -->
+    <div class="audio-scenario-bar">
+      <span class="sc-label">Sound Profile:</span>
+      <div class="sc-btn-group">
+        ${scenarios.map((sc, i) => `
+          <button class="audio-sc-btn ${i === scenarioIdx ? 'active' : ''}" data-sc-idx="${i}">
+            <span class="sc-badge-dot" style="background: ${i === 0 ? '#06b6d4' : (i === 1 ? '#f59e0b' : (i === 2 ? '#ec4899' : '#10b981'))};"></span>
+            ${sc.title}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: SPECTROGRAM & SYNTHESIZER -->
+    <div class="audio-tab-panel" id="panel-spectrogram-synth" style="display: ${activeTab === 'spectrogram_synth' ? 'block' : 'none'};">
+      <div class="audio-grid-2col">
+        <!-- Left: Audio Source Card -->
+        <div class="audio-card source-card">
+          <div class="card-head">
+            <h4><span class="icon">🎼</span> Continuous Waveform Source</h4>
+            <span class="badge category-badge">${currentSc.category}</span>
+          </div>
+          <p class="sc-desc">${currentSc.description}</p>
+
+          <div class="audio-player-box">
+            <button class="btn-play-synth" id="btn-play-synth-audio">
+              <span class="icon">▶</span> Play Synthesized Waveform (Web Audio)
+            </button>
+            <div class="synth-specs">
+              <div class="spec-item"><span class="lbl">Fundamental F0:</span> <strong>${currentSc.baseFreq} Hz</strong></div>
+              <div class="spec-item"><span class="lbl">Sample Rate:</span> <strong>24,000 Hz</strong></div>
+              <div class="spec-item"><span class="lbl">Uncompressed:</span> <strong>768 kbps PCM</strong></div>
+            </div>
+          </div>
+
+          <div class="mel-formula-box">
+            <span class="box-title">Biological Mel Frequency Warping:</span>
+            <div class="formula-code">Mel(f) = 2595 · log₁₀(1 + f / 700)</div>
+            <p class="formula-expl">Human cochlear hair cells are densely clustered for vocal frequencies (100–3,000 Hz). The Mel filterbank maps linear FFT hertz into biologically sensitive logarithmic bands.</p>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-spectrogram-xp">
+              🌊 Claim +20 XP: Fourier & Mel Bridge Mastered
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: 80-Bin Mel Spectrogram Display -->
+        <div class="audio-card spectrogram-card">
+          <div class="card-head">
+            <h4><span class="icon">🌈</span> Log Mel-Spectrogram Heatmap</h4>
+            <div class="res-picker">
+              <span class="lbl">Mel Bins:</span>
+              <button class="res-btn ${melBins === 40 ? 'active' : ''}" data-bins="40">40 Bins</button>
+              <button class="res-btn ${melBins === 80 ? 'active' : ''}" data-bins="80">80 Bins ★</button>
+              <button class="res-btn ${melBins === 128 ? 'active' : ''}" data-bins="128">128 Bins</button>
+            </div>
+          </div>
+
+          <div class="spectrogram-viewport" id="spectrogram-viewport">
+            ${generateSpectrogramSvg()}
+          </div>
+
+          <div class="spectrogram-legend">
+            <span class="legend-lbl">Spectral Energy Intensity (dB):</span>
+            <div class="legend-gradient">
+              <span>-80 dB (Silence)</span>
+              <div class="grad-bar"></div>
+              <span>0 dB (Peak Energy)</span>
+            </div>
+          </div>
+
+          <div class="spectrogram-stats-row">
+            <div class="stat-pill"><span class="lbl">Window:</span> <strong>25 ms (600 spl)</strong></div>
+            <div class="stat-pill"><span class="lbl">Hop Size:</span> <strong>10 ms (240 spl)</strong></div>
+            <div class="stat-pill"><span class="lbl">Frame Rate:</span> <strong>100 Hz</strong></div>
+            <div class="stat-pill highlight"><span class="lbl">Compress:</span> <strong>240× Stride</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: RVQ LADDER & BITRATE STUDIO -->
+    <div class="audio-tab-panel" id="panel-rvq-studio" style="display: ${activeTab === 'rvq_studio' ? 'block' : 'none'};">
+      <div class="rvq-layout">
+        <!-- Interactive Stage Selector -->
+        <div class="audio-card rvq-controls-card">
+          <div class="rvq-controls-head">
+            <div>
+              <h4><span class="icon">🧱</span> Residual Vector Quantization Hierarchy</h4>
+              <p class="sub">Select the number of codebook stages to observe how quantization error shrinks monotonically across the cascade.</p>
+            </div>
+            <div class="stages-toggle-group">
+              <span class="stages-lbl">Codebook Stages (N_q):</span>
+              <button class="stage-btn ${rvqStages === 1 ? 'active' : ''}" data-stages="1">1 Stage (1.5 kbps)</button>
+              <button class="stage-btn ${rvqStages === 2 ? 'active' : ''}" data-stages="2">2 Stages (3.0 kbps)</button>
+              <button class="stage-btn ${rvqStages === 4 ? 'active' : ''}" data-stages="4">4 Stages (6.0 kbps) ★</button>
+              <button class="stage-btn ${rvqStages === 8 ? 'active' : ''}" data-stages="8">8 Stages (12.0 kbps)</button>
+            </div>
+          </div>
+
+          <!-- Dynamic Metrics Grid -->
+          <div class="rvq-metrics-grid" id="rvq-metrics-grid">
+            <!-- Rendered by updateRvqView() -->
+          </div>
+        </div>
+
+        <!-- RVQ Cascade Architecture Diagram -->
+        <div class="audio-card rvq-cascade-card">
+          <div class="card-head">
+            <h4><span class="icon">🧬</span> Multi-Stage Error Subtraction Pipeline</h4>
+            <span class="badge codebook-badge">Codebook K = 1024 (10 bits per stage)</span>
+          </div>
+
+          <div class="rvq-svg-container" id="rvq-svg-container">
+            <!-- Dynamic SVG Cascade rendered by updateRvqView() -->
+          </div>
+
+          <!-- Residual Decay Chart & Codebook Tokens -->
+          <div class="rvq-lower-grid">
+            <div class="sub-card error-decay-card">
+              <h5>Monotonic Error Decay ||r_k||²</h5>
+              <div class="decay-bars" id="decay-bars-container">
+                <!-- Bars dynamically rendered -->
+              </div>
+            </div>
+            <div class="sub-card codebook-tokens-card">
+              <h5>Discrete Codebook Index Stream</h5>
+              <div class="code-stream-chips" id="code-stream-chips">
+                <!-- Chips dynamically rendered -->
+              </div>
+              <p class="token-sub">Each stage outputs an integer index ∈ [0, 1023]. Audio is now a sequence of compact discrete tokens ready for LLMs!</p>
+            </div>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-rvq-xp">
+              🧱 Claim +25 XP: RVQ Multi-Stage Cascade Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: ACOUSTIC LANGUAGE MODEL & DELAY TOKENIZER -->
+    <div class="audio-tab-panel" id="panel-speech-lm" style="display: ${activeTab === 'speech_lm' ? 'block' : 'none'};">
+      <div class="speech-lm-layout">
+        <!-- Theory Intro -->
+        <div class="audio-card speech-theory-card">
+          <div class="card-head">
+            <h4><span class="icon">⏱️</span> Acoustic Delay Pattern Interleaving (VALL-E / MusicGen)</h4>
+            <span class="badge delay-badge">Autoregressive Acoustic LM</span>
+          </div>
+          <p class="theory-desc">
+            Generating audio like text requires predicting multiple RVQ codebooks per frame. If we flatten them naively, the sequence becomes 4× to 8× longer! By introducing a <strong>1-step delay</strong> between each subsequent codebook stream, a standard causal Transformer can predict all codebook levels simultaneously without leaking future information.
+          </p>
+        </div>
+
+        <!-- Interactive Delay Grid Simulator -->
+        <div class="audio-card delay-sim-card">
+          <div class="sim-header-row">
+            <div>
+              <h5>Acoustic Token Matrix (4 RVQ Codebooks × 8 Timesteps)</h5>
+              <p class="sim-sub">Scrub the timeline or hit "Simulate Autoregressive Generation" to observe causal generation step by step.</p>
+            </div>
+            <div class="sim-actions">
+              <button class="btn-run-sim" id="btn-run-acoustic-sim">
+                <span class="icon">🚀</span> Simulate Generation Rollout
+              </button>
+            </div>
+          </div>
+
+          <!-- Step Scrubber -->
+          <div class="timeline-scrubber-box">
+            <div class="scrub-head">
+              <label for="audio-step-slider">Autoregressive Generation Step: <strong id="step-display">Step ${tokenStep}</strong> / 8</label>
+              <span class="active-focus" id="step-focus-desc">Streams 1-4 active</span>
+            </div>
+            <input type="range" id="audio-step-slider" min="1" max="8" value="${tokenStep}" class="audio-slider">
+          </div>
+
+          <!-- Delay Matrix Grid View -->
+          <div class="delay-matrix-wrapper" id="delay-matrix-wrapper">
+            <!-- Dynamic Delay Matrix Grid rendered by updateDelayMatrix() -->
+          </div>
+
+          <!-- Attention Arcs Visualization -->
+          <div class="attention-arcs-box">
+            <span class="arcs-title">Causal Attention Receptive Field:</span>
+            <div class="arcs-info" id="arcs-info-text">
+              At Step <strong>${tokenStep}</strong>, the model attends strictly to past and current prompt tokens. Due to the diagonal delay pattern, high-frequency codebook $C_k$ is conditioned on coarse codebook $C_{k-1}$ from the same acoustic frame!
+            </div>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-llm-xp">
+              ⏱️ Claim +30 XP: Acoustic Language Modeling Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach container to DOM
+  dom.interactiveContainer.innerHTML = '';
+  dom.interactiveContainer.appendChild(container);
+
+  // Tab switching logic
+  const tabBtns = container.querySelectorAll('.audio-tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.getAttribute('data-tab');
+      state.audioActiveTab = activeTab;
+
+      container.querySelector('#panel-spectrogram-synth').style.display = activeTab === 'spectrogram_synth' ? 'block' : 'none';
+      container.querySelector('#panel-rvq-studio').style.display = activeTab === 'rvq_studio' ? 'block' : 'none';
+      container.querySelector('#panel-speech-lm').style.display = activeTab === 'speech_lm' ? 'block' : 'none';
+      soundFx.playBlip(620, 0.05);
+
+      if (activeTab === 'rvq_studio') updateRvqView();
+      if (activeTab === 'speech_lm') updateDelayMatrix();
+    });
+  });
+
+  // Scenario buttons
+  const scBtns = container.querySelectorAll('.audio-sc-btn');
+  scBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      scenarioIdx = parseInt(btn.getAttribute('data-sc-idx'), 10);
+      state.audioScenarioIdx = scenarioIdx;
+      if (isPlayingAudio) stopWebAudio();
+      renderAudioSpeechLabWidget(quest);
+      soundFx.playBlip(480, 0.06);
+    });
+  });
+
+  // Mel Bins selector
+  const resBtns = container.querySelectorAll('.res-btn');
+  resBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      resBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      melBins = parseInt(btn.getAttribute('data-bins'), 10);
+      state.audioMelBins = melBins;
+      const viewport = container.querySelector('#spectrogram-viewport');
+      if (viewport) viewport.innerHTML = generateSpectrogramSvg();
+      soundFx.playBlip(700, 0.04);
+    });
+  });
+
+  // Web Audio Play Button
+  const btnPlaySynth = container.querySelector('#btn-play-synth-audio');
+  if (btnPlaySynth) {
+    btnPlaySynth.addEventListener('click', () => {
+      toggleWebAudioPlayback();
+    });
+  }
+
+  // RVQ Stage buttons
+  function setupRvqControls() {
+    const stageBtns = container.querySelectorAll('.stage-btn');
+    stageBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        stageBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        rvqStages = parseInt(btn.getAttribute('data-stages'), 10);
+        state.audioRvqStages = rvqStages;
+        updateRvqView();
+        soundFx.playBlip(550 + rvqStages * 35, 0.06);
+      });
+    });
+  }
+
+  function updateRvqView() {
+    const metrics = getRvqMetrics(rvqStages);
+    const metricsGrid = container.querySelector('#rvq-metrics-grid');
+    if (metricsGrid) {
+      metricsGrid.innerHTML = `
+        <div class="audio-metric-card">
+          <span class="m-lbl">Total Audio Bitrate</span>
+          <span class="m-val highlight">${metrics.bitrateKbps} kbps</span>
+          <span class="m-sub">${rvqStages} codebook stages × 50 Hz</span>
+        </div>
+        <div class="audio-metric-card">
+          <span class="m-lbl">Compression vs PCM</span>
+          <span class="m-val">${metrics.compRatio}×</span>
+          <span class="m-sub">705.6 kbps uncompressed</span>
+        </div>
+        <div class="audio-metric-card">
+          <span class="m-lbl">Signal-to-Noise Ratio</span>
+          <span class="m-val">${metrics.snr} dB</span>
+          <span class="m-sub">Reconstruction precision</span>
+        </div>
+        <div class="audio-metric-card">
+          <span class="m-lbl">PESQ Speech Quality</span>
+          <span class="m-val">${metrics.pesq}</span>
+          <span class="m-sub">Perceptual fidelity score</span>
+        </div>
+      `;
+    }
+
+    // Dynamic RVQ Cascade SVG
+    const svgBox = container.querySelector('#rvq-svg-container');
+    if (svgBox) {
+      let cascadeSvg = '';
+      const totalStages = rvqStages;
+      const stageW = Math.min(115, Math.floor(480 / totalStages));
+      
+      // Input z
+      cascadeSvg += `
+        <rect x="15" y="45" width="60" height="55" rx="6" fill="rgba(59, 130, 246, 0.15)" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="45" y="68" fill="#60a5fa" font-size="10" font-weight="bold" text-anchor="middle">Latent z</text>
+        <text x="45" y="84" fill="#94a3b8" font-size="7.5" font-family="monospace" text-anchor="middle">dim=128</text>
+        <line x1="75" y1="72" x2="95" y2="72" stroke="#60a5fa" stroke-width="1.8" marker-end="url(#lv-ar-cyan)"/>
+      `;
+
+      for (let s = 0; s < totalStages; s++) {
+        const sx = 95 + s * (stageW + 16);
+        const colr = s === 0 ? '#fb7185' : (s === 1 ? '#fbbf24' : (s === 2 ? '#22d3ee' : '#34d399'));
+        const errVal = metrics.residuals[s] || (0.42 * Math.pow(0.45, s)).toFixed(3);
+
+        cascadeSvg += `
+          <g>
+            <rect x="${sx}" y="25" width="${stageW}" height="95" rx="6" fill="rgba(15, 23, 42, 0.8)" stroke="${colr}" stroke-width="1.5"/>
+            <text x="${sx + stageW / 2}" y="42" fill="${colr}" font-size="9" font-weight="bold" text-anchor="middle">Stage ${s + 1}</text>
+            <rect x="${sx + 6}" y="52" width="${stageW - 12}" height="18" rx="3" fill="rgba(255,255,255,0.06)"/>
+            <text x="${sx + stageW / 2}" y="64" fill="#e2e8f0" font-size="7.5" font-family="monospace" text-anchor="middle">C_${s+1} [1024]</text>
+            <text x="${sx + stageW / 2}" y="86" fill="#94a3b8" font-size="7" font-family="monospace" text-anchor="middle">||r_${s+1}|| = ${errVal}</text>
+            <text x="${sx + stageW / 2}" y="104" fill="${colr}" font-size="7.5" font-weight="bold" text-anchor="middle">+1.5 kbps</text>
+          </g>
+        `;
+
+        if (s < totalStages - 1) {
+          cascadeSvg += `
+            <line x1="${sx + stageW}" y1="72" x2="${sx + stageW + 14}" y2="72" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
+          `;
+        }
+      }
+
+      // Output Reconstructed z_hat
+      const outX = 95 + totalStages * (stageW + 16);
+      cascadeSvg += `
+        <line x1="${outX - 16}" y1="72" x2="${outX}" y2="72" stroke="#34d399" stroke-width="1.8"/>
+        <rect x="${outX}" y="45" width="65" height="55" rx="6" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" stroke-width="1.5"/>
+        <text x="${outX + 32}" y="68" fill="#34d399" font-size="9.5" font-weight="bold" text-anchor="middle">Recon ẑ</text>
+        <text x="${outX + 32}" y="84" fill="#a7f3d0" font-size="7.5" font-family="monospace" text-anchor="middle">∑ₖ qₖ</text>
+      `;
+
+      svgBox.innerHTML = `
+        <svg class="rvq-flow-svg" viewBox="0 0 ${Math.max(620, outX + 80)} 145" preserveAspectRatio="xMidYMid meet">
+          ${cascadeSvg}
+        </svg>
+      `;
+    }
+
+    // Error Decay Bar Chart
+    const decayBox = container.querySelector('#decay-bars-container');
+    if (decayBox) {
+      decayBox.innerHTML = metrics.residuals.map((res, i) => {
+        const pct = Math.max(4, Math.min(100, (res / 0.42) * 100));
+        const colr = i === 0 ? '#fb7185' : (i === 1 ? '#fbbf24' : (i === 2 ? '#22d3ee' : '#34d399'));
+        return `
+          <div class="decay-row">
+            <span class="d-stage">Stage ${i + 1}:</span>
+            <div class="d-bar-track">
+              <div class="d-bar-fill" style="width: ${pct}%; background: ${colr};"></div>
+            </div>
+            <span class="d-val">${res}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Code Stream Chips
+    const chipsBox = container.querySelector('#code-stream-chips');
+    if (chipsBox) {
+      const sampleCodes = [742, 108, 915, 42, 603, 319, 881, 14];
+      chipsBox.innerHTML = Array.from({ length: rvqStages }).map((_, i) => {
+        const codeVal = sampleCodes[i % sampleCodes.length];
+        const colr = i === 0 ? '#fb7185' : (i === 1 ? '#fbbf24' : (i === 2 ? '#22d3ee' : '#34d399'));
+        return `
+          <div class="code-chip" style="border-color: ${colr}; color: ${colr};">
+            <span class="chip-lbl">Codebook ${i + 1}:</span>
+            <strong>#${codeVal}</strong>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // TAB 3: Delay Matrix & Interleaving View
+  function updateDelayMatrix() {
+    const matrixBox = container.querySelector('#delay-matrix-wrapper');
+    if (!matrixBox) return;
+
+    const streams = [
+      { name: 'CB 1 (Base Semantics)', delay: 0, color: '#fb7185' },
+      { name: 'CB 2 (Timbre/Pitch)', delay: 1, color: '#fbbf24' },
+      { name: 'CB 3 (Formants/Prosody)', delay: 2, color: '#22d3ee' },
+      { name: 'CB 4 (Acoustic Shine)', delay: 3, color: '#34d399' }
+    ];
+
+    const totalCols = 8;
+    let html = '<div class="delay-table">';
+
+    // Header row (Timesteps)
+    html += '<div class="delay-row head-row"><div class="st-cell label-cell">Stream / Layer</div>';
+    for (let c = 1; c <= totalCols; c++) {
+      const isCur = c === tokenStep;
+      html += `<div class="st-cell step-head ${isCur ? 'active-col' : ''}">t = ${c}</div>`;
+    }
+    html += '</div>';
+
+    // Stream rows
+    streams.forEach((st, sIdx) => {
+      html += `<div class="delay-row"><div class="st-cell label-cell" style="color: ${st.color}; font-weight: 600;">${st.name}</div>`;
+      for (let c = 1; c <= totalCols; c++) {
+        const isCur = c === tokenStep;
+        if (c - 1 < st.delay) {
+          // Staggered Delay pad
+          html += `<div class="st-cell delay-pad ${isCur ? 'active-pad' : ''}">&lt;delay&gt;</div>`;
+        } else {
+          const frameNum = c - st.delay;
+          const isGenerated = c <= tokenStep;
+          const cellCls = isGenerated ? 'generated-tok' : 'pending-tok';
+          html += `
+            <div class="st-cell ${cellCls} ${isCur ? 'current-step' : ''}" style="${isGenerated ? `background: rgba(${sIdx === 0 ? '251,113,133' : (sIdx === 1 ? '251,191,36' : (sIdx === 2 ? '34,211,238' : '52,211,153'))}, 0.22); border-color: ${st.color};` : ''}">
+              tok_${frameNum}
+            </div>
+          `;
+        }
+      }
+      html += '</div>';
+    });
+
+    html += '</div>';
+    matrixBox.innerHTML = html;
+
+    // Update scrubber text
+    const disp = container.querySelector('#step-display');
+    if (disp) disp.textContent = `Step ${tokenStep}`;
+    const desc = container.querySelector('#step-focus-desc');
+    if (desc) {
+      if (tokenStep === 1) desc.textContent = 'Only CB 1 active (CB 2-4 delayed)';
+      else if (tokenStep === 2) desc.textContent = 'CB 1 & CB 2 active (CB 3-4 delayed)';
+      else if (tokenStep === 3) desc.textContent = 'CB 1, CB 2 & CB 3 active (CB 4 delayed)';
+      else desc.textContent = 'All 4 RVQ Streams generating in parallel!';
+    }
+  }
+
+  // Scrubber input
+  const stepSlider = container.querySelector('#audio-step-slider');
+  if (stepSlider) {
+    stepSlider.addEventListener('input', (e) => {
+      tokenStep = parseInt(e.target.value, 10);
+      updateDelayMatrix();
+      soundFx.playBlip(400 + tokenStep * 40, 0.04);
+    });
+  }
+
+  // Simulation Rollout Button
+  const btnRunSim = container.querySelector('#btn-run-acoustic-sim');
+  if (btnRunSim) {
+    btnRunSim.addEventListener('click', () => {
+      if (isGeneratingTokens) return;
+      isGeneratingTokens = true;
+      btnRunSim.disabled = true;
+      btnRunSim.innerHTML = `<span class="icon spin">🔄</span> Generating Tokens...`;
+      soundFx.playBlip(750, 0.08);
+
+      let stepI = 1;
+      tokenStep = 1;
+      if (stepSlider) stepSlider.value = 1;
+      updateDelayMatrix();
+
+      const timer = setInterval(() => {
+        stepI++;
+        tokenStep = stepI;
+        if (stepSlider) stepSlider.value = stepI;
+        updateDelayMatrix();
+        soundFx.playBlip(420 + stepI * 50, 0.05);
+
+        if (stepI >= 8) {
+          clearInterval(timer);
+          isGeneratingTokens = false;
+          btnRunSim.disabled = false;
+          btnRunSim.innerHTML = `<span class="icon">🚀</span> Simulate Generation Rollout`;
+          soundFx.playLevelUp();
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+        }
+      }, 350);
+    });
+  }
+
+  // Claim XP buttons
+  const btnClaimSpectrogramXp = container.querySelector('#btn-claim-spectrogram-xp');
+  if (btnClaimSpectrogramXp) {
+    btnClaimSpectrogramXp.addEventListener('click', () => {
+      if (!xpSpectrogramClaimed) {
+        xpSpectrogramClaimed = true;
+        awardXp(20, 'Fourier & Mel Spectrogram Conquered');
+        btnClaimSpectrogramXp.textContent = '✓ +20 XP Claimed!';
+        btnClaimSpectrogramXp.disabled = true;
+        btnClaimSpectrogramXp.style.opacity = '0.6';
+        confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimRvqXp = container.querySelector('#btn-claim-rvq-xp');
+  if (btnClaimRvqXp) {
+    btnClaimRvqXp.addEventListener('click', () => {
+      if (!xpRvqClaimed) {
+        xpRvqClaimed = true;
+        awardXp(25, 'Residual Vector Quantization Conquered');
+        btnClaimRvqXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimRvqXp.disabled = true;
+        btnClaimRvqXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimLlmXp = container.querySelector('#btn-claim-llm-xp');
+  if (btnClaimLlmXp) {
+    btnClaimLlmXp.addEventListener('click', () => {
+      if (!xpLlmClaimed) {
+        xpLlmClaimed = true;
+        awardXp(30, 'Acoustic Language Models Conquered');
+        btnClaimLlmXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimLlmXp.disabled = true;
+        btnClaimLlmXp.style.opacity = '0.6';
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // Initialize view
+  setupRvqControls();
+  updateRvqView();
+  updateDelayMatrix();
+}
+
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -12706,6 +13509,13 @@ const questPrompts = {
     { label: '⚡ Why does Rectified Flow Matching beat classic DDPM?', prompt: 'Compare the curved stochastic trajectories of Brownian diffusion against the straight linear velocity field of Rectified Flow Matching in Flux.1 and SD3.' },
     { label: '🏛️ What is Latent Diffusion (Stable Diffusion)?', prompt: 'Explain the difference between pixel-space diffusion and latent-space diffusion: how does a VAE compress spatial dimensions by 8x to slash VRAM and FLOP requirements?' },
     { label: '🎯 Quiz me on Diffusion Models & Flow Matching', prompt: 'Give me a challenging question about DDPM score matching, CFG guidance scales, noise schedules, or rectified flow trajectories!' }
+  ],
+  'quest-18': [
+    { label: '🎙️ Why does 44.1 kHz raw audio break LLMs?', prompt: 'Explain why 44,100 scalar samples per second causes self-attention O(L^2) memory to explode, and how neural audio codecs compress continuous waveforms into 50 Hz discrete tokens.' },
+    { label: '🌈 How does the Mel Filterbank mimic human hearing?', prompt: 'Walk through how Short-Time Fourier Transform (STFT) frames are filtered through triangular Mel filterbanks, and why human cochlear biology requires logarithmic frequency warping.' },
+    { label: '🧱 How does Residual Vector Quantization (RVQ) work?', prompt: 'Explain the multi-stage codebook cascade in RVQ: how does quantizing residual errors r_k = r_{k-1} - q_k achieve high-fidelity audio with small codebooks?' },
+    { label: '⏱️ What is the Delay Pattern in VALL-E & MusicGen?', prompt: 'Walk through how interleaving RVQ codebook streams with a 1-step delay allows a single causal autoregressive Transformer to generate all codebook layers simultaneously.' },
+    { label: '🎯 Quiz me on Neural Audio Codecs & RVQ', prompt: 'Give me a challenging question about STFT hop sizes, Mel spectrogram bins, RVQ straight-through estimators, or acoustic language models!' }
   ]
 };
 
