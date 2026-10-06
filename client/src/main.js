@@ -112,7 +112,14 @@ const state = {
   agentSelectedToolIdx: 0,
   agentCustomArgs: {},
   agentSwarmRunning: false,
-  agentSwarmStep: 0
+  agentSwarmStep: 0,
+  // Quest 15: Multimodal Vision-Language Models state
+  vlmImageIdx: 0,
+  vlmActiveTab: 'patch_inspector', // 'patch_inspector' | 'projector_arena' | 'visual_qa'
+  vlmSelectedPatchIdx: 9, // default selected patch (0-indexed: 9 = Patch 10)
+  vlmProjectorMode: 'mlp_llava', // 'linear' | 'mlp_llava' | 'perceiver'
+  vlmShowBoundingBox: true,
+  vlmTokensGenerated: false
 };
 
 const tutorService = new AITutorService();
@@ -727,6 +734,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'agentic_tool_lab':
       renderAgenticToolLabWidget(quest);
+      break;
+    case 'multimodal_vlm_lab':
+      renderMultimodalVlmLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -9861,6 +9871,723 @@ function renderAgenticToolLabWidget(quest) {
   updateSchemaDisplay();
 }
 
+
+// --- WIDGET 15: Multimodal Vision-Language Models Lab ---
+function renderMultimodalVlmLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'vlm-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const images = config.images || [];
+  const projectorModes = config.projectorModes || [];
+
+  let imageIdx = state.vlmImageIdx || 0;
+  if (imageIdx >= images.length) imageIdx = 0;
+  let activeTab = state.vlmActiveTab || 'patch_inspector';
+  let selectedPatchIdx = state.vlmSelectedPatchIdx ?? 9;
+  let projectorMode = state.vlmProjectorMode || 'mlp_llava';
+  let showBoundingBox = state.vlmShowBoundingBox ?? true;
+  let isGenerating = false;
+  let xpClaimed = false;
+  let vqaXpClaimed = false;
+
+  const currentImg = () => images[imageIdx] || {
+    id: 'autonomous_nav',
+    title: 'Autonomous Driving Perception',
+    category: 'Robotics & Spatial Grounding',
+    resolution: '224x224',
+    description: 'Urban intersection with crossing pedestrian.',
+    userQuery: 'Detect the pedestrian and predict the bounding box coordinates.',
+    groundingTarget: {
+      label: 'pedestrian',
+      box: [112, 112, 210, 168],
+      boxNorm: [500, 500, 938, 750],
+      primaryPatches: [9, 10, 13, 14]
+    },
+    answer: 'The pedestrian is crossing in lower-right quadrant. Bounding box: [500, 500, 938, 750].'
+  };
+
+  function getSceneSvg(imgId) {
+    if (imgId === 'chest_xray') {
+      return `
+        <svg viewBox="0 0 224 224" class="vlm-scene-svg">
+          <rect width="224" height="224" fill="#080c14" />
+          <!-- Spine & Sternum -->
+          <line x1="112" y1="20" x2="112" y2="204" stroke="#475569" stroke-width="6" stroke-linecap="round" />
+          <!-- Rib Cages -->
+          <path d="M 60,60 Q 112,50 164,60" fill="none" stroke="rgba(203,213,225,0.4)" stroke-width="3" />
+          <path d="M 50,85 Q 112,75 174,85" fill="none" stroke="rgba(203,213,225,0.45)" stroke-width="3.5" />
+          <path d="M 45,115 Q 112,105 179,115" fill="none" stroke="rgba(203,213,225,0.45)" stroke-width="4" />
+          <path d="M 45,145 Q 112,135 179,145" fill="none" stroke="rgba(203,213,225,0.4)" stroke-width="4" />
+          <!-- Lung Outlines -->
+          <ellipse cx="78" cy="115" rx="36" ry="58" fill="rgba(30,41,59,0.5)" stroke="rgba(148,163,184,0.3)" stroke-width="1.5" />
+          <ellipse cx="146" cy="115" rx="36" ry="58" fill="rgba(30,41,59,0.5)" stroke="rgba(148,163,184,0.3)" stroke-width="1.5" />
+          <!-- Cardiac Silhouette -->
+          <path d="M 112,100 C 135,110 145,140 120,165 C 105,175 95,150 112,100 Z" fill="rgba(71,85,105,0.6)" stroke="#94a3b8" stroke-width="1.5" />
+          <!-- Focal Consolidation Opacity (Target) -->
+          <ellipse cx="65" cy="155" rx="28" ry="20" fill="rgba(56,189,248,0.45)" filter="drop-shadow(0 0 8px rgba(56,189,248,0.7))" />
+          <circle cx="62" cy="152" r="10" fill="rgba(255,255,255,0.4)" />
+        </svg>
+      `;
+    } else if (imgId === 'chart_analytics') {
+      return `
+        <svg viewBox="0 0 224 224" class="vlm-scene-svg">
+          <rect width="224" height="224" fill="#0b1120" />
+          <!-- Grid Lines -->
+          <line x1="30" y1="40" x2="204" y2="40" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2,2" />
+          <line x1="30" y1="80" x2="204" y2="80" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2,2" />
+          <line x1="30" y1="120" x2="204" y2="120" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2,2" />
+          <line x1="30" y1="160" x2="204" y2="160" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2,2" />
+          <line x1="30" y1="190" x2="204" y2="190" stroke="#475569" stroke-width="2" />
+          <!-- Q1 Bars -->
+          <rect x="42" y="130" width="12" height="60" fill="#38bdf8" rx="2" />
+          <rect x="56" y="110" width="12" height="80" fill="#a855f7" rx="2" />
+          <rect x="70" y="145" width="12" height="45" fill="#10b981" rx="2" />
+          <!-- Q2 Bars -->
+          <rect x="94" y="115" width="12" height="75" fill="#38bdf8" rx="2" />
+          <rect x="108" y="95" width="12" height="95" fill="#a855f7" rx="2" />
+          <rect x="122" y="100" width="12" height="90" fill="#10b981" rx="2" />
+          <!-- Q3 Bars (Peak Target) -->
+          <rect x="146" y="100" width="12" height="90" fill="#38bdf8" rx="2" />
+          <rect x="160" y="125" width="12" height="65" fill="#a855f7" rx="2" />
+          <!-- AI Services Peak Bar -->
+          <rect x="174" y="45" width="12" height="145" fill="#10b981" rx="2" filter="drop-shadow(0 0 6px rgba(16,185,129,0.7))" />
+          <!-- Q3 Tag -->
+          <text x="168" y="206" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="monospace">Q3 PEAK</text>
+        </svg>
+      `;
+    } else if (imgId === 'satellite_recon') {
+      return `
+        <svg viewBox="0 0 224 224" class="vlm-scene-svg">
+          <rect width="224" height="224" fill="#0369a1" />
+          <!-- Coastal Landmass -->
+          <path d="M 0,0 L 90,0 Q 110,60 80,120 Q 60,180 0,224 Z" fill="#1e293b" stroke="#334155" stroke-width="2" />
+          <!-- Harbor Piers -->
+          <rect x="80" y="45" width="35" height="10" fill="#475569" rx="1" />
+          <rect x="70" y="85" width="45" height="12" fill="#475569" rx="1" />
+          <!-- Container Ship (Target) -->
+          <g transform="translate(110, 85) rotate(25)">
+            <path d="M -12,-35 L 12,-35 L 16,30 Q 0,42 -16,30 Z" fill="#b91c1c" stroke="#f87171" stroke-width="1.5" />
+            <!-- Cargo Containers -->
+            <rect x="-8" y="-28" width="7" height="14" fill="#f59e0b" />
+            <rect x="1" y="-28" width="7" height="14" fill="#10b981" />
+            <rect x="-8" y="-10" width="7" height="14" fill="#38bdf8" />
+            <rect x="1" y="-10" width="7" height="14" fill="#f59e0b" />
+            <rect x="-8" y="8" width="7" height="14" fill="#10b981" />
+            <rect x="1" y="8" width="7" height="14" fill="#38bdf8" />
+            <!-- Bridge Tower -->
+            <rect x="-10" y="24" width="20" height="6" fill="#ffffff" />
+          </g>
+          <!-- Water Wake Waves -->
+          <path d="M 145,130 Q 170,145 195,140" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" />
+          <path d="M 155,145 Q 180,160 205,155" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+        </svg>
+      `;
+    } else {
+      // autonomous_nav
+      return `
+        <svg viewBox="0 0 224 224" class="vlm-scene-svg">
+          <rect width="224" height="224" fill="#0f172a" />
+          <!-- Road Asphalt -->
+          <polygon points="30,224 194,224 140,80 84,80" fill="#1e293b" />
+          <!-- Road Center Dashes -->
+          <line x1="112" y1="85" x2="112" y2="98" stroke="#f59e0b" stroke-width="2" />
+          <line x1="112" y1="112" x2="112" y2="132" stroke="#f59e0b" stroke-width="2.5" />
+          <line x1="112" y1="150" x2="112" y2="180" stroke="#f59e0b" stroke-width="3" />
+          <line x1="112" y1="195" x2="112" y2="224" stroke="#f59e0b" stroke-width="3.5" />
+          <!-- Crosswalk Stripes in Lower-Right -->
+          <line x1="118" y1="175" x2="175" y2="175" stroke="rgba(255,255,255,0.5)" stroke-width="4" stroke-dasharray="8,6" />
+          <line x1="115" y1="190" x2="185" y2="190" stroke="rgba(255,255,255,0.5)" stroke-width="4" stroke-dasharray="10,6" />
+          <!-- Approaching Car on Left -->
+          <rect x="58" y="115" width="28" height="42" fill="#3b82f6" rx="4" stroke="#60a5fa" stroke-width="1.5" />
+          <rect x="62" y="125" width="20" height="14" fill="#1e293b" rx="2" />
+          <circle x="64" y="152" r="3" fill="#facc15" />
+          <circle x="80" y="152" r="3" fill="#facc15" />
+          <!-- Pedestrian on Crosswalk (Target) -->
+          <g transform="translate(136, 140)">
+            <circle cx="8" cy="8" r="4" fill="#10b981" />
+            <line x1="8" y1="12" x2="8" y2="28" stroke="#10b981" stroke-width="2.5" />
+            <line x1="8" y1="18" x2="2" y2="24" stroke="#10b981" stroke-width="2" />
+            <line x1="8" y1="18" x2="14" y2="24" stroke="#10b981" stroke-width="2" />
+            <line x1="8" y1="28" x2="4" y2="38" stroke="#10b981" stroke-width="2" />
+            <line x1="8" y1="28" x2="13" y2="38" stroke="#10b981" stroke-width="2" />
+          </g>
+          <!-- Traffic Light -->
+          <rect x="180" y="35" width="14" height="34" fill="#000" rx="3" stroke="#475569" />
+          <circle cx="187" cy="44" r="3.5" fill="#334155" />
+          <circle cx="187" cy="52" r="3.5" fill="#334155" />
+          <circle cx="187" cy="60" r="3.5" fill="#10b981" filter="drop-shadow(0 0 4px #10b981)" />
+        </svg>
+      `;
+    }
+  }
+
+  container.innerHTML = `
+    <div class="vlm-lab-header">
+      <div class="vlm-title-row">
+        <div class="vlm-title-badge">
+          <span class="vlm-icon">👁️</span>
+          <div>
+            <h3>Multimodal Vision-Language Models (VLM) Lab</h3>
+            <p class="vlm-subtitle">Deconstruct 2D images into ViT patches, warp visual vectors through multimodal projectors, and ground coordinates.</p>
+          </div>
+        </div>
+        <div class="vlm-tab-nav">
+          <button class="vlm-tab-btn ${activeTab === 'patch_inspector' ? 'active' : ''}" data-tab="patch_inspector">🧩 ViT Patchifier</button>
+          <button class="vlm-tab-btn ${activeTab === 'projector_arena' ? 'active' : ''}" data-tab="projector_arena">🔌 Multimodal Projector</button>
+          <button class="vlm-tab-btn ${activeTab === 'visual_qa' ? 'active' : ''}" data-tab="visual_qa">📍 Spatial Grounding & VQA</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Chips Bar -->
+    <div class="vlm-scenario-bar">
+      <span class="scenario-bar-label">🖼️ Select Multimodal Input:</span>
+      <div class="scenario-chips" id="vlm-image-chips">
+        ${images.map((img, idx) => `
+          <button class="scenario-chip ${idx === imageIdx ? 'active' : ''}" data-img-idx="${idx}">
+            <span class="sc-icon">${idx === 0 ? '🚗' : idx === 1 ? '🩻' : idx === 2 ? '📊' : '🛰️'}</span>
+            <span class="sc-title">${img.title}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: ViT Patch Inspector -->
+    <div class="vlm-tab-panel" id="panel-patch-inspector" style="display: ${activeTab === 'patch_inspector' ? 'block' : 'none'};">
+      <div class="patch-lab-grid">
+        <!-- Left: Image Canvas with 4x4 Grid Overlay -->
+        <div class="vlm-canvas-card">
+          <div class="canvas-header">
+            <h4>2D Image Patch Grid (4×4 = 16 Patches)</h4>
+            <span class="res-badge">224×224 px • Patch P=56</span>
+          </div>
+          <div class="vlm-viewport-wrapper">
+            <div class="vlm-scene-viewport" id="vlm-scene-viewport">
+              ${getSceneSvg(currentImg().id)}
+              <!-- 4x4 Interactive Grid Overlay -->
+              <div class="patch-grid-overlay" id="patch-grid-overlay">
+                ${Array.from({ length: 16 }).map((_, i) => `
+                  <div class="patch-cell ${i === selectedPatchIdx ? 'selected' : ''}" data-patch="${i}">
+                    <span class="patch-label">P${i + 1}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="viewport-footer">
+            <span class="viewport-hint">👆 Click any patch cell to inspect its 768-dim raw tensor & position embedding</span>
+          </div>
+        </div>
+
+        <!-- Right: Patch Tensor & Embedding Inspector -->
+        <div class="vlm-tensor-card">
+          <div class="tensor-header">
+            <div class="patch-ident">
+              <span class="patch-badge" id="inspect-patch-badge">Patch #${selectedPatchIdx + 1}</span>
+              <span class="coord-tag" id="inspect-coord-tag">Row ${Math.floor(selectedPatchIdx / 4) + 1}, Col ${(selectedPatchIdx % 4) + 1}</span>
+            </div>
+            <button class="claim-xp-btn mini" id="btn-claim-patch-xp">✨ Claim ViT XP (+25 XP)</button>
+          </div>
+
+          <!-- Feature Breakdown -->
+          <div class="tensor-details-box">
+            <div class="detail-row">
+              <span class="detail-label">Raw Pixel Vector x_p:</span>
+              <span class="detail-val mono">56×56×3 = 9,408 values (norm to [1, 768])</span>
+            </div>
+            <!-- Simulated Heat Bar -->
+            <div class="vector-heat-bar" id="patch-heat-bar"></div>
+
+            <div class="detail-row" style="margin-top: 0.6rem;">
+              <span class="detail-label">Linear Projection E:</span>
+              <span class="detail-val mono">W_E · x_p ➔ ℝ¹⁰²⁴ Visual Feature</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Spatial Positional Embedding E_pos:</span>
+              <span class="detail-val mono" id="patch-pos-emb-text">2D Learned Grid Embed (r=${Math.floor(selectedPatchIdx / 4)}, c=${selectedPatchIdx % 4})</span>
+            </div>
+          </div>
+
+          <!-- Patch-to-Patch Cosine Similarity Heatmap -->
+          <div class="patch-similarity-box">
+            <div class="sim-header">
+              <span class="sim-title">Cosine Similarity vs All Patches</span>
+              <span class="sim-sub">Self-Attention Weight Distribution</span>
+            </div>
+            <div class="sim-grid-4x4" id="sim-grid-4x4">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Multimodal Projector Arena -->
+    <div class="vlm-tab-panel" id="panel-projector-arena" style="display: ${activeTab === 'projector_arena' ? 'block' : 'none'};">
+      <div class="projector-arena-card">
+        <div class="projector-top-bar">
+          <div class="proj-modes-col">
+            <label class="mode-label">Select Projector Architecture:</label>
+            <div class="proj-mode-pills" id="proj-mode-pills">
+              ${projectorModes.map(m => `
+                <button class="proj-pill ${m.id === projectorMode ? 'active' : ''}" data-mode="${m.id}">
+                  ${m.name}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+          <div class="dim-flow-pill">
+            <span class="dim-chip vision">Vision d_v: 768</span>
+            <span class="dim-arrow">➔ Projector ➔</span>
+            <span class="dim-chip text">LLM d_text: 4096</span>
+          </div>
+        </div>
+
+        <!-- Projector Spec Details -->
+        <div class="projector-spec-card" id="projector-spec-display">
+          <!-- Injected dynamically -->
+        </div>
+
+        <!-- Cross-Modal Token Attention Matrix -->
+        <div class="cross-attn-matrix-box">
+          <div class="cross-attn-header">
+            <h4>Cross-Modal Token Attention Heatmap</h4>
+            <span class="attn-badge">Q (Prompt Tokens) × K^T (16 Visual Patches)</span>
+          </div>
+          <p class="cross-attn-desc">See which image patches light up when the LLM reads specific words in the prompt query: <em>"${currentImg().userQuery}"</em></p>
+          <div class="cross-attn-table-wrapper" id="cross-attn-table-container">
+            <!-- Heatmap generated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Visual Grounding & VQA Engine -->
+    <div class="vlm-tab-panel" id="panel-visual-qa" style="display: ${activeTab === 'visual_qa' ? 'block' : 'none'};">
+      <div class="grounding-lab-grid">
+        <!-- Left: Image with Glowing Bounding Box -->
+        <div class="grounding-canvas-card">
+          <div class="canvas-header">
+            <h4>Spatial Grounding Reticle</h4>
+            <div class="box-toggle-wrapper">
+              <label for="chk-vlm-box" class="box-toggle-label">
+                <input type="checkbox" id="chk-vlm-box" ${showBoundingBox ? 'checked' : ''} />
+                <span>Show Bounding Box Pin 📍</span>
+              </label>
+            </div>
+          </div>
+          <div class="vlm-viewport-wrapper">
+            <div class="vlm-scene-viewport relative" id="vlm-grounding-viewport">
+              ${getSceneSvg(currentImg().id)}
+              <!-- Glowing Bounding Box Overlay -->
+              <div class="bounding-box-reticle" id="bounding-box-reticle" style="display: ${showBoundingBox ? 'block' : 'none'};">
+                <div class="reticle-label" id="reticle-label-text">${currentImg().groundingTarget.label}</div>
+                <div class="reticle-corner tl"></div>
+                <div class="reticle-corner tr"></div>
+                <div class="reticle-corner bl"></div>
+                <div class="reticle-corner br"></div>
+              </div>
+            </div>
+          </div>
+          <div class="grounding-coords-row">
+            <span class="coords-label">Normalized Coordinate Bins [0, 1000]:</span>
+            <code class="coords-code" id="grounding-coords-text">[${currentImg().groundingTarget.boxNorm.join(', ')}]</code>
+          </div>
+        </div>
+
+        <!-- Right: VQA Autoregressive Inference Console -->
+        <div class="grounding-vqa-card">
+          <div class="vqa-header">
+            <h4>Multimodal Generation & Autoregressive Decoder</h4>
+            <span class="vqa-model-badge">LLaVA-1.5 7B Engine</span>
+          </div>
+
+          <div class="vqa-query-box">
+            <span class="query-role">User Query:</span>
+            <div class="query-text">"${currentImg().userQuery}"</div>
+          </div>
+
+          <div class="vqa-actions">
+            <button class="vqa-generate-btn" id="btn-generate-vlm">🚀 Generate Grounded Response</button>
+          </div>
+
+          <!-- Generation Sequence Timeline -->
+          <div class="vqa-stream-box" id="vqa-stream-box">
+            <div class="stream-idle-text">// Click Generate to simulate multimodal token sequence decoding...</div>
+          </div>
+
+          <div class="vqa-claim-row" id="vqa-claim-row" style="display: none;">
+            <button class="claim-xp-btn" id="btn-claim-vqa-xp">🌟 Claim Multimodal Master XP (+30 XP)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach to DOM
+  dom.interactiveContainer.appendChild(container);
+
+  // Position the bounding box reticle based on target
+  function updateBoundingBoxPosition() {
+    const reticle = container.querySelector('#bounding-box-reticle');
+    const target = currentImg().groundingTarget;
+    if (reticle && target) {
+      const [top, left, bottom, right] = target.box;
+      reticle.style.top = `${top}px`;
+      reticle.style.left = `${left}px`;
+      reticle.style.width = `${right - left}px`;
+      reticle.style.height = `${bottom - top}px`;
+    }
+  }
+
+  // --- TAB NAVIGATION ---
+  const tabBtns = container.querySelectorAll('.vlm-tab-btn');
+  const panels = {
+    patch_inspector: container.querySelector('#panel-patch-inspector'),
+    projector_arena: container.querySelector('#panel-projector-arena'),
+    visual_qa: container.querySelector('#panel-visual-qa')
+  };
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      activeTab = target;
+      state.vlmActiveTab = target;
+
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === target));
+      Object.keys(panels).forEach(k => {
+        if (panels[k]) panels[k].style.display = (k === target) ? 'block' : 'none';
+      });
+
+      soundFx.playBlip(540, 0.05);
+
+      if (target === 'projector_arena') {
+        updateProjectorTab();
+      } else if (target === 'visual_qa') {
+        updateBoundingBoxPosition();
+      }
+    });
+  });
+
+  // --- SCENARIO SWITCHING ---
+  const imgChips = container.querySelectorAll('.scenario-chip');
+  imgChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      imageIdx = parseInt(chip.dataset.imgIdx, 10);
+      state.vlmImageIdx = imageIdx;
+
+      imgChips.forEach(c => c.classList.toggle('active', c === chip));
+
+      // Refresh viewports
+      const pViewport = container.querySelector('#vlm-scene-viewport');
+      const gViewport = container.querySelector('#vlm-grounding-viewport');
+      const svg = getSceneSvg(currentImg().id);
+
+      if (pViewport) {
+        const overlay = pViewport.querySelector('#patch-grid-overlay');
+        pViewport.innerHTML = svg;
+        if (overlay) pViewport.appendChild(overlay);
+      }
+
+      if (gViewport) {
+        const reticle = gViewport.querySelector('#bounding-box-reticle');
+        gViewport.innerHTML = svg;
+        if (reticle) gViewport.appendChild(reticle);
+      }
+
+      // Update text in QA
+      const qText = container.querySelector('.query-text');
+      if (qText) qText.textContent = `"${currentImg().userQuery}"`;
+
+      const cText = container.querySelector('#grounding-coords-text');
+      if (cText) cText.textContent = `[${currentImg().groundingTarget.boxNorm.join(', ')}]`;
+
+      const rLabel = container.querySelector('#reticle-label-text');
+      if (rLabel) rLabel.textContent = currentImg().groundingTarget.label;
+
+      // Reset VQA stream
+      const streamBox = container.querySelector('#vqa-stream-box');
+      if (streamBox) streamBox.innerHTML = `<div class="stream-idle-text">// Click Generate to simulate multimodal token sequence decoding...</div>`;
+      const claimRow = container.querySelector('#vqa-claim-row');
+      if (claimRow) claimRow.style.display = 'none';
+
+      soundFx.playBlip(620, 0.05);
+      renderPatchDetails();
+      updateProjectorTab();
+      updateBoundingBoxPosition();
+    });
+  });
+
+  // --- TAB 1: PATCH INSPECTOR LOGIC ---
+  const patchCells = container.querySelectorAll('.patch-cell');
+  const inspectBadge = container.querySelector('#inspect-patch-badge');
+  const inspectCoord = container.querySelector('#inspect-coord-tag');
+  const heatBar = container.querySelector('#patch-heat-bar');
+  const simGrid = container.querySelector('#sim-grid-4x4');
+  const btnClaimPatchXp = container.querySelector('#btn-claim-patch-xp');
+
+  function renderPatchDetails() {
+    if (inspectBadge) inspectBadge.textContent = `Patch #${selectedPatchIdx + 1}`;
+    const r = Math.floor(selectedPatchIdx / 4);
+    const c = selectedPatchIdx % 4;
+    if (inspectCoord) inspectCoord.textContent = `Row ${r + 1}, Col ${c + 1} • P[${r},${c}]`;
+
+    // Render simulated heat bar
+    if (heatBar) {
+      heatBar.innerHTML = '';
+      for (let i = 0; i < 24; i++) {
+        const div = document.createElement('div');
+        div.className = 'heat-segment';
+        const val = 0.2 + 0.8 * Math.sin((selectedPatchIdx + 1) * 0.7 + i * 0.35) ** 2;
+        div.style.background = `rgba(56, 189, 248, ${val.toFixed(2)})`;
+        heatBar.appendChild(div);
+      }
+    }
+
+    // Render 4x4 similarity grid
+    if (simGrid) {
+      simGrid.innerHTML = '';
+      const primaryPatches = currentImg().groundingTarget.primaryPatches || [];
+      const isTargetPatch = primaryPatches.includes(selectedPatchIdx);
+
+      for (let i = 0; i < 16; i++) {
+        const div = document.createElement('div');
+        div.className = 'sim-cell';
+
+        let simScore;
+        if (i === selectedPatchIdx) {
+          simScore = 1.0;
+        } else if (isTargetPatch && primaryPatches.includes(i)) {
+          simScore = 0.85 + 0.1 * Math.random();
+        } else {
+          const dist = Math.hypot(Math.floor(i / 4) - r, (i % 4) - c);
+          simScore = Math.max(0.12, 0.75 - dist * 0.18 + 0.05 * Math.sin(i));
+        }
+
+        const scorePercent = Math.round(simScore * 100);
+        div.style.background = `rgba(16, 185, 129, ${(simScore * 0.55).toFixed(2)})`;
+        div.innerHTML = `<span class="sim-val">${scorePercent}%</span><span class="sim-p">P${i + 1}</span>`;
+
+        div.addEventListener('click', () => {
+          selectPatch(i);
+        });
+
+        simGrid.appendChild(div);
+      }
+    }
+  }
+
+  function selectPatch(idx) {
+    selectedPatchIdx = idx;
+    state.vlmSelectedPatchIdx = idx;
+    patchCells.forEach((c, i) => c.classList.toggle('selected', i === idx));
+    soundFx.playBlip(680 + idx * 20, 0.04);
+    renderPatchDetails();
+  }
+
+  patchCells.forEach((cell, idx) => {
+    cell.addEventListener('click', () => {
+      selectPatch(idx);
+    });
+  });
+
+  if (btnClaimPatchXp) {
+    btnClaimPatchXp.addEventListener('click', () => {
+      if (!xpClaimed) {
+        xpClaimed = true;
+        awardXp(25, 'Vision Transformer Patch Conquered');
+        btnClaimPatchXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimPatchXp.disabled = true;
+        btnClaimPatchXp.style.opacity = '0.6';
+      }
+    });
+  }
+
+  // --- TAB 2: PROJECTOR ARENA LOGIC ---
+  const projPills = container.querySelectorAll('.proj-pill');
+  const specDisplay = container.querySelector('#projector-spec-display');
+  const crossAttnContainer = container.querySelector('#cross-attn-table-container');
+
+  function updateProjectorTab() {
+    const curSpec = projectorModes.find(m => m.id === projectorMode) || projectorModes[1];
+    if (specDisplay && curSpec) {
+      specDisplay.innerHTML = `
+        <div class="spec-row">
+          <div class="spec-col">
+            <span class="spec-label">Architecture Formula:</span>
+            <code class="spec-formula">${curSpec.formula}</code>
+          </div>
+          <div class="spec-col">
+            <span class="spec-label">Parameter Scaling:</span>
+            <span class="spec-val">${curSpec.params}</span>
+          </div>
+        </div>
+        <div class="spec-pros-cons">
+          <div class="spec-benefit"><strong>✓ Advantage:</strong> ${curSpec.pros}</div>
+          <div class="spec-drawback"><strong>⚠️ Trade-off:</strong> ${curSpec.cons}</div>
+        </div>
+      `;
+    }
+
+    // Render Cross-Attention Heatmap Table
+    if (crossAttnContainer) {
+      crossAttnContainer.innerHTML = '';
+      const promptWords = currentImg().userQuery.split(' ').slice(0, 6);
+      const targetPatches = currentImg().groundingTarget.primaryPatches || [9, 10];
+
+      let tableHtml = `
+        <table class="attn-table">
+          <thead>
+            <tr>
+              <th>Patch / Token</th>
+              ${promptWords.map(w => `<th><code>${w}</code></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (let p = 0; p < 16; p++) {
+        const isTarget = targetPatches.includes(p);
+        tableHtml += `
+          <tr>
+            <td class="patch-col"><strong>P${p + 1}</strong></td>
+        `;
+
+        promptWords.forEach((word, wIdx) => {
+          let score;
+          const isKeyword = word.toLowerCase().includes('pedestrian') ||
+                            word.toLowerCase().includes('detect') ||
+                            word.toLowerCase().includes('opacity') ||
+                            word.toLowerCase().includes('peak') ||
+                            word.toLowerCase().includes('vessel') ||
+                            word.toLowerCase().includes('target');
+
+          if (isTarget && isKeyword) {
+            score = 0.82 + 0.15 * Math.random();
+          } else if (isTarget) {
+            score = 0.45 + 0.2 * Math.random();
+          } else if (isKeyword) {
+            score = 0.25 + 0.15 * Math.random();
+          } else {
+            score = 0.05 + 0.12 * Math.random();
+          }
+
+          const scorePercent = Math.round(score * 100);
+          const bgOpacity = (score * 0.65).toFixed(2);
+          tableHtml += `
+            <td style="background: rgba(139, 92, 246, ${bgOpacity});">
+              <span class="attn-score">${scorePercent}%</span>
+            </td>
+          `;
+        });
+
+        tableHtml += `</tr>`;
+      }
+
+      tableHtml += `</tbody></table>`;
+      crossAttnContainer.innerHTML = tableHtml;
+    }
+  }
+
+  projPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      projectorMode = pill.dataset.mode;
+      state.vlmProjectorMode = projectorMode;
+      projPills.forEach(p => p.classList.toggle('active', p === pill));
+      soundFx.playBlip(720, 0.05);
+      updateProjectorTab();
+    });
+  });
+
+  // --- TAB 3: VISUAL GROUNDING & VQA LOGIC ---
+  const chkBox = container.querySelector('#chk-vlm-box');
+  const reticle = container.querySelector('#bounding-box-reticle');
+  const btnGenerateVlm = container.querySelector('#btn-generate-vlm');
+  const streamBox = container.querySelector('#vqa-stream-box');
+  const vqaClaimRow = container.querySelector('#vqa-claim-row');
+  const btnClaimVqaXp = container.querySelector('#btn-claim-vqa-xp');
+
+  if (chkBox && reticle) {
+    chkBox.addEventListener('change', () => {
+      showBoundingBox = chkBox.checked;
+      state.vlmShowBoundingBox = showBoundingBox;
+      reticle.style.display = showBoundingBox ? 'block' : 'none';
+      soundFx.playBlip(560, 0.04);
+    });
+  }
+
+  if (btnGenerateVlm) {
+    btnGenerateVlm.addEventListener('click', () => {
+      if (isGenerating) return;
+      isGenerating = true;
+      btnGenerateVlm.disabled = true;
+      btnGenerateVlm.textContent = '⏳ Decoding Multimodal Tokens...';
+      if (streamBox) streamBox.innerHTML = '';
+
+      // Phase 1: Visual Tokens Ingested
+      const vStep = document.createElement('div');
+      vStep.className = 'vqa-token-pill visual';
+      vStep.innerHTML = `<span>🖼️ Projected Image Embeddings:</span> <code>[v₁ ... v₁₆] (${currentImg().resolution})</code>`;
+      streamBox.appendChild(vStep);
+      soundFx.playBlip(550, 0.05);
+
+      setTimeout(() => {
+        // Phase 2: Text Prompt Ingested
+        const pStep = document.createElement('div');
+        pStep.className = 'vqa-token-pill prompt';
+        pStep.innerHTML = `<span>💬 Prompt Tokens:</span> <code>"${currentImg().userQuery}"</code>`;
+        streamBox.appendChild(pStep);
+        soundFx.playBlip(650, 0.05);
+      }, 700);
+
+      setTimeout(() => {
+        // Phase 3: Text Answer Stream
+        const aStep = document.createElement('div');
+        aStep.className = 'vqa-answer-card';
+        aStep.innerHTML = `
+          <div class="answer-label">Autoregressive Answer:</div>
+          <div class="answer-body">${currentImg().answer}</div>
+          <div class="coords-badge">
+            <span>Discrete Coordinate Tokens:</span>
+            <code>&lt;box&gt;[${currentImg().groundingTarget.boxNorm.join(', ')}]&lt;/box&gt;</code>
+          </div>
+        `;
+        streamBox.appendChild(aStep);
+
+        // Highlight Bounding Box
+        if (chkBox) chkBox.checked = true;
+        if (reticle) reticle.style.display = 'block';
+        reticle?.classList.add('pulse-box');
+        setTimeout(() => reticle?.classList.remove('pulse-box'), 2000);
+
+        soundFx.playLevelUp();
+        if (vqaClaimRow) vqaClaimRow.style.display = 'flex';
+        isGenerating = false;
+        btnGenerateVlm.disabled = false;
+        btnGenerateVlm.textContent = '🚀 Re-generate Grounded Response';
+      }, 1800);
+    });
+  }
+
+  if (btnClaimVqaXp) {
+    btnClaimVqaXp.addEventListener('click', () => {
+      if (!vqaXpClaimed) {
+        vqaXpClaimed = true;
+        awardXp(30, 'Multimodal VLM Master Conquered');
+        btnClaimVqaXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimVqaXp.disabled = true;
+        btnClaimVqaXp.style.opacity = '0.6';
+      }
+    });
+  }
+
+  // Initial draw
+  renderPatchDetails();
+  updateProjectorTab();
+  updateBoundingBoxPosition();
+}
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -10070,6 +10797,13 @@ const questPrompts = {
     { label: '🔒 Agent Sandbox & Security Best Practices', prompt: 'What security boundaries are required when giving LLMs tools like bash execution, SQL queries, or file writes (human-in-the-loop, ephemeral containers, read-only)?' },
     { label: '🐝 Multi-Agent Swarm Orchestration', prompt: 'Explain the difference between Hierarchical Supervisor-Worker patterns and Peer-to-Peer agent communication topologies.' },
     { label: '🎯 Quiz me on Agentic Tool Use & ReAct', prompt: 'Give me a challenging question about function calling JSON schemas, ReAct loop convergence, or multi-agent delegation!' }
+  ],
+  'quest-15': [
+    { label: '🧩 How does ViT turn pixels into tokens?', prompt: 'Explain the Vision Transformer (ViT) patchification process: how does dividing an image into 16x16 pixel patches enable standard Transformer self-attention?' },
+    { label: '🎯 How does CLIP contrastive learning work?', prompt: 'Walk through CLIP dual encoders and symmetric InfoNCE loss: how does maximizing diagonal cosine similarities align visual semantics with natural language?' },
+    { label: '🔌 Linear vs 2-Layer MLP Multimodal Projectors', prompt: 'Why did LLaVA-1.5 upgrade from a single linear matrix to a 2-layer GeLU MLP projector? Explain nonlinear manifold warping.' },
+    { label: '📍 How do VLMs predict Bounding Boxes?', prompt: 'Explain spatial grounding in multimodal models: how are bounding box coordinates normalized to [0, 1000] and generated as text tokens without separate detection heads?' },
+    { label: '🎯 Quiz me on Multimodal VLMs & Vision Transformers', prompt: 'Give me a challenging question about Vision Transformers, CLIP contrastive loss, multimodal projectors, or visual spatial grounding!' }
   ]
 };
 

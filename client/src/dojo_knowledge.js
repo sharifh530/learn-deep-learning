@@ -625,7 +625,52 @@ print(f"🏁 Final Answer: 5-year CAGR is {float(obs)*100:.2f}%")
         answer: "B",
         explanation: "Osu! Without reasoning, an agent blindly executes tools without understanding intermediate results. ReAct pairs cognitive deliberation with empirical environment feedback, allowing the model to self-heal and chain multi-step tools together."
       }
-    }
+    },
+
+    'quest-15': {
+      title: 'Multimodal Vision-Language Models: ViT, CLIP & Cross-Attention',
+      eli10: `👁️ **The Bionic Optic Nerve & The Semantic Bridge (Multimodal VLMs):**\n\nHow does a text-only language model like ChatGPT or LLaMA learn to look at an X-ray or autonomous driving street scene and explain what it sees?\n\n1. **The Pixel-to-Token Dilemma:** High-resolution photos are massive matrices of raw RGB pixels (e.g. $1024 \times 1024 \times 3 = 3.14\text{M}$ numbers). Language models cannot read raw pixel matrices directly!\n2. **Patchifying with ViT:** A Vision Transformer (ViT) slices the photo into a grid of non-overlapping square patches (e.g. $16 \times 16$ pixels). Each patch is flattened into a vector, acting exactly like an individual \"visual word\"!\n3. **Semantic Alignment via CLIP:** Vision and text live in totally different coordinate systems. CLIP aligns them by training dual encoders on 400M photo-caption pairs with contrastive loss, ensuring the visual vector for a cat clusters right next to the word vector for \"cat\".\n4. **The Multimodal Projector (The Universal Adapter):** Vision backbones output vectors in visual dimension ($d_v = 768$ or $1024$), but the LLM expects text vectors in text dimension ($d_{\text{text}} = 4096$). A lightweight 2-layer GeLU MLP projector nonlinearly translates visual tokens into the LLM's native vocabulary manifold.\n5. **Spatial Grounding:** Rather than needing a separate object detector (like YOLO), modern VLMs predict normalized bounding box coordinates $[y_{\min}, x_{\min}, y_{\max}, x_{\max}]$ as discrete text tokens directly!`,
+
+      snippet: `\`\`\`python
+import torch
+import torch.nn as nn
+
+# 1. Simulate Image Patches & Linear Projection
+batch_size, num_patches, patch_dim = 1, 16, 768
+image_patches = torch.randn(batch_size, num_patches, patch_dim)
+
+# 2. Multimodal Projector (2-Layer GeLU MLP - LLaVA style)
+llm_dim = 4096
+projector = nn.Sequential(
+    nn.Linear(patch_dim, llm_dim),
+    nn.GELU(),
+    nn.Linear(llm_dim, llm_dim)
+)
+
+# Project visual tokens into LLM text embedding dimension
+visual_tokens = projector(image_patches) # [1, 16, 4096]
+
+# 3. Simulate Text Prompt Embedding Tokens
+text_tokens = torch.randn(batch_size, 6, llm_dim) # "What is in this picture?"
+
+# 4. Multimodal Early Fusion (Concatenation)
+multimodal_sequence = torch.cat([visual_tokens, text_tokens], dim=1)
+print(f"Projected Visual Tokens : {visual_tokens.shape}")
+print(f"Unified Multimodal Stream: {multimodal_sequence.shape} (16 image + 6 text = 22 tokens)")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Multimodal Projectors**\n\nWhy do modern Vision-Language Models (like LLaVA-1.5) place a 2-layer GeLU MLP projector between the frozen Vision Transformer and the LLM backbone?",
+        options: [
+            "A) It makes the images 4K resolution automatically",
+            "B) It projects visual feature representations from visual dimension (e.g. 768) into the LLM's text embedding space (e.g. 4096) with non-linear expressiveness, without retraining the billions of LLM weights from scratch",
+            "C) It converts JPEG images into MP3 audio waveforms",
+            "D) It prevents the GPU from requiring any power supply"
+        ],
+        answer: "B",
+        explanation: "Osu! Pretrained vision encoders and text LLMs operate in different dimensionalities and latent geometries. The lightweight MLP projector warps visual features into the language model's native semantic space, enabling zero-shot instruction following at minimal fine-tuning cost!"
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -770,6 +815,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('agent') || hasPhrase('react') || hasPhrase('tool') || hasPhrase('function call') || hasPhrase('json schema') || hasPhrase('observation') || hasPhrase('action') || hasPhrase('sandbox') || hasPhrase('quest 14')) {
     return DOJO_KNOWLEDGE.quests['quest-14'].eli10;
+  }
+  if (hasPhrase('vlm') || hasPhrase('multimodal') || hasPhrase('vision') || hasPhrase('vit') || hasPhrase('clip') || hasPhrase('patch') || hasPhrase('cross attention') || hasPhrase('llava') || hasPhrase('perceiver') || hasPhrase('grounding') || hasPhrase('quest 15')) {
+    return DOJO_KNOWLEDGE.quests['quest-15'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

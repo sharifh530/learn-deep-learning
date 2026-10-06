@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey & Agentic AI (Quests 7 - 14)
+## ⚡ Phase 3: The LLM Odyssey, Agents & Multimodal AI (Quests 7 - 15)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -428,9 +428,32 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
+### 👁️ Quest 15: Multimodal Vision-Language Models (Image Patchification, Cross-Attention & Visual Reasoning)
+- **Tagline:** VLMs & Visual Embeddings
+- **The Core Problem:**
+  Natural language models operate on discrete token indices. Raw visual inputs (e.g. 1024x1024 RGB images) consist of millions of continuous spatial float intensities. Standard LLMs cannot read pixel arrays directly without an architectural bridge.
+- **The Solution:**
+  1. Slice images into grids of non-overlapping patches ($P \times P = 16 \times 16$) using Vision Transformers (ViT).
+  2. Linearly project flattened patch vectors and add spatial 2D positional embeddings ($E_{\text{pos}}$).
+  3. Warp visual feature dimension ($d_v = 768 / 1024$) into LLM text dimension ($d_{\text{text}} = 4096$) via a 2-layer GeLU MLP multimodal projector.
+  4. Fuse visual and text tokens in early concatenation, allowing unified causal self-attention to perform cross-modal reasoning and predict normalized bounding box coordinates $[y_{\min}, x_{\min}, y_{\max}, x_{\max}]$.
+- **Key Concepts:**
+  - **Vision Transformer (ViT) Patchification:** Flattening 2D spatial patches $X \in \mathbb{R}^{H \times W \times C}$ into $N = (HW) / P^2$ token vectors.
+  - **CLIP Dual Encoders & Symmetric InfoNCE Loss:** Maximizing diagonal cosine similarities between normalized image and text embeddings across large web-scale batches.
+  - **Multimodal Projectors:** Comparing linear projection matrices, 2-layer GeLU MLPs (LLaVA-1.5), and Perceiver Resampler cross-attention query compression (Flamingo).
+  - **Spatial Grounding:** Auto-regressively predicting discrete coordinate bins $[0, 1000]$ without dedicated detection heads.
+- **Interactive Playground:** 3-tab Multimodal VLM Lab:
+  - *Tab 1: ViT Patchifier:* Interactive 4x4 patch grid overlay across 4 scenarios (Autonomous Driving, Chest X-Ray, Revenue Infographics, Satellite Imagery), raw tensor inspector, and 16-cell patch similarity heatmap.
+  - *Tab 2: Multimodal Projector Arena:* Dynamic projector mode switcher (Linear vs 2-Layer MLP vs Perceiver Resampler) and prompt-to-patch cross-attention heatmap table.
+  - *Tab 3: Spatial Grounding & VQA Engine:* Autoregressive token generation simulation with animated glowing bounding box reticle and normalized coordinate outputs.
+- **Python Lab Snippet:**
+  Runnable PyTorch implementation of 2-layer GeLU patch projector and multimodal sequence concatenation.
+
+---
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 15: Multimodal Vision-Language Models (VLMs):** Cross-attention patch projections, CLIP visual embeddings, and multimodal reasoning.
 - **Quest 16: Mixture-of-Experts (MoE) & Dynamic Routing:** Sparse top-$k$ routing, expert load balancing, and switch transformers.
+- **Quest 17: Diffusion Models & Flow Matching:** Denoising score matching, continuous flow trajectories, and latent diffusion synthesis.
 
 
 ---

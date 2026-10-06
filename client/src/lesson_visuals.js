@@ -2790,6 +2790,273 @@ function q14MultiAgentSwarm() {
   };
 }
 
+
+// ==========================================
+// QUEST 15: MULTIMODAL VISION-LANGUAGE MODELS
+// ==========================================
+
+function q15Patchification() {
+  let g = '';
+  g += T(320, 18, 'Image Patchification: Deconstructing 2D Pixels into 1D Token Vectors', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Left: 2D Image with 4x4 Patch Grid
+  g += rect(30, 40, 140, 140, { fill: 'rgba(15, 23, 42, 0.8)', stroke: C.cyan, sw: 1.5, rx: 6 });
+  const pw = 35;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      const px = 30 + c * pw;
+      const py = 40 + r * pw;
+      const idx = r * 4 + c + 1;
+      const isSpecial = idx === 10 || idx === 11;
+      g += rect(px + 2, py + 2, pw - 4, pw - 4, {
+        fill: isSpecial ? 'rgba(56, 189, 248, 0.35)' : 'rgba(30, 41, 59, 0.6)',
+        stroke: isSpecial ? C.cyan : 'rgba(148, 163, 184, 0.25)',
+        rx: 3
+      });
+      g += T(px + pw / 2, py + pw / 2 + 3, `P${idx}`, { size: 8, mono: true, fill: isSpecial ? '#7dd3fc' : C.muted });
+    }
+  }
+  g += T(100, 195, 'Input: 224x224x3 (H×W×C)', { size: 9, mono: true, fill: C.cyan });
+
+  // Arrow to Flattening
+  g += arrow(175, 110, 210, 110, 'cyan', 2);
+  g += T(192, 98, 'Flatten', { size: 8, fill: C.muted });
+
+  // 2. Center: Linear Patch Projection E
+  g += rect(215, 65, 110, 90, { fill: 'rgba(139, 92, 246, 0.15)', stroke: C.violet, sw: 1.5, rx: 6 });
+  g += T(270, 85, 'Linear Projection E', { size: 9.5, weight: 700, fill: C.violet });
+  g += T(270, 102, 'P²·C ➔ Hidden D', { size: 8.5, mono: true, fill: '#ddd6fe' });
+  g += T(270, 118, '768 ➔ 1024', { size: 8, mono: true, fill: C.muted });
+  g += T(270, 138, '+ Positional E_pos', { size: 8.5, weight: 600, fill: C.amber });
+
+  // Arrow to 1D Sequence
+  g += arrow(330, 110, 365, 110, 'violet', 2);
+
+  // 3. Right: 1D Token Sequence Stream
+  g += rect(370, 50, 240, 120, { fill: 'rgba(15, 23, 42, 0.7)', stroke: C.emerald, sw: 1.5, rx: 8 });
+  g += T(490, 68, 'Vision Transformer Input Sequence Z₀', { size: 9.5, weight: 700, fill: C.emerald });
+
+  // Token Pills
+  const tokens = ['[CLS]', 'z₁', 'z₂', '...', 'z₁₆'];
+  tokens.forEach((tok, i) => {
+    const tx = 382 + i * 44;
+    const isCls = i === 0;
+    g += rect(tx, 82, 38, 28, {
+      fill: isCls ? 'rgba(245, 158, 11, 0.25)' : 'rgba(16, 185, 129, 0.2)',
+      stroke: isCls ? C.amber : C.emerald,
+      rx: 4
+    });
+    g += T(tx + 19, 98, tok, { size: 8.5, mono: true, weight: 700, fill: isCls ? '#fde68a' : '#6ee7b7' });
+    g += T(tx + 19, 122, `+p${i}`, { size: 7.5, mono: true, fill: C.muted });
+  });
+
+  g += T(490, 150, 'Sequence Length: N = 16 + 1 tokens', { size: 8.5, mono: true, fill: '#a7f3d0' });
+  g += T(320, 206, 'ViT flattens 2D patches into vectors, linearly projects to dimension D, and adds 1D/2D spatial positional encodings.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By dividing images into a 4x4 grid of non-overlapping patches, Vision Transformers process visual scenes using standard Transformer self-attention layers.'
+  };
+}
+
+function q15ClipContrastive() {
+  let g = '';
+  g += T(320, 18, 'CLIP Contrastive Alignment: Symmetric InfoNCE Joint Embedding Space', { size: 12.5, weight: 700, fill: C.text });
+
+  // Top: Vision Encoder
+  g += rect(30, 42, 160, 48, { fill: 'rgba(56, 189, 248, 0.15)', stroke: C.cyan, rx: 6 });
+  g += T(110, 58, '🖼️ Vision Encoder f_v', { size: 10, weight: 700, fill: C.cyan });
+  g += T(110, 74, 'Image I_i ➔ Vector v_i (d=768)', { size: 8, mono: true, fill: C.muted });
+
+  // Bottom-Left: Text Encoder
+  g += rect(30, 122, 160, 48, { fill: 'rgba(139, 92, 246, 0.15)', stroke: C.violet, rx: 6 });
+  g += T(110, 138, '📝 Text Encoder f_t', { size: 10, weight: 700, fill: C.violet });
+  g += T(110, 154, 'Text T_j ➔ Vector u_j (d=768)', { size: 8, mono: true, fill: C.muted });
+
+  // Arrows to Matrix
+  g += arrow(195, 66, 235, 85, 'cyan', 2);
+  g += arrow(195, 146, 235, 125, 'violet', 2);
+
+  // Center-Right: 4x4 Cosine Similarity Matrix
+  g += rect(240, 42, 200, 145, { fill: 'rgba(15, 23, 42, 0.9)', stroke: 'rgba(255, 255, 255, 0.15)', rx: 6 });
+  g += T(340, 58, 'Normalized Dot Product Matrix: S_ij = (v_i · u_j) / τ', { size: 8, mono: true, fill: C.text });
+
+  const bSize = 4;
+  const cw = 38;
+  const ch = 24;
+  for (let r = 0; r < bSize; r++) {
+    for (let c = 0; c < bSize; c++) {
+      const mx = 255 + c * (cw + 5);
+      const my = 70 + r * (ch + 3);
+      const isDiag = r === c;
+      g += rect(mx, my, cw, ch, {
+        fill: isDiag ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.1)',
+        stroke: isDiag ? C.emerald : 'rgba(248, 113, 113, 0.3)',
+        rx: 3
+      });
+      g += T(mx + cw / 2, my + ch / 2 + 3, isDiag ? '+0.92' : '-0.14', {
+        size: 7.5,
+        mono: true,
+        weight: isDiag ? 700 : 400,
+        fill: isDiag ? '#6ee7b7' : '#fca5a5'
+      });
+    }
+  }
+
+  // Legend & Loss Explanation
+  g += rect(455, 48, 160, 135, { fill: 'rgba(30, 41, 59, 0.6)', stroke: C.border, rx: 6 });
+  g += T(535, 68, 'Contrastive Objective', { size: 9.5, weight: 700, fill: C.amber });
+  g += T(535, 88, '🟩 Diagonal (Positives):', { size: 8.5, weight: 600, fill: C.emerald });
+  g += T(535, 102, 'Pull together (v_i · u_i ➔ 1)', { size: 7.5, mono: true, fill: C.text });
+  g += T(535, 122, '🟥 Off-Diagonal (Negatives):', { size: 8.5, weight: 600, fill: C.rose });
+  g += T(535, 136, 'Push apart (v_i · u_j ➔ 0)', { size: 7.5, mono: true, fill: C.text });
+  g += T(535, 160, 'Symmetric InfoNCE Loss', { size: 8, mono: true, fill: C.muted });
+
+  g += T(320, 204, 'CLIP maps text and images into a shared metric space where semantically matching pairs align on the diagonal.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By maximizing cosine similarity along the diagonal and minimizing it everywhere else, CLIP aligns multimodal semantics without requiring pixel-level labels.'
+  };
+}
+
+function q15VlmProjector() {
+  let g = '';
+  g += T(320, 18, 'The Multimodal Projector: Transforming Visual Features into LLM Token Space', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Vision Backbone Output
+  g += rect(25, 45, 140, 135, { fill: 'rgba(56, 189, 248, 0.1)', stroke: C.cyan, rx: 8 });
+  g += T(95, 68, 'Pretrained ViT', { size: 10, weight: 700, fill: C.cyan });
+  g += T(95, 84, '(CLIP / SigLIP)', { size: 8.5, fill: C.muted });
+  g += rect(40, 102, 110, 32, { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(56, 189, 248, 0.3)', rx: 4 });
+  g += T(95, 115, 'Visual Tokens X_v', { size: 8.5, mono: true, fill: '#7dd3fc' });
+  g += T(95, 126, 'd_v = 768 / 1024', { size: 7.5, mono: true, fill: C.muted });
+  g += T(95, 162, 'Frozen Weights 🔒', { size: 8.5, weight: 600, fill: C.amber });
+
+  // Arrow to Projector
+  g += arrow(170, 112, 205, 112, 'cyan', 2);
+
+  // Center: 3 Projector Paradigms
+  g += rect(210, 42, 220, 145, { fill: 'rgba(139, 92, 246, 0.12)', stroke: C.violet, rx: 8 });
+  g += T(320, 58, 'Multimodal Projector Types', { size: 10, weight: 700, fill: C.violet });
+
+  // Option 1: Linear
+  g += rect(220, 68, 200, 26, { fill: 'rgba(30, 41, 59, 0.6)', stroke: 'rgba(255, 255, 255, 0.1)', rx: 4 });
+  g += T(320, 81, '1. Linear: H_v = X_v · W_v (Fast, 3M)', { size: 7.5, mono: true, fill: C.text });
+
+  // Option 2: 2-Layer MLP (LLaVA-1.5) - Highlighted
+  g += rect(220, 98, 200, 44, { fill: 'rgba(16, 185, 129, 0.2)', stroke: C.emerald, sw: 1.5, rx: 4 });
+  g += T(320, 112, '2. 2-Layer GeLU MLP (LLaVA-1.5) ★', { size: 8.5, weight: 700, fill: '#6ee7b7' });
+  g += T(320, 128, 'W₂ · GELU(W₁ X_v + b₁) ➔ Nonlinear Warp', { size: 7, mono: true, fill: '#d1fae5' });
+
+  // Option 3: Perceiver
+  g += rect(220, 146, 200, 26, { fill: 'rgba(30, 41, 59, 0.6)', stroke: 'rgba(255, 255, 255, 0.1)', rx: 4 });
+  g += T(320, 160, '3. Perceiver Resampler: M=64 Queries', { size: 7.5, mono: true, fill: C.text });
+
+  // Arrow to LLM
+  g += arrow(435, 112, 470, 112, 'emerald', 2);
+
+  // Right: LLM Backbone
+  g += rect(475, 45, 140, 135, { fill: 'rgba(16, 185, 129, 0.1)', stroke: C.emerald, rx: 8 });
+  g += T(545, 68, 'LLM Backbone', { size: 10, weight: 700, fill: C.emerald });
+  g += T(545, 84, '(LLaMA / Qwen / Mistral)', { size: 8.5, fill: C.muted });
+  g += rect(490, 102, 110, 32, { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(16, 185, 129, 0.3)', rx: 4 });
+  g += T(545, 115, 'Projected Tokens H_v', { size: 8.5, mono: true, fill: '#6ee7b7' });
+  g += T(545, 126, 'd_text = 4096', { size: 7.5, mono: true, fill: C.muted });
+  g += T(545, 162, 'LoRA or Full Tune ⚡', { size: 8.5, weight: 600, fill: C.amber });
+
+  g += T(320, 204, 'The projector bridges the dimensional and geometric divide between frozen visual encoders and autoregressive language backbones.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Rather than retraining billion-parameter models from scratch, lightweight projectors translate visual vectors into the native text vocabulary embedding manifold.'
+  };
+}
+
+function q15CrossAttention() {
+  let g = '';
+  g += T(320, 18, 'Multimodal Sequence Fusion: Early Concatenation vs Causal Self-Attention', { size: 12.5, weight: 700, fill: C.text });
+
+  // 1. Sequence Banner
+  g += rect(30, 42, 580, 52, { fill: 'rgba(15, 23, 42, 0.85)', stroke: 'rgba(255, 255, 255, 0.15)', rx: 6 });
+  g += T(320, 56, 'Unified Multimodal Sequence Stream fed into Transformer Layers', { size: 8.5, fill: C.muted });
+
+  // Visual Tokens (Early Tokens)
+  g += rect(45, 64, 180, 24, { fill: 'rgba(56, 189, 248, 0.2)', stroke: C.cyan, rx: 4 });
+  g += T(135, 78, 'Visual Tokens [v₁ ... v₁₆]', { size: 8.5, mono: true, weight: 700, fill: '#7dd3fc' });
+
+  // Text Prompt Tokens
+  g += rect(235, 64, 210, 24, { fill: 'rgba(139, 92, 246, 0.2)', stroke: C.violet, rx: 4 });
+  g += T(340, 78, 'Prompt: "Describe the image."', { size: 8.5, mono: true, fill: '#ddd6fe' });
+
+  // Generated Text Tokens
+  g += rect(455, 64, 140, 24, { fill: 'rgba(16, 185, 129, 0.25)', stroke: C.emerald, rx: 4 });
+  g += T(525, 78, 'Output: "A street..."', { size: 8.5, mono: true, weight: 700, fill: '#6ee7b7' });
+
+  // Attention Flow Diagram
+  g += rect(30, 108, 580, 78, { fill: 'rgba(30, 41, 59, 0.5)', stroke: C.border, rx: 6 });
+  g += T(320, 124, 'Causal Attention Matrix Flow (Every text token attends back to all visual patches)', { size: 9, weight: 700, fill: C.text });
+
+  // Attention Curved Lines
+  g += path('M 525,92 C 450,150 200,150 135,92', { stroke: C.emerald, sw: 2, fill: 'none' });
+  g += path('M 340,92 C 280,140 180,140 135,92', { stroke: C.violet, sw: 1.5, fill: 'none' });
+
+  g += T(330, 160, 'Q (Text Queries) × K^T (Visual Keys) ➔ Cross-Modal Attention Weights', { size: 8.5, mono: true, fill: C.amber });
+
+  g += T(320, 204, 'In Early Fusion, visual tokens are treated identically to text tokens, allowing standard causal attention to ground every generated word.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By prepending projected image tokens into the input stream, the LLM’s standard causal self-attention mechanism enables rich visual reasoning.'
+  };
+}
+
+function q15SpatialGrounding() {
+  let g = '';
+  g += T(320, 18, 'Spatial Grounding: Discretizing 2D Coordinates into Language Tokens', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: Image Frame with Target and Bounding Box
+  g += rect(40, 42, 190, 140, { fill: 'rgba(15, 23, 42, 0.85)', stroke: C.cyan, rx: 6 });
+  g += T(135, 58, 'Autonomous Driving Scene (224×224)', { size: 8, fill: C.muted });
+
+  // Mock Street Scene Elements
+  g += path('M 40,160 L 230,160', { stroke: '#475569', sw: 2 });
+  g += path('M 135,160 L 135,182', { stroke: '#94a3b8', sw: 1.5 });
+
+  // Bounding Box Reticle
+  g += rect(110, 80, 80, 75, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, sw: 2, rx: 3 });
+  g += circ(110, 80, 3, { fill: C.emerald });
+  g += circ(190, 155, 3, { fill: C.emerald });
+  g += T(150, 115, '🚶 Pedestrian', { size: 9, weight: 700, fill: '#ecfdf5' });
+
+  // Coordinate Pins
+  g += T(105, 75, '[ymin, xmin]', { size: 7.5, mono: true, fill: '#6ee7b7' });
+  g += T(195, 168, '[ymax, xmax]', { size: 7.5, mono: true, fill: '#6ee7b7' });
+
+  // Arrow to Coordinate Tokenizer
+  g += arrow(235, 112, 275, 112, 'emerald', 2);
+
+  // Right: Coordinate Normalization & LLM Tokenizer
+  g += rect(280, 42, 320, 140, { fill: 'rgba(30, 41, 59, 0.7)', stroke: C.border, rx: 8 });
+  g += T(440, 60, 'Coordinate Normalization to Bins [0, 1000]', { size: 9.5, weight: 700, fill: C.amber });
+
+  g += rect(295, 75, 290, 42, { fill: 'rgba(11, 17, 32, 0.8)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 4 });
+  g += T(440, 92, 'y_norm = floor((80 / 224) × 1000) = 357', { size: 8, mono: true, fill: '#94a3b8' });
+  g += T(440, 106, 'x_norm = floor((110 / 224) × 1000) = 491', { size: 8, mono: true, fill: '#94a3b8' });
+
+  // Predicted Text Output Box
+  g += rect(295, 126, 290, 42, { fill: 'rgba(16, 185, 129, 0.12)', stroke: C.emerald, rx: 4 });
+  g += T(440, 140, 'Autoregressive Vocabulary Generation:', { size: 7.5, fill: C.muted });
+  g += T(440, 156, '"Pedestrian at <box>[357, 491, 692, 848]</box>"', { size: 8.5, mono: true, weight: 700, fill: '#6ee7b7' });
+
+  g += T(320, 204, 'Modern VLMs eliminate separate detection heads: bounding box coordinates are tokenized and predicted directly by the LLM.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'By mapping 2D image coordinates into discrete integer bins [0, 1000], the language model unifies object detection, spatial grounding, and text generation.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -2805,7 +3072,8 @@ const VISUALS = {
   'quest-11': [q11PretrainVsSFT, q11ChatMLTemplate, q11RlhfPipeline, q11DpoLossDynamics, q11SafetyTaxTradeoff],
   'quest-12': [q12VramExplosion, q12MatrixDecomposition, q12AdapterSwitching, q12WeightMerging, q12QloraQuantization],
   'quest-13': [q13System1VsSystem2, q13TreeOfThoughts, q13OrmVsPrm, q13GrpoArchitecture, q13TestTimeComputeScaling],
-  'quest-14': [q14LlmToolBridge, q14ReactLoopCycle, q14JsonSchemaValidation, q14AgentSandboxSecurity, q14MultiAgentSwarm]
+  'quest-14': [q14LlmToolBridge, q14ReactLoopCycle, q14JsonSchemaValidation, q14AgentSandboxSecurity, q14MultiAgentSwarm],
+  'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding]
 };
 
 let activeCleanups = [];
