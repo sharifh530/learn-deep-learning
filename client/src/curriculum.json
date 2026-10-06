@@ -3990,6 +3990,161 @@
           "breakdown": "x = Raw 1D waveform, Encoder = Strided 1D conv network, Q_k = k-th codebook quantizer, Decoder = Transposed conv vocoder."
         }
       }
+    },
+    {
+      "id": "quest-19",
+      "title": "Quest 19: World Models & Video Generation",
+      "subtitle": "Spatio-Temporal 3D DiT, Latent Video Dynamics, Spatio-Temporal Patchification & Action Conditioning",
+      "tagline": "World Models & Video",
+      "tier": "Phase 3: The LLM Odyssey, Agents, Generative & Speech AI",
+      "interactiveType": "world_model_video_lab",
+      "interactiveConfig": {
+        "scenarios": [
+          {
+            "id": "hyperdrive_space",
+            "title": "Starship Asteroid Slalom",
+            "category": "3D Kinematics & Space Physics",
+            "prompt": "Cinematic 4K tracking shot of a starship dodging tumbling obsidian asteroids through a purple nebula, hyper-realistic thruster particle dynamics.",
+            "actionVector": [
+              0.0,
+              1.0,
+              0.2
+            ],
+            "motionVelocity": "720 m/s",
+            "fvdScore": 142.5
+          },
+          {
+            "id": "robot_arm",
+            "title": "Robotic Gripper Block Stacking",
+            "category": "Embodied Manipulation & Contact Physics",
+            "prompt": "Top-down laboratory camera view of a 7-DOF robotic arm picking a metallic golden cube and stacking it precisely onto an azure base, realistic rigid body contact.",
+            "actionVector": [
+              0.4,
+              0.0,
+              -0.6
+            ],
+            "motionVelocity": "0.15 m/s",
+            "fvdScore": 118.2
+          },
+          {
+            "id": "autonomous_drive",
+            "title": "Urban Autonomous Highway",
+            "category": "Ego-Vehicle Kinematics & Traffic Flow",
+            "prompt": "First-person dashcam view accelerating down a rainy Tokyo expressway at dusk, vehicle headlights reflecting on wet asphalt, dynamic lane switching.",
+            "actionVector": [
+              -0.1,
+              0.8,
+              0.0
+            ],
+            "motionVelocity": "28.5 m/s",
+            "fvdScore": 129.8
+          },
+          {
+            "id": "fluid_dynamics",
+            "title": "Bioluminescent Fluid Splash",
+            "category": "Non-Linear Navier-Stokes Hydrodynamics",
+            "prompt": "High-speed macro 1000fps capture of a drop of cyan luminescent droplet impacting dark viscous oil, crown splash droplet breakup and surface tension ripples.",
+            "actionVector": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "motionVelocity": "4.2 m/s",
+            "fvdScore": 165.4
+          }
+        ],
+        "tubeletSizes": [
+          {
+            "label": "8×8×2 (Fine Detail)",
+            "p": 8,
+            "t": 2,
+            "tokens": 4096
+          },
+          {
+            "label": "16×16×2 (Standard Sora)",
+            "p": 16,
+            "t": 2,
+            "tokens": 1024
+          },
+          {
+            "label": "16×16×4 (Temporal Compress)",
+            "p": 16,
+            "t": 4,
+            "tokens": 512
+          }
+        ]
+      },
+      "lesson": {
+        "concept": "Spatio-Temporal 3D Diffusion Transformers & Action-Conditioned World Models",
+        "sections": [
+          {
+            "heading": "The 4D Video Challenge: Why Naive 2D Diffusion Collapses",
+            "analogy": "The Flipbook Dilemma: Why Independent Snapshots Cause Shimmering Hallucinations",
+            "deepDive": "Generating high-definition video requires handling a 4D tensor $x \\in \\mathbb{R}^{T \\times H \\times W \\times C}$. If you attempt to generate video by running a 2D image diffusion model frame-by-frame, the result is catastrophic: characters change faces every 10 milliseconds, background buildings melt and morph, and fine textures shimmer uncontrollably. This is known as **temporal inconsistency** and **motion drift**. Standard 2D models lack an internal representation of physics, velocity fields, or object permanence. To produce physically coherent video, models must treat time not as independent static snapshots, but as an inextricably linked spatio-temporal spacetime manifold where pixels move along continuous trajectory curves.",
+            "formulaCard": "\\mathcal{L}_{\\text{temporal}} = \\mathbb{E}_{x, t} \\left[ \\| \\nabla_t x_t - v_{\\text{optical}}(x_t) \\|^2 \\]"
+          },
+          {
+            "heading": "The Spatio-Temporal Patch: 3D Tubelets & Spacetime Compression",
+            "analogy": "Slicing a Loaf of Space-Time Bread into Ice Cubes",
+            "deepDive": "Just as Vision Transformers (ViT) slice 2D images into $16 \\times 16$ pixel patches, video diffusion models (such as OpenAI's Sora and CogVideoX) slice video into **3D Spatio-Temporal Tubelets** of size $P_h \\times P_w \\times P_t$ (e.g. $16 \\times 16$ pixels across 2 frames). Before transformer attention, a **3D Causal VAE** compresses the raw video both spatially (e.g. $8\\times$ downsampling) and temporally (e.g. $4\\times$ downsampling). This 3D patchification flattens the continuous video volume into a discrete sequence of 1D token embeddings. Crucially, this representation allows the model to seamlessly process arbitrary resolutions, variable frame rates, and flexible aspect ratios natively by varying the grid dimensions $(T', H', W')$.",
+            "formulaCard": "N_{\\text{tokens}} = \\left( \\frac{T}{P_t} \\right) \\times \\left( \\frac{H}{P_h} \\right) \\times \\left( \\frac{W}{P_w} \\right)"
+          },
+          {
+            "heading": "3D Diffusion Transformers (3D DiT): Decoupled Space-Time Attention",
+            "analogy": "A Film Crew with a Spatial Cinematographer and a Temporal Continuity Editor",
+            "deepDive": "Scaling 3D attention naively over thousands of spacetime tokens would explode attention memory quadratically $\\mathcal{O}((T \\times H \\times W)^2)$. Frontier video models overcome this using **Factorized / Decoupled Spatio-Temporal Attention**. Within each transformer block, tokens first execute **Spatial Self-Attention** strictly across height and width within the same frame (guaranteeing local geometric realism and crisp object edges). Then, tokens execute **Temporal Self-Attention** strictly across frames along the time axis (enforcing motion continuity and trajectory velocity). Finally, text prompt embeddings are injected via **Cross-Attention**, and timestep noise conditions are modulated using **Adaptive Layer Normalization (adaLN-Zero)**.",
+            "formulaCard": "\\text{DiTBlock}(z) = \\text{adaLN}\\Big( \\text{TemporalAttn}\\big( \\text{SpatialAttn}(z) \\big) \\Big) + z"
+          },
+          {
+            "heading": "Generative World Models: Predicting the Future with Action Conditioning",
+            "analogy": "The Dreaming Brain & The Mental Flight Simulator",
+            "deepDive": "A **World Model** does not merely passively generate pretty pixels; it builds an internal simulation of the laws of physics, cause-and-effect, and environmental dynamics. In action-conditioned world models (such as Dreamer, GAIA-1, and World Labs), the model receives the current latent state $s_t$ and an intentional agent action vector $a_t$ (such as steering angle, robotic motor torque, or camera velocity). The latent transition function $s_{t+1} = \\mathcal{T}_\\theta(s_t, a_t, \\epsilon_t)$ predicts how the world will evolve. This turns generative video into an interactive simulator where autonomous vehicles can test emergency maneuvers or robotic manipulators can plan multi-step assembly trajectories entirely in imagination before touching physical reality.",
+            "formulaCard": "s_{t+1} = \\mathcal{T}_{\\theta}(s_t, a_t, \\epsilon_t) \\quad \\text{where } a_t \\in \\mathcal{A}"
+          },
+          {
+            "heading": "Temporal Coherence, Physics Hallucination & Autoregressive Rollouts",
+            "analogy": "The Mirage Highway: When the Simulator Violates Gravity",
+            "deepDive": "While current video generators can render breathtaking photorealistic textures, they frequently suffer from **physics hallucinations**: liquids flowing uphill, disappearing objects when occluded, or rigid solids bending unnaturally. To generate extended video sequences beyond the training context window (e.g. 1-minute to 10-minute clips), models employ **Autoregressive Temporal Rollouts**. The last $K$ generated frames serve as an observation prompt condition for the next window, with Key-Value (KV) cache reuse across temporal boundaries. Quality and physical consistency are quantitatively benchmarked using **Fréchet Video Distance (FVD)**, which measures perceptual and temporal distribution divergence in deep video feature space.",
+            "formulaCard": "\\text{FVD} = \\|\\mu_r - \\mu_g\\|^2 + \\text{Tr}\\left( \\Sigma_r + \\Sigma_g - 2(\\Sigma_r \\Sigma_g)^{1/2} \\right)"
+          }
+        ]
+      },
+      "quiz": [
+        {
+          "question": "Why does generating video by applying a 2D diffusion model frame-by-frame fail to produce realistic motion?",
+          "options": [
+            "A) 2D models require too many training epochs compared to 3D models",
+            "B) Without temporal attention or velocity modeling, each frame samples independent noise trajectories, causing catastrophic temporal flickering and motion drift",
+            "C) 2D diffusion models cannot process color images",
+            "D) The spatial resolution automatically drops to 16x16 pixels"
+          ],
+          "answer": 1,
+          "explanation": "Correct! Independent 2D frame generation lacks temporal conditioning or cross-frame attention, meaning noise trajectories diverge between adjacent frames, leading to violent flickering, shape-shifting characters, and zero motion coherence."
+        },
+        {
+          "question": "What is the computational benefit of Factorized (Decoupled) Spatio-Temporal Attention over monolithic 3D attention?",
+          "options": [
+            "A) It eliminates the need for text prompts entirely",
+            "B) It breaks quadratic complexity from O((T·H·W)²) into O(T·(H·W)² + (H·W)·T²), drastically reducing VRAM while maintaining full spatial and temporal modeling",
+            "C) It allows the model to run without backpropagation",
+            "D) It converts floating-point weights into 1-bit binary weights"
+          ],
+          "answer": 1,
+          "explanation": "Correct! Factorized attention splits full 3D attention into sequential spatial self-attention within frames and temporal self-attention across frames, slashing quadratic memory requirements to tractable levels for long video generation."
+        },
+        {
+          "question": "In an action-conditioned World Model (e.g. GAIA-1 or Dreamer), what role does the action vector a_t play?",
+          "options": [
+            "A) It acts as the learning rate for the AdamW optimizer",
+            "B) It modulates the latent state transition s_{t+1} = T(s_t, a_t), allowing the model to simulate future environmental dynamics directly driven by agent control inputs",
+            "C) It forces the model to delete past memory tokens from the KV cache",
+            "D) It measures the Fréchet Video Distance (FVD)"
+          ],
+          "answer": 1,
+          "explanation": "Correct! The action vector a_t (e.g. steering angle, gripper torque) conditions the transition function, enabling the generative model to act as an interactive physics simulator of agent interventions."
+        }
+      ],
+      "codeSnippet": "# Spatio-Temporal Decoupled 3D DiT Block (PyTorch)\nimport torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass SpatioTemporalDiTBlock(nn.Module):\n    def __init__(self, dim=512, num_heads=8):\n        super().__init__()\n        self.dim = dim\n        self.num_heads = num_heads\n        \n        # 1. Spatial Self-Attention (within frames: H x W)\n        self.spatial_norm = nn.LayerNorm(dim)\n        self.spatial_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)\n        \n        # 2. Temporal Self-Attention (across frames: T)\n        self.temporal_norm = nn.LayerNorm(dim)\n        self.temporal_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)\n        \n        # 3. Feed-Forward Network\n        self.ffn_norm = nn.LayerNorm(dim)\n        self.ffn = nn.Sequential(\n            nn.Linear(dim, dim * 4),\n            nn.GELU(),\n            nn.Linear(dim * 4, dim)\n        )\n        \n    def forward(self, x, T, S):\n        # x shape: [Batch, T * S, Dim], where S = H * W\n        B, total_tokens, D = x.shape\n        \n        # --- A. Spatial Self-Attention ---\n        # Reshape to [Batch * T, S, Dim] so attention is strictly within each frame\n        x_spatial = x.view(B * T, S, D)\n        h_s = self.spatial_norm(x_spatial)\n        out_s, _ = self.spatial_attn(h_s, h_s, h_s)\n        x_spatial = x_spatial + out_s\n        \n        # --- B. Temporal Self-Attention ---\n        # Reshape to [Batch * S, T, Dim] so attention is strictly across the time axis\n        x_temporal = x_spatial.view(B, T, S, D).permute(0, 2, 1, 3).contiguous().view(B * S, T, D)\n        h_t = self.temporal_norm(x_temporal)\n        out_t, _ = self.temporal_attn(h_t, h_t, h_t)\n        x_temporal = x_temporal + out_t\n        \n        # Restore original shape: [Batch, T * S, Dim]\n        x = x_temporal.view(B, S, T, D).permute(0, 2, 1, 3).contiguous().view(B, total_tokens, D)\n        \n        # --- C. Feed-Forward Network ---\n        x = x + self.ffn(self.ffn_norm(x))\n        return x\n\n# Test with 8 frames of 16x16 tokens (S = 256)\nblock = SpatioTemporalDiTBlock(dim=256, num_heads=4)\nx_video = torch.randn(2, 8 * 256, 256) # Batch=2, Tokens=2048\nout_video = block(x_video, T=8, S=256)\nprint(f\"3D DiT Output Tensor Shape: {out_video.shape}\")"
     }
   ]
 }

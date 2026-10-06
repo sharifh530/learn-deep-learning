@@ -3886,6 +3886,298 @@ function q18SpeechLlmTokenization() {
   };
 }
 
+
+// ==========================================
+// QUEST 19: WORLD MODELS & VIDEO GENERATION VISUALS
+// ==========================================
+
+function q19VideoCubePatchification() {
+  let g = '';
+  g += T(320, 18, '3D Spatio-Temporal Patchification: Video Volume to Tubelet Tokens', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left: 3D Video Volume (T x H x W)
+  g += rect(25, 42, 230, 140, { fill: 'rgba(59, 130, 246, 0.08)', stroke: C.blue, rx: 8 });
+  g += T(140, 58, '1. Continuous 4D Video (T × H × W × C)', { size: 9, weight: 700, fill: C.blue });
+  g += T(140, 72, '16 Frames • 1080p RGB • 30 fps', { size: 7.5, fill: C.muted });
+
+  // Stack of 3 perspective frames
+  const frameOffsets = [
+    { x: 50, y: 130, w: 90, h: 50, colr: 'rgba(59, 130, 246, 0.4)' },
+    { x: 80, y: 110, w: 90, h: 50, colr: 'rgba(59, 130, 246, 0.6)' },
+    { x: 110, y: 90, w: 90, h: 50, colr: 'rgba(59, 130, 246, 0.8)' }
+  ];
+  frameOffsets.forEach((fo, idx) => {
+    g += rect(fo.x, fo.y - 10, fo.w, fo.h, { fill: fo.colr, stroke: '#93c5fd', rx: 3, sw: 1 });
+    g += T(fo.x + fo.w / 2, fo.y + 15, `t = ${idx * 4}`, { size: 7.5, mono: true, fill: '#fff' });
+  });
+
+  // Highlighted 3D Tubelet (Ice Cube)
+  g += rect(140, 95, 26, 26, { fill: 'rgba(245, 158, 11, 0.35)', stroke: C.amber, rx: 2, sw: 1.5 });
+  g += T(153, 108, 'p×p×t', { size: 6.5, mono: true, fill: '#fef08a' });
+  g += T(140, 165, '3D Tubelet Cube (16×16×2)', { size: 7.5, weight: 600, fill: C.amber });
+
+  // Projection Arrow
+  g += arrow(260, 112, 290, 112, 'amber', 2);
+
+  // Middle: 3D Conv Linear Projection
+  g += rect(295, 52, 90, 120, { fill: 'rgba(245, 158, 11, 0.1)', stroke: C.amber, rx: 6 });
+  g += T(340, 74, 'Conv3D / Linear', { size: 8.5, weight: 700, fill: C.amber });
+  g += T(340, 90, 'Kernel [2, 16, 16]', { size: 7.5, mono: true, fill: '#fde68a' });
+  g += T(340, 108, 'Stride [2, 16, 16]', { size: 7.5, mono: true, fill: '#fde68a' });
+  g += T(340, 130, 'Flatten to 1D', { size: 7.5, fill: C.muted });
+  g += T(340, 146, 'Token dim D=1024', { size: 7.5, mono: true, fill: C.cyan });
+
+  // Projection Arrow
+  g += arrow(390, 112, 420, 112, 'emerald', 2);
+
+  // Right: 1D Sequence of Spacetime Tokens
+  g += rect(425, 42, 190, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(520, 58, '2. 1D Sequence for 3D DiT', { size: 9, weight: 700, fill: C.emerald });
+  g += T(520, 72, 'L = (T/2) × (H/16) × (W/16) tokens', { size: 7.5, mono: true, fill: '#6ee7b7' });
+
+  // Token row chips
+  for (let k = 0; k < 6; k++) {
+    const tx = 438 + k * 28;
+    g += rect(tx, 90, 24, 45, { fill: 'rgba(16, 185, 129, 0.2)', stroke: C.emerald, rx: 3 });
+    g += T(tx + 12, 104, `v_${k+1}`, { size: 7, mono: true, fill: '#a7f3d0' });
+    g += T(tx + 12, 124, `t,x,y`, { size: 6, mono: true, fill: C.dim });
+  }
+  g += T(520, 155, '+ 3D RoPE (Time + Spatial)', { size: 7.5, weight: 600, fill: '#34d399' });
+  g += T(520, 168, 'Preserves time order & pixel coords', { size: 7, fill: C.muted });
+
+  g += T(320, 204, '3D Tubelet patchification condenses 4D space-time video into a flat 1D token sequence with 3D positional embeddings, compatible with standard Transformer blocks.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: '3D spacetime tubelet patchification compresses continuous video cubes into discrete 1D sequence tokens.'
+  };
+}
+
+function q19ThreeDDiTArchitecture() {
+  let g = '';
+  g += T(320, 18, 'Factorized 3D Diffusion Transformer (3D DiT): Spatial + Temporal Attention', { size: 12.5, weight: 700, fill: C.text });
+
+  // Main DiT Block Outline
+  g += rect(25, 42, 590, 140, { fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(255, 255, 255, 0.12)', rx: 8 });
+
+  // 1. Input Tokens
+  g += rect(35, 78, 65, 68, { fill: 'rgba(59, 130, 246, 0.15)', stroke: C.blue, rx: 5 });
+  g += T(67, 102, 'Input Tokens', { size: 8, weight: 700, fill: C.blue });
+  g += T(67, 118, 'z_t ∈ ℝ^(L×D)', { size: 7.5, mono: true, fill: '#93c5fd' });
+  g += arrow(105, 112, 125, 112, 'blue', 2);
+
+  // 2. Spatial Self-Attention Module
+  g += rect(130, 58, 125, 108, { fill: 'rgba(6, 182, 212, 0.12)', stroke: C.cyan, rx: 6 });
+  g += T(192, 75, '1. Spatial Self-Attention', { size: 8.5, weight: 700, fill: C.cyan });
+  g += T(192, 90, 'Reshape: [B×T, S, D]', { size: 7.5, mono: true, fill: '#67e8f9' });
+  g += rect(140, 102, 105, 22, { fill: 'rgba(6, 182, 212, 0.2)', rx: 3 });
+  g += T(192, 113, 'Attention within H×W', { size: 7.5, weight: 600, fill: '#fff' });
+  g += T(192, 138, 'Ensures crisp object geometry', { size: 7, fill: C.muted });
+  g += T(192, 152, 'Complexity: O(T · S²)', { size: 7, mono: true, fill: C.dim });
+
+  g += arrow(260, 112, 280, 112, 'cyan', 2);
+
+  // 3. Temporal Self-Attention Module
+  g += rect(285, 58, 125, 108, { fill: 'rgba(168, 85, 247, 0.12)', stroke: C.violet, rx: 6 });
+  g += T(347, 75, '2. Temporal Self-Attention', { size: 8.5, weight: 700, fill: C.violet });
+  g += T(347, 90, 'Reshape: [B×S, T, D]', { size: 7.5, mono: true, fill: '#d8b4fe' });
+  g += rect(295, 102, 105, 22, { fill: 'rgba(168, 85, 247, 0.2)', rx: 3 });
+  g += T(347, 113, 'Attention across Frames T', { size: 7.5, weight: 600, fill: '#fff' });
+  g += T(347, 138, 'Ensures velocity & trajectory', { size: 7, fill: C.muted });
+  g += T(347, 152, 'Complexity: O(S · T²)', { size: 7, mono: true, fill: C.dim });
+
+  g += arrow(415, 112, 435, 112, 'violet', 2);
+
+  // 4. Text Cross-Attention & FFN
+  g += rect(440, 58, 105, 108, { fill: 'rgba(16, 185, 129, 0.12)', stroke: C.emerald, rx: 6 });
+  g += T(492, 75, '3. Cross-Attn & FFN', { size: 8.5, weight: 700, fill: C.emerald });
+  g += T(492, 90, 'Text Prompt conditioning', { size: 7, fill: '#a7f3d0' });
+  g += rect(448, 102, 89, 22, { fill: 'rgba(16, 185, 129, 0.2)', rx: 3 });
+  g += T(492, 113, 'adaLN-Zero Scale/Shift', { size: 7, mono: true, fill: '#fff' });
+  g += T(492, 138, 'SwiGLU Multiplier', { size: 7, fill: C.muted });
+  g += T(492, 152, 'Noise timestep t inject', { size: 7, fill: C.dim });
+
+  g += arrow(550, 112, 570, 112, 'emerald', 2);
+
+  // 5. Output
+  g += circ(585, 112, 12, { fill: 'rgba(16, 185, 129, 0.3)', stroke: C.emerald });
+  g += T(585, 112, '+', { size: 12, weight: 700, fill: '#fff' });
+
+  g += T(320, 204, 'Factorizing full 3D attention into Spatial (H×W) and Temporal (T) operations slashes quadratic complexity while maintaining pristine geometric and motion fidelity.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Decoupled 3D DiT block: Spatial attention preserves crisp per-frame textures; temporal attention enforces motion physics.'
+  };
+}
+
+function q19ActionConditionedWorldModel() {
+  let g = '';
+  g += T(320, 18, 'Action-Conditioned World Model: Latent State Transition Dynamics', { size: 12.5, weight: 700, fill: C.text });
+
+  // Current State s_t
+  g += rect(30, 48, 90, 80, { fill: 'rgba(59, 130, 246, 0.15)', stroke: C.blue, rx: 6 });
+  g += T(75, 72, 'State s_t', { size: 9.5, weight: 700, fill: C.blue });
+  g += T(75, 88, 'Latent Manifold', { size: 7.5, fill: C.muted });
+  g += T(75, 108, 'Observation o_t', { size: 7.5, mono: true, fill: '#93c5fd' });
+
+  // Action vector a_t
+  g += rect(30, 142, 90, 38, { fill: 'rgba(239, 68, 68, 0.15)', stroke: C.rose, rx: 6 });
+  g += T(75, 155, 'Action a_t', { size: 9, weight: 700, fill: C.rose });
+  g += T(75, 168, '[Steer, Throttle, Torque]', { size: 6.8, mono: true, fill: '#fca5a5' });
+
+  // Arrows to Transition Model
+  g += arrow(125, 88, 175, 105, 'blue', 2);
+  g += arrow(125, 161, 175, 115, 'rose', 2);
+
+  // Transition Model T_theta (World Model Core)
+  g += rect(180, 48, 165, 132, { fill: 'rgba(168, 85, 247, 0.15)', stroke: C.violet, rx: 8 });
+  g += T(262, 70, 'World Transition Model', { size: 10, weight: 700, fill: C.violet });
+  g += T(262, 88, 's_{t+1} = 𝒯_θ(s_t, a_t, ε_t)', { size: 8.5, mono: true, weight: 700, fill: '#f3e8ff' });
+
+  g += rect(192, 106, 140, 24, { fill: 'rgba(168, 85, 247, 0.25)', rx: 4 });
+  g += T(262, 118, 'Recurrent / Diffusion Prior', { size: 7.5, weight: 600, fill: '#d8b4fe' });
+
+  g += T(262, 148, 'Predicts Physical Laws', { size: 7.5, fill: C.muted });
+  g += T(262, 162, 'Collision, Inertia, Gravity', { size: 7, fill: C.dim });
+
+  // Arrow to Future State
+  g += arrow(350, 112, 385, 112, 'emerald', 2);
+
+  // Future State s_{t+1}
+  g += rect(390, 48, 90, 80, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(435, 72, 'State s_{t+1}', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(435, 88, 'Future State', { size: 7.5, fill: C.muted });
+  g += T(435, 108, 'Ego-Trajectory', { size: 7.5, mono: true, fill: '#6ee7b7' });
+
+  // Arrow to Observation Decoder & Policy Reward
+  g += arrow(485, 88, 515, 88, 'emerald', 2);
+  g += arrow(485, 108, 515, 145, 'amber', 2);
+
+  // Decoded Future Video Frame
+  g += rect(520, 52, 100, 62, { fill: 'rgba(16, 185, 129, 0.2)', stroke: C.emerald, rx: 6 });
+  g += T(570, 74, 'Decoded Video x̂_{t+1}', { size: 8, weight: 700, fill: C.emerald });
+  g += T(570, 92, 'Visual Hallucination', { size: 7, fill: '#a7f3d0' });
+
+  // Reward / Safety Predictor
+  g += rect(520, 124, 100, 56, { fill: 'rgba(245, 158, 11, 0.15)', stroke: C.amber, rx: 6 });
+  g += T(570, 144, 'Reward / Risk r̂_{t+1}', { size: 8, weight: 700, fill: C.amber });
+  g += T(570, 160, 'Safe Trajectory Eval', { size: 7, fill: '#fde68a' });
+
+  g += T(320, 204, 'Action-conditioned world models act as mental physics engines, allowing autonomous agents to simulate the consequences of motor actions before executing in reality.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Action-conditioned world model: Predicts future latent environment states conditioned on past history and physical agent actions.'
+  };
+}
+
+function q19TemporalConsistencyDrift() {
+  let g = '';
+  g += T(320, 18, 'Temporal Coherence: Naive 2D Diffusion vs 3D Joint Spatiotemporal Tube', { size: 12.5, weight: 700, fill: C.text });
+
+  // Left Card: Naive 2D Frame Generation (Severe Drift)
+  g += rect(25, 42, 280, 140, { fill: 'rgba(239, 68, 68, 0.06)', stroke: C.rose, rx: 8 });
+  g += T(165, 60, '1. Naive Frame-by-Frame (2D Diffusion)', { size: 9.5, weight: 700, fill: C.rose });
+  g += T(165, 74, 'Independent noise per frame • Zero temporal prior', { size: 7.5, fill: C.muted });
+
+  // Shimmering morphing object across 3 frames
+  g += circ(70, 115, 16, { fill: 'rgba(239, 68, 68, 0.3)', stroke: C.rose });
+  g += T(70, 142, 't = 0 (Sphere)', { size: 7, fill: C.muted });
+
+  g += '<path d="M 150,100 L 175,130 L 140,130 Z" fill="rgba(239, 68, 68, 0.3)" stroke="#fb7185" />';
+  g += T(160, 142, 't = 5 (Triangle!)', { size: 7, fill: C.rose });
+
+  g += rect(230, 102, 28, 26, { fill: 'rgba(239, 68, 68, 0.3)', stroke: C.rose, rx: 2 });
+  g += T(244, 142, 't = 10 (Cube!)', { size: 7, fill: C.rose });
+
+  g += rect(35, 155, 260, 20, { fill: 'rgba(239, 68, 68, 0.15)', rx: 4 });
+  g += T(165, 165, '⚠️ Temporal Flickering • FVD = 420 (Poor)', { size: 7.5, weight: 700, fill: '#fca5a5' });
+
+  // Right Card: 3D DiT Joint Tube (Rigid Consistency)
+  g += rect(335, 42, 280, 140, { fill: 'rgba(16, 185, 129, 0.08)', stroke: C.emerald, rx: 8 });
+  g += T(475, 60, '2. Joint 3D Spacetime DiT (Rigid Tube)', { size: 9.5, weight: 700, fill: C.emerald });
+  g += T(475, 74, 'Cross-frame attention tracks velocity vector v_t', { size: 7.5, fill: '#6ee7b7' });
+
+  // Consistent sphere moving along motion trajectory
+  g += line(370, 115, 570, 115, 'rgba(255,255,255,0.2)', 1.5);
+  g += arrow(370, 115, 570, 115, 'emerald', 2);
+
+  g += circ(390, 115, 16, { fill: 'rgba(16, 185, 129, 0.3)', stroke: C.emerald });
+  g += T(390, 142, 't = 0 (Sphere)', { size: 7, fill: '#a7f3d0' });
+
+  g += circ(470, 115, 16, { fill: 'rgba(16, 185, 129, 0.3)', stroke: C.emerald });
+  g += T(470, 142, 't = 5 (Sphere)', { size: 7, fill: '#a7f3d0' });
+
+  g += circ(550, 115, 16, { fill: 'rgba(16, 185, 129, 0.3)', stroke: C.emerald });
+  g += T(550, 142, 't = 10 (Sphere)', { size: 7, fill: '#a7f3d0' });
+
+  g += rect(345, 155, 260, 20, { fill: 'rgba(16, 185, 129, 0.15)', rx: 4 });
+  g += T(475, 165, '⚡ Object Permanence Preserved • FVD = 118 (Studio)', { size: 7.5, weight: 700, fill: '#34d399' });
+
+  g += T(320, 204, 'Temporal attention models the continuous physical manifold of moving objects, eliminating identity drift and morphing artifacts across long video clips.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Temporal attention enforces continuous object permanence and motion vectors, preventing frame-to-frame shape shifting.'
+  };
+}
+
+function q19AutoregressiveRollout() {
+  let g = '';
+  g += T(320, 18, 'Long-Horizon Video Generation: Sliding Window Rollout & KV Caching', { size: 12.5, weight: 700, fill: C.text });
+
+  // Timeline Track Background
+  g += rect(25, 42, 590, 140, { fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(255, 255, 255, 0.08)', rx: 8 });
+
+  // Window 1: Generated Frames 1..16
+  g += rect(40, 58, 200, 80, { fill: 'rgba(59, 130, 246, 0.15)', stroke: C.blue, rx: 6 });
+  g += T(140, 78, 'Window 1 (Frames 1–16)', { size: 9, weight: 700, fill: C.blue });
+  g += T(140, 94, 'Text Prompt Conditioned', { size: 7.5, fill: C.muted });
+  g += T(140, 115, 'Generates Base Motion', { size: 7, fill: '#93c5fd' });
+
+  // Overlap / Context Anchor (Frames 13-16)
+  g += rect(190, 58, 50, 80, { fill: 'rgba(245, 158, 11, 0.25)', stroke: C.amber, rx: 4 });
+  g += T(215, 95, 'Overlap', { size: 7.5, weight: 700, fill: '#fef08a' });
+  g += T(215, 110, 'Anchor', { size: 6.5, fill: C.amber });
+
+  // Arrow connecting Window 1 to Window 2
+  g += arrow(245, 98, 275, 98, 'amber', 2);
+
+  // Window 2: Generated Frames 17..32
+  g += rect(280, 58, 200, 80, { fill: 'rgba(16, 185, 129, 0.15)', stroke: C.emerald, rx: 6 });
+  g += T(380, 78, 'Window 2 (Frames 17–32)', { size: 9, weight: 700, fill: C.emerald });
+  g += T(380, 94, 'Conditioned on Past KV Cache', { size: 7.5, fill: '#6ee7b7' });
+  g += T(380, 115, 'Seamless Continuity', { size: 7, fill: '#34d399' });
+
+  // Overlap 2
+  g += rect(430, 58, 50, 80, { fill: 'rgba(245, 158, 11, 0.25)', stroke: C.amber, rx: 4 });
+  g += T(455, 95, 'Overlap', { size: 7.5, weight: 700, fill: '#fef08a' });
+
+  // Arrow connecting to Window 3
+  g += arrow(485, 98, 515, 98, 'emerald', 2);
+
+  // Window 3 Preview
+  g += rect(520, 58, 80, 80, { fill: 'rgba(168, 85, 247, 0.12)', stroke: C.violet, rx: 6, strokeDasharray: '4,2' });
+  g += T(560, 95, 'Window 3...', { size: 8, fill: C.violet });
+  g += T(560, 112, 'Frames 33-48', { size: 6.5, mono: true, fill: C.muted });
+
+  // Bottom Timeline Scrubber
+  g += line(40, 158, 590, 158, C.axis, 1.5);
+  for (let s = 0; s <= 4; s++) {
+    const sx = 40 + s * 135;
+    g += line(sx, 154, sx, 162, C.axis, 1.5);
+    g += T(sx, 172, `${s * 1}s (${s * 24}f)`, { size: 7, mono: true, fill: C.dim });
+  }
+
+  g += T(320, 204, 'Sliding window autoregressive rollouts maintain temporal Key-Value caches across frame boundaries, enabling multi-minute video generation without memory explosion.', { size: 9.5, fill: C.muted });
+
+  return {
+    html: svg(640, 218, g),
+    caption: 'Autoregressive sliding-window video rollout: Extends videos indefinitely by conditioning subsequent windows on cached boundary latents.'
+  };
+}
+
 // ---------- Registry ----------
 const VISUALS = {
   'quest-1': [q1Neuron, q1DotProduct, q1WeightLines, q1Bias],
@@ -3905,7 +4197,8 @@ const VISUALS = {
   'quest-15': [q15Patchification, q15ClipContrastive, q15VlmProjector, q15CrossAttention, q15SpatialGrounding],
   'quest-16': [q16DenseVsSparse, q16TopKGating, q16LoadBalancingLoss, q16TokenDroppingCapacity, q16ModernMoeArchitectures],
   'quest-17': [q17ForwardReverseMarkov, q17ClosedFormJump, q17UnetTimeConditioned, q17CfgVectorExtrapolation, q17RectifiedFlowMatching],
-  'quest-18': [q18WaveformToStft, q18MelFilterbanks, q18NeuralCodecPipeline, q18RvqQuantizationLadder, q18SpeechLlmTokenization]
+  'quest-18': [q18WaveformToStft, q18MelFilterbanks, q18NeuralCodecPipeline, q18RvqQuantizationLadder, q18SpeechLlmTokenization],
+  'quest-19': [q19VideoCubePatchification, q19ThreeDDiTArchitecture, q19ActionConditionedWorldModel, q19TemporalConsistencyDrift, q19AutoregressiveRollout]
 };
 
 let activeCleanups = [];

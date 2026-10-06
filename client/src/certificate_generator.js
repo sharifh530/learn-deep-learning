@@ -8,7 +8,7 @@ export function generateDiplomaCanvas(options = {}) {
   const {
     studentName = 'Tensor Practitioner',
     completedQuests = [],
-    totalQuests = 18,
+    totalQuests = 19,
     userXp = 1250,
     completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     verificationCode = generateVerificationCode(studentName)
@@ -218,19 +218,20 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
     { num: 'XV', icon: '👁️', title: 'Multimodal VLMs', tag: 'Vision & Cross-Attention' },
     { num: 'XVI', icon: '🔀', title: 'Mixture of Experts', tag: 'Top-k Gating & MoE' },
     { num: 'XVII', icon: '🌊', title: 'Diffusion & Flow', tag: 'Score Matching & Flow' },
-    { num: 'XVIII', icon: '🎙️', title: 'Audio & Codecs', tag: 'Mel Spectrogram & RVQ' }
+    { num: 'XVIII', icon: '🎙️', title: 'Audio & Codecs', tag: 'Mel Spectrogram & RVQ' },
+    { num: 'XIX', icon: '🎬', title: 'World Models', tag: '3D DiT & Video Dynamics' }
   ];
 
   ctx.save();
 
-  // Perfectly symmetrical 3x6 grid (3 rows of 6 cards = 18 disciplines, row width 1140px)
+  // Balanced 3-row layout for 19 quests: 6 in row 1, 7 in row 2, 6 in row 3
   const row1 = quests.slice(0, 6);
-  const row2 = quests.slice(6, 12);
-  const row3 = quests.slice(12, 18);
+  const row2 = quests.slice(6, 13);
+  const row3 = quests.slice(13, 19);
 
-  const cardWidth = 180;
+  const cardWidth = 165;
   const cardHeight = 84;
-  const gap = 12;
+  const gap = 10;
   const rowGap = 14;
 
   const renderRow = (rowItems, startGlobalIdx, y) => {
@@ -284,7 +285,7 @@ function drawMasteredDisciplinesGrid(ctx, centerX, startY, completedQuests, tota
   const startGridY = 475;
   renderRow(row1, 0, startGridY);
   renderRow(row2, 6, startGridY + cardHeight + rowGap);
-  renderRow(row3, 12, startGridY + (cardHeight + rowGap) * 2);
+  renderRow(row3, 13, startGridY + (cardHeight + rowGap) * 2);
 
   ctx.restore();
 }

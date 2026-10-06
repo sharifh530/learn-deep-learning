@@ -141,7 +141,15 @@ const state = {
   audioRvqStages: 4,
   audioMelBins: 80,
   audioPlaybackActive: false,
-  audioPlaybackFreq: 440
+  audioPlaybackFreq: 440,
+  // Quest 19: World Models & Video Generation state
+  worldScenarioIdx: 0,
+  worldActiveTab: 'spacetime_tubelets', // 'spacetime_tubelets' | 'dit_attention' | 'world_simulator'
+  worldTubeletSizeIdx: 1, // 0: 8x8x2, 1: 16x16x2, 2: 16x16x4
+  worldCurrentFrame: 4,
+  worldMotionScale: 2.5,
+  worldSimAction: 'accelerate', // 'steer_left' | 'accelerate' | 'steer_right' | 'brake'
+  worldRolloutSteps: 5
 };
 
 const tutorService = new AITutorService();
@@ -768,6 +776,9 @@ function renderInteractiveWidget(quest) {
       break;
     case 'audio_speech_lab':
       renderAudioSpeechLabWidget(quest);
+      break;
+    case 'world_model_video_lab':
+      renderWorldModelVideoLabWidget(quest);
       break;
     default:
       dom.interactiveContainer.innerHTML = `<p>Interactive playground loading...</p>`;
@@ -13279,6 +13290,650 @@ function renderAudioSpeechLabWidget(quest) {
 }
 
 
+
+// --- WIDGET 19: World Models & Video Generation Lab ---
+function renderWorldModelVideoLabWidget(quest) {
+  const container = document.createElement('div');
+  container.className = 'world-lab-container';
+
+  const config = quest.interactiveConfig || {};
+  const scenarios = config.scenarios || [
+    {
+      id: 'hyperdrive_space',
+      title: 'Starship Asteroid Slalom',
+      category: '3D Kinematics & Space Physics',
+      prompt: 'Cinematic 4K tracking shot of a starship dodging tumbling obsidian asteroids through a purple nebula, hyper-realistic thruster particle dynamics.',
+      actionVector: [0.0, 1.0, 0.2],
+      motionVelocity: '720 m/s',
+      fvdScore: 142.5
+    },
+    {
+      id: 'robot_arm',
+      title: 'Robotic Gripper Block Stacking',
+      category: 'Embodied Manipulation & Contact Physics',
+      prompt: 'Top-down laboratory camera view of a 7-DOF robotic arm picking a metallic golden cube and stacking it precisely onto an azure base, realistic rigid body contact.',
+      actionVector: [0.4, 0.0, -0.6],
+      motionVelocity: '0.15 m/s',
+      fvdScore: 118.2
+    },
+    {
+      id: 'autonomous_drive',
+      title: 'Urban Autonomous Highway',
+      category: 'Ego-Vehicle Kinematics & Traffic Flow',
+      prompt: 'First-person dashcam view accelerating down a rainy Tokyo expressway at dusk, vehicle headlights reflecting on wet asphalt, dynamic lane switching.',
+      actionVector: [-0.1, 0.8, 0.0],
+      motionVelocity: '28.5 m/s',
+      fvdScore: 129.8
+    },
+    {
+      id: 'fluid_dynamics',
+      title: 'Bioluminescent Fluid Splash',
+      category: 'Non-Linear Navier-Stokes Hydrodynamics',
+      prompt: 'High-speed macro 1000fps capture of a drop of cyan luminescent droplet impacting dark viscous oil, crown splash droplet breakup and surface tension ripples.',
+      actionVector: [0.0, 0.0, -1.0],
+      motionVelocity: '4.2 m/s',
+      fvdScore: 165.4
+    }
+  ];
+
+  const tubeletConfigs = [
+    { label: '8×8×2 (Fine Detail)', p: 8, t: 2, tokens: 4096, vram: '14.2 GB', comp: '128×' },
+    { label: '16×16×2 (Standard Sora) ★', p: 16, t: 2, tokens: 1024, vram: '4.8 GB', comp: '512×' },
+    { label: '16×16×4 (Temporal Fast)', p: 16, t: 4, tokens: 512, vram: '2.5 GB', comp: '1024×' }
+  ];
+
+  let scenarioIdx = state.worldScenarioIdx || 0;
+  if (scenarioIdx >= scenarios.length) scenarioIdx = 0;
+  let activeTab = state.worldActiveTab || 'spacetime_tubelets';
+  let tubeletIdx = state.worldTubeletSizeIdx ?? 1;
+  let currentFrame = state.worldCurrentFrame || 4;
+  let motionScale = state.worldMotionScale || 2.5;
+  let simAction = state.worldSimAction || 'accelerate';
+  let isSimulatingRollout = false;
+
+  let xpTubeletClaimed = false;
+  let xpDitClaimed = false;
+  let xpWorldSimClaimed = false;
+
+  const currentSc = scenarios[scenarioIdx];
+  const curTube = tubeletConfigs[tubeletIdx];
+
+  // Procedural SVG Video Cube Renderer
+  function generateVideoCubeSvg() {
+    const totalFrames = 8;
+    let svgInner = '';
+
+    // Perspective stack of frames
+    for (let f = 0; f < totalFrames; f++) {
+      const isSelected = (f + 1) === currentFrame;
+      const offsetX = 35 + f * 42;
+      const offsetY = 120 - f * 10;
+      const frameW = 125;
+      const frameH = 75;
+
+      const fillColor = isSelected
+        ? 'rgba(56, 189, 248, 0.35)'
+        : `rgba(15, 23, 42, ${0.4 + f * 0.06})`;
+      const strokeColor = isSelected ? '#38bdf8' : 'rgba(148, 163, 184, 0.4)';
+      const strokeW = isSelected ? 2 : 1;
+
+      svgInner += `
+        <g class="frame-layer ${isSelected ? 'active-layer' : ''}">
+          <rect x="${offsetX}" y="${offsetY}" width="${frameW}" height="${frameH}" rx="4"
+                fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeW}" />
+          <text x="${offsetX + 10}" y="${offsetY + 16}" fill="${isSelected ? '#38bdf8' : '#64748b'}" font-size="8" font-family="monospace">
+            f_${f+1}
+          </text>
+      `;
+
+      // Draw grid lines on selected frame
+      if (isSelected) {
+        const pSize = curTube.p === 8 ? 16 : 25;
+        for (let gx = offsetX + pSize; gx < offsetX + frameW; gx += pSize) {
+          svgInner += `<line x1="${gx}" y1="${offsetY}" x2="${gx}" y2="${offsetY + frameH}" stroke="rgba(56, 189, 248, 0.4)" stroke-width="0.8" stroke-dasharray="2,2"/>`;
+        }
+        for (let gy = offsetY + pSize; gy < offsetY + frameH; gy += pSize) {
+          svgInner += `<line x1="${offsetX}" y1="${gy}" x2="${offsetX + frameW}" y2="${gy}" stroke="rgba(56, 189, 248, 0.4)" stroke-width="0.8" stroke-dasharray="2,2"/>`;
+        }
+        // Active 3D Tubelet Cube
+        svgInner += `
+          <rect x="${offsetX + 35}" y="${offsetY + 22}" width="${pSize}" height="${pSize}" rx="2"
+                fill="rgba(245, 158, 11, 0.4)" stroke="#f59e0b" stroke-width="1.8"/>
+          <text x="${offsetX + 35 + pSize/2}" y="${offsetY + 22 + pSize/2 + 3}" fill="#fef08a" font-size="7" font-weight="bold" text-anchor="middle" font-family="monospace">
+            ${curTube.p}²×${curTube.t}
+          </text>
+        `;
+      }
+
+      svgInner += `</g>`;
+    }
+
+    // Time Axis arrow along top
+    svgInner += `
+      <line x1="45" y1="35" x2="365" y2="35" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#lv-ar-cyan)"/>
+      <text x="205" y="24" fill="#38bdf8" font-size="8.5" font-weight="bold" text-anchor="middle" font-family="monospace">
+        Time Axis t (8 Frames • 24 fps)
+      </text>
+    `;
+
+    return `
+      <svg class="video-cube-svg" viewBox="0 0 420 185" preserveAspectRatio="xMidYMid meet">
+        ${svgInner}
+      </svg>
+    `;
+  }
+
+  // Dual Attention & Optical Flow SVG
+  function generateAttentionSvg() {
+    let svgInner = '';
+
+    // Left: Spatial Attention Box
+    svgInner += `
+      <rect x="25" y="25" width="260" height="150" rx="8" fill="rgba(6, 182, 212, 0.08)" stroke="#06b6d4" stroke-width="1.5"/>
+      <text x="155" y="44" fill="#06b6d4" font-size="9.5" font-weight="bold" text-anchor="middle">1. Spatial Attention (Inside Frame ${currentFrame})</text>
+      <text x="155" y="58" fill="#94a3b8" font-size="7.5" text-anchor="middle">Reshaped: [Batch × T, S, Dim] • Token Grid S = H×W</text>
+    `;
+
+    // 4x4 Grid of Spatial Tokens with intra-attention arcs
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) {
+        const cx = 55 + c * 52;
+        const cy = 80 + r * 28;
+        const isCore = (r === 1 && c === 1);
+        svgInner += `
+          <rect x="${cx - 16}" y="${cy - 10}" width="32" height="20" rx="3"
+                fill="${isCore ? 'rgba(245, 158, 11, 0.3)' : 'rgba(6, 182, 212, 0.15)'}"
+                stroke="${isCore ? '#f59e0b' : '#06b6d4'}" stroke-width="${isCore ? 1.5 : 1}"/>
+          <text x="${cx}" y="${cy + 3}" fill="${isCore ? '#fef08a' : '#a5f3fc'}" font-size="7.5" font-family="monospace" text-anchor="middle">
+            p_${r*4 + c + 1}
+          </text>
+        `;
+        if (isCore && c < 3) {
+          svgInner += `<path d="M ${cx+16},${cy} Q ${cx+32},${cy-12} ${cx+36},${cy}" fill="none" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="2,2"/>`;
+        }
+      }
+    }
+    svgInner += `
+      <text x="155" y="162" fill="#67e8f9" font-size="7.5" font-family="monospace" text-anchor="middle">
+        Guarantees Geometric Sharpness & Edge Continuity
+      </text>
+    `;
+
+    // Right: Temporal Attention Box
+    svgInner += `
+      <rect x="315" y="25" width="280" height="150" rx="8" fill="rgba(168, 85, 247, 0.08)" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="455" y="44" fill="#a855f7" font-size="9.5" font-weight="bold" text-anchor="middle">2. Temporal Attention (Across Timeline T)</text>
+      <text x="455" y="58" fill="#94a3b8" font-size="7.5" text-anchor="middle">Reshaped: [Batch × S, T, Dim] • Motion Flow Tracking</text>
+    `;
+
+    // Horizontal timeline of identical spatial coordinate across frames
+    for (let f = 0; f < 5; f++) {
+      const tx = 345 + f * 52;
+      const ty = 100;
+      const isCur = (f + 1) === currentFrame;
+      svgInner += `
+        <circle cx="${tx}" cy="${ty}" r="14" fill="${isCur ? 'rgba(52, 211, 153, 0.35)' : 'rgba(168, 85, 247, 0.2)'}"
+                stroke="${isCur ? '#34d399' : '#a855f7'}" stroke-width="${isCur ? 2 : 1.2}"/>
+        <text x="${tx}" y="${ty + 3}" fill="${isCur ? '#34d399' : '#e2e8f0'}" font-size="7.5" font-family="monospace" font-weight="bold" text-anchor="middle">
+          t_${f+1}
+        </text>
+      `;
+      if (f < 4) {
+        // Motion velocity arrow
+        const arrowW = (motionScale * 8).toFixed(1);
+        svgInner += `
+          <line x1="${tx + 14}" y1="${ty}" x2="${tx + 38}" y2="${ty}" stroke="#a855f7" stroke-width="1.5" marker-end="url(#lv-ar-violet)"/>
+        `;
+      }
+    }
+
+    svgInner += `
+      <text x="455" y="142" fill="#d8b4fe" font-size="7.5" font-family="monospace" text-anchor="middle">
+        Velocity v_t = ${currentSc.motionVelocity} (Guidance scale: ${motionScale}×)
+      </text>
+      <text x="455" y="162" fill="#34d399" font-size="7.5" font-weight="bold" font-family="monospace" text-anchor="middle">
+        ✓ Eliminates Frame Flickering & Shape Morphing
+      </text>
+    `;
+
+    return `
+      <svg class="dit-attn-svg" viewBox="0 0 620 190" preserveAspectRatio="xMidYMid meet">
+        ${svgInner}
+      </svg>
+    `;
+  }
+
+  // HTML Structure
+  container.innerHTML = `
+    <div class="world-lab-header">
+      <div class="world-title-row">
+        <div class="world-title-badge">
+          <span class="world-icon">🎬</span>
+          <div>
+            <h3>World Models & Video Generation: 3D DiT Studio</h3>
+            <p class="world-subtitle">Deconstruct 4D video volumes into 3D spacetime tubelet patches, inspect decoupled spatial-temporal attention, and simulate action-conditioned generative world dynamics.</p>
+          </div>
+        </div>
+        <div class="world-tab-nav">
+          <button class="world-tab-btn ${activeTab === 'spacetime_tubelets' ? 'active' : ''}" data-tab="spacetime_tubelets">🧊 3D Spacetime Tubelets</button>
+          <button class="world-tab-btn ${activeTab === 'dit_attention' ? 'active' : ''}" data-tab="dit_attention">⚡ 3D DiT Attention Arena</button>
+          <button class="world-tab-btn ${activeTab === 'world_simulator' ? 'active' : ''}" data-tab="world_simulator">🕹️ Action World Simulator</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario Selector Bar -->
+    <div class="world-scenario-bar">
+      <span class="sc-label">Simulation World:</span>
+      <div class="sc-btn-group">
+        ${scenarios.map((sc, i) => `
+          <button class="world-sc-btn ${i === scenarioIdx ? 'active' : ''}" data-sc-idx="${i}">
+            <span class="sc-badge-dot" style="background: ${i === 0 ? '#38bdf8' : (i === 1 ? '#f59e0b' : (i === 2 ? '#10b981' : '#ec4899'))};"></span>
+            ${sc.title}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- TAB 1: 3D SPACETIME TUBELETS -->
+    <div class="world-tab-panel" id="panel-spacetime-tubelets" style="display: ${activeTab === 'spacetime_tubelets' ? 'block' : 'none'};">
+      <div class="world-grid-2col">
+        <!-- Left: Tubelet Geometry & Video Cube -->
+        <div class="world-card cube-card">
+          <div class="card-head">
+            <h4><span class="icon">📦</span> 4D Spacetime Volume Slicing</h4>
+            <span class="badge category-badge">${currentSc.category}</span>
+          </div>
+          <p class="sc-desc">${currentSc.prompt}</p>
+
+          <div class="cube-viewport" id="cube-viewport">
+            ${generateVideoCubeSvg()}
+          </div>
+
+          <!-- Timeline Scrubber -->
+          <div class="frame-scrubber-box">
+            <div class="scrub-head">
+              <label for="frame-slider">Inspect Video Frame: <strong id="frame-disp">Frame ${currentFrame}</strong> / 8</label>
+              <span class="time-stamp" id="time-disp">${((currentFrame - 1) * 0.042).toFixed(3)}s</span>
+            </div>
+            <input type="range" id="frame-slider" min="1" max="8" value="${currentFrame}" class="world-slider">
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-tubelet-xp">
+              🧊 Claim +20 XP: 3D Tubelet Patchification Mastered
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Patch Size Config & Computational Footprint -->
+        <div class="world-card metrics-card">
+          <div class="card-head">
+            <h4><span class="icon">📐</span> Patch Size & Sequence Complexity</h4>
+          </div>
+
+          <div class="tubelet-picker">
+            <span class="picker-lbl">Spacetime Tubelet Size (P_h × P_w × P_t):</span>
+            <div class="tube-btn-row">
+              ${tubeletConfigs.map((tc, idx) => `
+                <button class="tube-btn ${idx === tubeletIdx ? 'active' : ''}" data-tube-idx="${idx}">
+                  ${tc.label}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Dynamic Metrics Grid -->
+          <div class="tube-metrics-grid">
+            <div class="w-metric-box">
+              <span class="m-lbl">1D Sequence Length</span>
+              <span class="m-val highlight" id="m-tokens-disp">${curTube.tokens} Tokens</span>
+              <span class="m-sub">(T/P_t) × (H/P_h) × (W/P_w)</span>
+            </div>
+            <div class="w-metric-box">
+              <span class="m-lbl">3D VAE Compression</span>
+              <span class="m-val">${curTube.comp}</span>
+              <span class="m-sub">Spatiotemporal reduction</span>
+            </div>
+            <div class="w-metric-box">
+              <span class="m-lbl">VRAM Attention Footprint</span>
+              <span class="m-val">${curTube.vram}</span>
+              <span class="m-sub">Dual attention memory</span>
+            </div>
+            <div class="w-metric-box">
+              <span class="m-lbl">Fréchet Video Dist (FVD)</span>
+              <span class="m-val success">${currentSc.fvdScore}</span>
+              <span class="m-sub">Lower is higher fidelity</span>
+            </div>
+          </div>
+
+          <div class="formula-box">
+            <span class="box-title">Spacetime Sequence Formula:</span>
+            <div class="formula-code">N_tokens = (T / P_t) · (H / P_h) · (W / P_w)</div>
+            <p class="formula-desc">Smaller tubelets (e.g. 8×8×2) capture hyper-fine high-frequency textures but increase token count by 4×, demanding quadratic attention compute.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 3D DiT ATTENTION ARENA -->
+    <div class="world-tab-panel" id="panel-dit-attention" style="display: ${activeTab === 'dit_attention' ? 'block' : 'none'};">
+      <div class="dit-layout">
+        <!-- Dual Attention Explainer Card -->
+        <div class="world-card attn-explainer-card">
+          <div class="card-head">
+            <h4><span class="icon">⚡</span> Factorized Spatio-Temporal Attention Engine</h4>
+            <span class="badge dit-badge">Decoupled DiT Block</span>
+          </div>
+          <p class="explainer-desc">
+            Full 3D attention over video would require <strong>O((T·H·W)²)</strong> operations, crashing GPU memory. Factorizing attention decouples spatial geometry from temporal kinematics:
+          </p>
+
+          <div class="attn-viewport" id="attn-viewport">
+            ${generateAttentionSvg()}
+          </div>
+
+          <!-- Motion Guidance Slider -->
+          <div class="motion-slider-box">
+            <div class="scrub-head">
+              <label for="motion-slider">Temporal Motion Guidance Scale (s_motion): <strong id="motion-disp">${motionScale}×</strong></label>
+              <span class="active-focus" id="motion-desc">Optimal physical fluidity</span>
+            </div>
+            <input type="range" id="motion-slider" min="1.0" max="5.0" step="0.5" value="${motionScale}" class="world-slider">
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-dit-xp">
+              ⚡ Claim +25 XP: 3D DiT Architecture Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: ACTION-CONDITIONED WORLD SIMULATOR -->
+    <div class="world-tab-panel" id="panel-world-simulator" style="display: ${activeTab === 'world_simulator' ? 'block' : 'none'};">
+      <div class="world-sim-layout">
+        <!-- Theory Intro -->
+        <div class="world-card sim-intro-card">
+          <div class="card-head">
+            <h4><span class="icon">🕹️</span> Generative World Model: Mental Physics Engine</h4>
+            <span class="badge world-badge">s_{t+1} = 𝒯(s_t, a_t)</span>
+          </div>
+          <p class="sim-desc">
+            A World Model does not just hallucinate pixels—it builds an internal physics engine. By injecting an <strong>agent action vector a_t</strong>, the model simulates counterfactual futures, predicting how the environment will react before taking physical real-world risks.
+          </p>
+        </div>
+
+        <!-- Interactive Joystick & Rollout Canvas -->
+        <div class="world-card interactive-sim-card">
+          <div class="sim-top-row">
+            <!-- Left: Action Pad -->
+            <div class="action-pad-box">
+              <span class="pad-title">Agent Action Vector a_t:</span>
+              <div class="joystick-grid">
+                <button class="act-btn ${simAction === 'steer_left' ? 'active' : ''}" data-act="steer_left" title="Steer Left">
+                  <span class="act-icon">⬅️</span>
+                  <span>Steer Left</span>
+                </button>
+                <button class="act-btn ${simAction === 'accelerate' ? 'active' : ''}" data-act="accelerate" title="Accelerate Forward">
+                  <span class="act-icon">⬆️</span>
+                  <span>Accelerate</span>
+                </button>
+                <button class="act-btn ${simAction === 'steer_right' ? 'active' : ''}" data-act="steer_right" title="Steer Right">
+                  <span class="act-icon">➡️</span>
+                  <span>Steer Right</span>
+                </button>
+                <button class="act-btn ${simAction === 'brake' ? 'active' : ''}" data-act="brake" title="Brake / Reverse">
+                  <span class="act-icon">⬇️</span>
+                  <span>Brake</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: Action Vector Display -->
+            <div class="vector-spec-box">
+              <span class="spec-title">Conditioning Action Parameters:</span>
+              <div class="spec-row">
+                <span class="s-lbl">Selected Action:</span>
+                <strong id="act-name-disp" class="highlight">${simAction.toUpperCase()}</strong>
+              </div>
+              <div class="spec-row">
+                <span class="s-lbl">Ego-Velocity:</span>
+                <strong id="act-vel-disp">${currentSc.motionVelocity}</strong>
+              </div>
+              <div class="spec-row">
+                <span class="s-lbl">Predicted Reward r̂:</span>
+                <strong class="success">+0.84 (Safe & Feasible)</strong>
+              </div>
+              <button class="btn-run-rollout" id="btn-run-world-rollout">
+                <span class="icon">🚀</span> Run 5-Step Autoregressive Rollout
+              </button>
+            </div>
+          </div>
+
+          <!-- Rollout Trajectory Visualizer -->
+          <div class="rollout-tray-box">
+            <span class="tray-title">5-Frame Forward Hallucination Trajectory (s_{t+1} ... s_{t+5}):</span>
+            <div class="tray-steps-row" id="tray-steps-row">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <div class="card-footer-action">
+            <button class="btn-claim-xp" id="btn-claim-world-xp">
+              🕹️ Claim +30 XP: Generative World Models Mastered
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach to DOM
+  dom.interactiveContainer.innerHTML = '';
+  dom.interactiveContainer.appendChild(container);
+
+  // Helper to render Rollout Steps Tray
+  function updateRolloutTray() {
+    const tray = container.querySelector('#tray-steps-row');
+    if (!tray) return;
+
+    const actionIcons = {
+      steer_left: '↩️ Curving Left',
+      accelerate: '⚡ Surging Forward',
+      steer_right: '↪️ Curving Right',
+      brake: '🛑 Decelerating'
+    };
+
+    let html = '';
+    for (let s = 1; s <= 5; s++) {
+      const isDone = true;
+      html += `
+        <div class="rollout-frame-card">
+          <div class="frame-tag">t + ${s} (${s * 40}ms)</div>
+          <div class="frame-preview-box">
+            <span class="f-icon">${s === 1 ? '🎯' : (s === 5 ? '🏁' : '✨')}</span>
+            <span class="f-action-sub">${actionIcons[simAction]}</span>
+          </div>
+          <div class="frame-metric">s_{t+${s}} ✓</div>
+        </div>
+      `;
+    }
+    tray.innerHTML = html;
+  }
+
+  // Tab switching
+  const tabBtns = container.querySelectorAll('.world-tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTab = btn.getAttribute('data-tab');
+      state.worldActiveTab = activeTab;
+
+      container.querySelector('#panel-spacetime-tubelets').style.display = activeTab === 'spacetime_tubelets' ? 'block' : 'none';
+      container.querySelector('#panel-dit-attention').style.display = activeTab === 'dit_attention' ? 'block' : 'none';
+      container.querySelector('#panel-world-simulator').style.display = activeTab === 'world_simulator' ? 'block' : 'none';
+      soundFx.playBlip(620, 0.05);
+    });
+  });
+
+  // Scenario buttons
+  const scBtns = container.querySelectorAll('.world-sc-btn');
+  scBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      scenarioIdx = parseInt(btn.getAttribute('data-sc-idx'), 10);
+      state.worldScenarioIdx = scenarioIdx;
+      renderWorldModelVideoLabWidget(quest);
+      soundFx.playBlip(500, 0.06);
+    });
+  });
+
+  // Tubelet picker
+  const tubeBtns = container.querySelectorAll('.tube-btn');
+  tubeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tubeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      tubeletIdx = parseInt(btn.getAttribute('data-tube-idx'), 10);
+      state.worldTubeletSizeIdx = tubeletIdx;
+      
+      const cubeVp = container.querySelector('#cube-viewport');
+      if (cubeVp) cubeVp.innerHTML = generateVideoCubeSvg();
+
+      const tokensDisp = container.querySelector('#m-tokens-disp');
+      if (tokensDisp) tokensDisp.textContent = `${tubeletConfigs[tubeletIdx].tokens} Tokens`;
+
+      soundFx.playBlip(680, 0.05);
+    });
+  });
+
+  // Frame Scrubber
+  const frameSlider = container.querySelector('#frame-slider');
+  if (frameSlider) {
+    frameSlider.addEventListener('input', (e) => {
+      currentFrame = parseInt(e.target.value, 10);
+      state.worldCurrentFrame = currentFrame;
+
+      const fDisp = container.querySelector('#frame-disp');
+      if (fDisp) fDisp.textContent = `Frame ${currentFrame}`;
+      const tDisp = container.querySelector('#time-disp');
+      if (tDisp) tDisp.textContent = `${((currentFrame - 1) * 0.042).toFixed(3)}s`;
+
+      const cubeVp = container.querySelector('#cube-viewport');
+      if (cubeVp) cubeVp.innerHTML = generateVideoCubeSvg();
+
+      const attnVp = container.querySelector('#attn-viewport');
+      if (attnVp) attnVp.innerHTML = generateAttentionSvg();
+
+      soundFx.playBlip(440 + currentFrame * 35, 0.03);
+    });
+  }
+
+  // Motion Guidance Slider
+  const motionSlider = container.querySelector('#motion-slider');
+  if (motionSlider) {
+    motionSlider.addEventListener('input', (e) => {
+      motionScale = parseFloat(e.target.value);
+      state.worldMotionScale = motionScale;
+
+      const mDisp = container.querySelector('#motion-disp');
+      if (mDisp) mDisp.textContent = `${motionScale.toFixed(1)}×`;
+
+      const attnVp = container.querySelector('#attn-viewport');
+      if (attnVp) attnVp.innerHTML = generateAttentionSvg();
+
+      soundFx.playBlip(550, 0.03);
+    });
+  }
+
+  // Action Buttons
+  const actBtns = container.querySelectorAll('.act-btn');
+  actBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      actBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      simAction = btn.getAttribute('data-act');
+      state.worldSimAction = simAction;
+
+      const actDisp = container.querySelector('#act-name-disp');
+      if (actDisp) actDisp.textContent = simAction.toUpperCase();
+
+      updateRolloutTray();
+      soundFx.playBlip(580, 0.05);
+    });
+  });
+
+  // Run Rollout Simulation Button
+  const btnRunRollout = container.querySelector('#btn-run-world-rollout');
+  if (btnRunRollout) {
+    btnRunRollout.addEventListener('click', () => {
+      if (isSimulatingRollout) return;
+      isSimulatingRollout = true;
+      btnRunRollout.disabled = true;
+      btnRunRollout.innerHTML = `<span class="icon spin">🔄</span> Simulating Future Physics...`;
+      soundFx.playBlip(750, 0.08);
+
+      setTimeout(() => {
+        isSimulatingRollout = false;
+        btnRunRollout.disabled = false;
+        btnRunRollout.innerHTML = `<span class="icon">🚀</span> Run 5-Step Autoregressive Rollout`;
+        updateRolloutTray();
+        soundFx.playLevelUp();
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }, 500);
+    });
+  }
+
+  // Claim XP buttons
+  const btnClaimTubeletXp = container.querySelector('#btn-claim-tubelet-xp');
+  if (btnClaimTubeletXp) {
+    btnClaimTubeletXp.addEventListener('click', () => {
+      if (!xpTubeletClaimed) {
+        xpTubeletClaimed = true;
+        awardXp(20, '3D Tubelet Patchification Conquered');
+        btnClaimTubeletXp.textContent = '✓ +20 XP Claimed!';
+        btnClaimTubeletXp.disabled = true;
+        btnClaimTubeletXp.style.opacity = '0.6';
+        confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimDitXp = container.querySelector('#btn-claim-dit-xp');
+  if (btnClaimDitXp) {
+    btnClaimDitXp.addEventListener('click', () => {
+      if (!xpDitClaimed) {
+        xpDitClaimed = true;
+        awardXp(25, '3D Diffusion Transformer Conquered');
+        btnClaimDitXp.textContent = '✓ +25 XP Claimed!';
+        btnClaimDitXp.disabled = true;
+        btnClaimDitXp.style.opacity = '0.6';
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  const btnClaimWorldXp = container.querySelector('#btn-claim-world-xp');
+  if (btnClaimWorldXp) {
+    btnClaimWorldXp.addEventListener('click', () => {
+      if (!xpWorldSimClaimed) {
+        xpWorldSimClaimed = true;
+        awardXp(30, 'Action-Conditioned World Models Conquered');
+        btnClaimWorldXp.textContent = '✓ +30 XP Claimed!';
+        btnClaimWorldXp.disabled = true;
+        btnClaimWorldXp.style.opacity = '0.6';
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      }
+    });
+  }
+
+  // Initial render of rollout tray
+  updateRolloutTray();
+}
+
+
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
@@ -13516,6 +14171,13 @@ const questPrompts = {
     { label: '🧱 How does Residual Vector Quantization (RVQ) work?', prompt: 'Explain the multi-stage codebook cascade in RVQ: how does quantizing residual errors r_k = r_{k-1} - q_k achieve high-fidelity audio with small codebooks?' },
     { label: '⏱️ What is the Delay Pattern in VALL-E & MusicGen?', prompt: 'Walk through how interleaving RVQ codebook streams with a 1-step delay allows a single causal autoregressive Transformer to generate all codebook layers simultaneously.' },
     { label: '🎯 Quiz me on Neural Audio Codecs & RVQ', prompt: 'Give me a challenging question about STFT hop sizes, Mel spectrogram bins, RVQ straight-through estimators, or acoustic language models!' }
+  ],
+  'quest-19': [
+    { label: '🎬 Why does 2D diffusion fail for video?', prompt: 'Explain why applying 2D image diffusion frame-by-frame leads to catastrophic temporal flickering and motion drift, and why joint spatio-temporal modeling is mandatory.' },
+    { label: '🧊 How do 3D Spacetime Tubelets compress video?', prompt: 'Walk through how 3D tubelets (e.g. 16x16x2) and 3D causal VAEs compress continuous 4D video volumes into flat 1D token sequences for Transformers.' },
+    { label: '⚡ How does Decoupled 3D DiT Attention work?', prompt: 'Compare monolithic 3D attention vs decoupled spatial self-attention (within frame) and temporal self-attention (across time) in modern architectures like Sora and CogVideoX.' },
+    { label: '🕹️ What is an Action-Conditioned World Model?', prompt: 'Explain how world models (Dreamer, GAIA-1, V-JEPA) predict future latent environment states s_{t+1} conditioned on physical agent action vectors a_t.' },
+    { label: '🎯 Quiz me on World Models & Video DiT', prompt: 'Give me a challenging question about 3D DiT factorized attention, spacetime tubelets, action conditioning, or Fréchet Video Distance (FVD)!' }
   ]
 };
 

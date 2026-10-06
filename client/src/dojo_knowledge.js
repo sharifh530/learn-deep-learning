@@ -839,6 +839,64 @@ print(f"Acoustic Token Streams: {token_codes.shape} (4 codebooks x 50 tokens/sec
         explanation: "Osu! In Residual Vector Quantization, each subsequent codebook $C_k$ quantizes the leftover error (residual) $r_{k-1} = r_{k-2} - q_{k-1}$! This allows multiple low-complexity codebooks to achieve high fidelity without needing an astronomically huge dictionary!"
       }
     },
+    'quest-19': {
+      title: 'Quest 19: World Models & Video Generation',
+      eli10: `🎬 **World Models & Video Generation Explained Like You're 10:**
+
+Imagine you are watching a movie, but every time a character blinks, their face turns into a completely different person! That's what happens if AI generates video frame-by-frame.
+
+1. **The 4D Video Nightmare:** Video is a 4D box ($Time \times Height \times Width \times Color$). If a model generates pictures independently, they shimmer and melt like a fever dream because it has zero memory of physics or velocity!
+2. **3D Spacetime Tubelets (Ice Cubes):** Instead of cutting 2D squares, models like Sora slice video into 3D spacetime ice cubes ($16 \times 16$ pixels $\times 2$ frames). This compresses video into a sequence of tokens the AI can process easily.
+3. **The Film Crew (Decoupled 3D DiT):** Inside each transformer layer, two specialists work together:
+   - **The Spatial Cinematographer:** Looks strictly within each frame to make cars, faces, and lighting crystal-clear.
+   - **The Temporal Continuity Editor:** Looks strictly across frames along the timeline to make sure objects move smoothly at realistic physical speeds!
+4. **The Mental Flight Simulator (Action-Conditioned World Models):** A true World Model doesn't just paint videos; it simulates reality. When you give it an action (like turning a steering wheel left or moving a robot gripper down), the model predicts the exact future physical consequences ($s_{t+1} = \mathcal{T}(s_t, a_t)$).
+5. **Autoregressive Rollouts:** By sliding a window forward and caching past frames in memory, world models can generate minutes of continuous interactive video!`,
+
+      snippet: `\`\`\`python
+# Decoupled Spatio-Temporal 3D DiT Attention in PyTorch
+import torch
+import torch.nn as nn
+
+class SpatioTemporalDiTBlock(nn.Module):
+    def __init__(self, dim=256, num_heads=4):
+        super().__init__()
+        self.spatial_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
+        self.temporal_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+
+    def forward(self, x, T, S):
+        # x: [Batch, T*S, Dim] (S = H*W spatial tokens)
+        B, total, D = x.shape
+        # 1. Spatial Self-Attention (within frames: S tokens)
+        x_s = x.view(B * T, S, D)
+        out_s, _ = self.spatial_attn(self.norm1(x_s), self.norm1(x_s), self.norm1(x_s))
+        x = (x_s + out_s).view(B, T, S, D)
+        # 2. Temporal Self-Attention (across frames: T tokens)
+        x_t = x.permute(0, 2, 1, 3).contiguous().view(B * S, T, D)
+        out_t, _ = self.temporal_attn(self.norm2(x_t), self.norm2(x_t), self.norm2(x_t))
+        x = (x_t + out_t).view(B, S, T, D).permute(0, 2, 1, 3).contiguous().view(B, total, D)
+        return x
+
+block = SpatioTemporalDiTBlock()
+dummy_video = torch.randn(1, 8 * 64, 256) # 8 frames x 64 spatial tokens
+out = block(dummy_video, T=8, S=64)
+print(f"3D DiT Block Output: {out.shape}")
+\`\`\``,
+
+      quiz: {
+        question: "🥋 **Dojo Pop Quiz: Spatio-Temporal 3D DiT Architecture**\n\nWhy do frontier video models like Sora decouple attention into separate Spatial and Temporal self-attention layers instead of using full 3D attention?",
+        options: [
+            "A) Decoupled attention prevents the GPU from needing floating-point numbers",
+            "B) Monolithic 3D attention scales quadratically O((T·H·W)²) which explodes VRAM; factorizing into Spatial O(T·S²) and Temporal O(S·T²) slashes memory while preserving motion fidelity",
+            "C) Full 3D attention can only process black-and-white videos",
+            "D) Decoupled attention eliminates the need for camera motion"
+        ],
+        answer: "B",
+        explanation: "Osu! Full 3D attention across all spacetime tokens causes quadratic memory explosion $\mathcal{O}((T \times S)^2)$. Decoupling spatial attention within frames and temporal attention across frames keeps computational complexity manageable while enforcing both crisp textures and fluid temporal motion!"
+      }
+    },
   },
 
   // --- GENERAL TOPICS & FREQUENTLY ASKED QUESTIONS ---
@@ -995,6 +1053,9 @@ export function queryDojoKnowledge(userPrompt, questContext = null) {
   }
   if (hasPhrase('audio') || hasPhrase('speech') || hasPhrase('codec') || hasPhrase('rvq') || hasPhrase('spectrogram') || hasPhrase('mel') || hasPhrase('soundstream') || hasPhrase('encodec') || hasPhrase('vall-e') || hasPhrase('musicgen') || hasPhrase('audiolm') || hasPhrase('vocoder') || hasPhrase('stft') || hasPhrase('quest 18')) {
     return DOJO_KNOWLEDGE.quests['quest-18'].eli10;
+  }
+  if (hasPhrase('video') || hasPhrase('world model') || hasPhrase('dit') || hasPhrase('sora') || hasPhrase('tubelet') || hasPhrase('temporal attention') || hasPhrase('spatial attention') || hasPhrase('dreamer') || hasPhrase('gaia') || hasPhrase('v-jepa') || hasPhrase('action condition') || hasPhrase('fvd') || hasPhrase('quest 19')) {
+    return DOJO_KNOWLEDGE.quests['quest-19'].eli10;
   }
 
   // 5. Fallback context-rich synthesis based on active quest

@@ -161,10 +161,10 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
 
 ---
 
-## ⚡ Phase 3: The LLM Odyssey, Agents, Generative & Speech AI (Quests 7 - 18)
+## ⚡ Phase 3: The LLM Odyssey, Agents, Generative, Speech & World Models (Quests 7 - 19)
 
 ```
-[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing] ➡️ [Quest 17: Diffusion Models & Flow Matching] ➡️ [Quest 18: Audio & Speech AI]
+[Quest 7: Attention Machine] ➡️ [Quest 8: Words into Vectors] ➡️ [Quest 9: Inside GPT Block] ➡️ [Quest 10: Generation Engine] ➡️ [Quest 11: Post-Training & DPO] ➡️ [Quest 12: PEFT & LoRA] ➡️ [Quest 13: Reasoning & PRMs] ➡️ [Quest 14: Agentic Tool Use & ReAct] ➡️ [Quest 15: Multimodal VLMs] ➡️ [Quest 16: Mixture-of-Experts & Dynamic Routing] ➡️ [Quest 17: Diffusion Models & Flow Matching] ➡️ [Quest 18: Audio & Speech AI] ➡️ [Quest 19: World Models & Video Generation]
 ```
 
 ### ⚡ Quest 7: The Attention Machine (Transformers & Self-Attention)
@@ -515,9 +515,31 @@ Welcome to **NeuroQuest**! This playbook is designed to transform deep learning 
   Runnable PyTorch implementation of `ResidualVectorQuantizer` with Straight-Through Estimators (STE).
 
 
+
+---
+
+### 🎬 Quest 19: World Models & Video Generation (3D DiT, Spatio-Temporal Patchification & Action Conditioning)
+- **Tagline:** 3D DiT & Video Dynamics
+- **The Core Problem:**
+  Video generation requires handling a 4D continuous volume ($T \times H \times W \times C$). Naively running 2D diffusion frame-by-frame creates violent temporal flickering, drifting object identities, and zero adherence to physical laws. Monolithic 3D attention across all spacetime pixels explodes memory quadratically $\mathcal{O}((T \cdot H \cdot W)^2)$.
+- **The Solution:**
+  Frontier video architectures (Sora, CogVideoX, V-JEPA) compress video through 3D causal VAEs and slice continuous volumes into discrete **3D Spatio-Temporal Tubelets** ($16 \times 16 \times 2$). The transformer factorizes attention into decoupled **Spatial Self-Attention** (within frames for crisp geometric edges) and **Temporal Self-Attention** (across frames along the time axis for fluid kinematics). In **Action-Conditioned World Models** (Dreamer, GAIA-1), the model predicts future latent environment states $s_{t+1} = \mathcal{T}_\theta(s_t, a_t, \epsilon_t)$ driven directly by physical agent motor actions.
+- **Key Concepts:**
+  - **3D Spacetime Tubelets:** Slicing 4D video volumes into $P_h \times P_w \times P_t$ patches projected to 1D tokens, enabling arbitrary resolution, aspect ratios, and durations.
+  - **Decoupled 3D DiT:** Factorizing attention into spatial ($H \times W$) and temporal ($T$) operations with adaLN-Zero conditioning, eliminating quadratic memory blowup.
+  - **Action-Conditioned Transitions:** Modeling the environment as a latent transition simulator where agent actions ($a_t$) steer future video trajectory rollouts.
+  - **Temporal Consistency & Optical Flow:** Minimizing temporal motion drift and object morphing through cross-frame velocity vector guidance.
+  - **Fréchet Video Distance (FVD):** Evaluating multi-frame perceptual fidelity and temporal smoothness against ground-truth video distributions.
+- **Interactive Playground:** 3-tab World Models & Video Lab:
+  - *Tab 1: 3D Spacetime Tubelets:* Interactive 3D Video Cube visualizer, frame scrubber (1..8), tubelet size switcher ($8 \times 8 \times 2$, $16 \times 16 \times 2$, $16 \times 16 \times 4$), and sequence complexity calculator.
+  - *Tab 2: 3D DiT Attention Arena:* Dual attention visualizer (Spatial vs Temporal), motion guidance scale slider ($s_{\text{motion}} \in [1.0, 5.0]$), and optical flow velocity vectors.
+  - *Tab 3: Action World Simulator:* Interactive agent joystick (steer left, accelerate, steer right, brake), 5-frame forward hallucination rollout, and counterfactual trajectory exploration.
+- **Python Lab Snippet:**
+  Runnable PyTorch implementation of `SpatioTemporalDiTBlock` with decoupled spatial-temporal attention.
+
+
 ## 🔮 Roadmap: Future Expansion Quests
-- **Quest 19: World Models & Video Generation:** Spatio-temporal 3D DiT diffusion, latent video dynamics, and action-conditioned world models.
-- **Quest 20: Embodied AI & Robotics Foundation Models:** Vision-Language-Action (VLA) models, diffusion policy for robotic manipulation, and closed-loop sensory-motor control.
+- **Quest 20: Embodied AI & Robotics Foundation Models:** Vision-Language-Action (VLA) models (RT-2, OpenVLA), diffusion policy for continuous robotic manipulation, and closed-loop sensory-motor control.
 
 
 ---
