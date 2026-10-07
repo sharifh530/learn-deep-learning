@@ -41,7 +41,7 @@
 
         <!-- Center Cluster: Unified Cosmic Learner HUD -->
         <div class="nav-hud" id="nav-player-hud" title="Player Tensor Progression & PyTorch Engine Status">
-          <div class="hud-stat-group level-group" id="user-level-badge" title="Current Level & Rank">
+          <div class="hud-stat-group level-group" id="user-level-badge" title="Martial Arts Belt Rank & Progress (Click or press 'B' for Dojo Trophy Room)" tabindex="0" role="button">
             <span class="hud-icon">⭐</span>
             <span class="hud-level-text" id="user-level-text">Lvl 1 • Tensor Novice</span>
           </div>
@@ -104,6 +104,16 @@
                     <kbd class="studio-kbd">G</kbd>
                   </div>
                   <span class="studio-item-desc">20-Quest Cosmic Tech Tree & Lore</span>
+                </div>
+              </button>
+              <button class="studio-menu-item" id="btn-menu-trophy" role="menuitem" title="Sensei's Dojo Trophy Room & Martial Arts Belts (Shortcut: B)">
+                <div class="studio-item-icon">🥋</div>
+                <div class="studio-item-info">
+                  <div class="studio-item-title-row">
+                    <span class="studio-item-title">Dojo Trophy Room</span>
+                    <kbd class="studio-kbd">B</kbd>
+                  </div>
+                  <span class="studio-item-desc">10-Tier Obi Belts &amp; 16 Achievement Badges</span>
                 </div>
               </button>
             </div>
@@ -501,11 +511,15 @@
               <span><kbd class="palette-kbd">G</kbd> Galaxy</span>
               <span><kbd class="palette-kbd">M</kbd> Architect</span>
               <span><kbd class="palette-kbd">D</kbd> DoodleVision</span>
+              <span><kbd class="palette-kbd">B</kbd> Belts</span>
               <span><kbd class="palette-kbd">T</kbd> Sensei</span>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Sensei's Dojo Trophy Room & Martial Arts Belts Modal -->
+      <div class="modal-overlay dojo-modal-overlay" id="trophy-modal" style="display: none;"></div>
 
       <!-- Neural Network Architecture Designer Modal -->
       <div class="modal-overlay architect-modal-overlay" id="architect-modal" style="display: none;">

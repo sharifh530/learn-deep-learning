@@ -12,6 +12,7 @@ import { soundFx } from './sound_effects.js';
 import { ArchitectDesigner } from './architect_designer.js';
 import { DoodleCapstoneStudio } from './doodle_capstone.js';
 import { GalaxyConstellationMap } from './galaxy_map.js';
+import { DojoManager } from './dojo_achievements.js';
 
 // --- State Management ---
 const state = {
@@ -167,6 +168,7 @@ const tutorService = new AITutorService();
 // --- DOM References ---
 const dom = {
   // Navigation
+  userLevelBadge: document.getElementById('user-level-badge'),
   userLevelText: document.getElementById('user-level-text'),
   xpBarFill: document.getElementById('xp-bar-fill'),
   xpLabelText: document.getElementById('xp-label-text'),
@@ -298,6 +300,8 @@ const dom = {
   btnStudiosDropdown: document.getElementById('btn-studios-dropdown'),
   studiosDropdownWrapper: document.getElementById('studios-dropdown-wrapper'),
   btnMenuGalaxy: document.getElementById('btn-menu-galaxy'),
+  btnMenuTrophy: document.getElementById('btn-menu-trophy'),
+  trophyModal: document.getElementById('trophy-modal'),
   paletteModal: document.getElementById('palette-modal'),
   paletteSearchInput: document.getElementById('palette-search-input'),
   paletteResultsContainer: document.getElementById('palette-results-container'),
@@ -334,9 +338,17 @@ function updateXpDisplay() {
   }
 
   const progressPercent = Math.min(100, Math.round((xp / nextXp) * 100));
-  dom.userLevelText.textContent = `Lvl ${level}`;
-  if (dom.userLevelBadge) {
-    dom.userLevelBadge.title = `Level ${level}: ${title} (${xp} / ${nextXp} XP)`;
+  if (window.dojoManager) {
+    const currentBelt = window.dojoManager.getCurrentBelt(xp);
+    dom.userLevelText.textContent = `${currentBelt.kanji} Lvl ${level} • ${currentBelt.name}`;
+    if (dom.userLevelBadge) {
+      dom.userLevelBadge.title = `🥋 ${currentBelt.japaneseName} (${currentBelt.title}) — ${xp} XP. Click or press 'B' to view Dojo Trophy Room.`;
+    }
+  } else {
+    dom.userLevelText.textContent = `Lvl ${level}`;
+    if (dom.userLevelBadge) {
+      dom.userLevelBadge.title = `Level ${level}: ${title} (${xp} / ${nextXp} XP)`;
+    }
   }
   dom.xpBarFill.style.width = `${progressPercent}%`;
   dom.xpLabelText.textContent = `${xp}/${nextXp} XP`;
@@ -347,6 +359,9 @@ function updateXpDisplay() {
 function awardXp(amount, reason = '') {
   state.userXp += amount;
   updateXpDisplay();
+  if (window.dojoManager) {
+    window.dojoManager.checkBadges();
+  }
   soundFx.playXpGain();
   confetti({
     particleCount: 60,
@@ -14654,6 +14669,7 @@ function renderEmbodiedRoboticsLabWidget(quest) {
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
   dom.btnRunCode.addEventListener('click', async () => {
+    if (window.dojoManager) window.dojoManager.recordStat('codeRuns');
     const code = dom.codeEditorArea.value;
     dom.terminalOutput.textContent = '⏳ Executing snippet in Python engine...';
     dom.btnRunCode.disabled = true;
@@ -14733,6 +14749,7 @@ function renderQuiz(quest) {
           feedbackEl.style.color = '#34d399';
           feedbackEl.innerHTML = `✓ <strong>Correct!</strong> ${q.explanation}`;
           awardXp(50);
+          if (window.dojoManager) window.dojoManager.recordStat('correctQuizzes');
           const wasAllCompleteBefore = state.completedQuests.size === state.curriculum.quests.length;
           state.completedQuests.add(quest.id);
           localStorage.setItem('nq_completed_quests', JSON.stringify([...state.completedQuests]));
@@ -15124,6 +15141,7 @@ function renderTutorChips() {
 async function handleSend(customPrompt = null) {
   const prompt = customPrompt || (dom.tutorInputText ? dom.tutorInputText.value.trim() : '');
   if (!prompt) return;
+  if (window.dojoManager) window.dojoManager.recordStat('tutorChats');
 
   const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   renderMessageBubble('user', prompt, userTime);
@@ -15639,6 +15657,7 @@ function setupGalaxyModal() {
   };
 
   const openModal = () => {
+    if (window.dojoManager) window.dojoManager.recordStat('galaxyOpens');
     updateGalaxyHud();
     dom.galaxyModal.style.display = 'flex';
     galaxyMap.init();
@@ -15737,6 +15756,7 @@ function setupCapstoneModal() {
   studio.init();
 
   const openModal = () => {
+    if (window.dojoManager) window.dojoManager.recordStat('doodleDraws');
     dom.capstoneModal.style.display = 'flex';
     studio.init();
     soundFx.playBlip(540, 0.08);
@@ -15925,6 +15945,7 @@ function setupArchitectModal() {
   designer.setupEventListeners(dom.architectCanvas, dom.architectControlsContainer);
 
   const openModal = () => {
+    if (window.dojoManager) window.dojoManager.recordStat('architectCustomized');
     dom.architectModal.style.display = 'flex';
     designer.update();
     soundFx.playBlip(540, 0.08);
@@ -16042,6 +16063,44 @@ function setupStudiosDropdown() {
   });
 }
 
+// --- SENSEI'S DOJO TROPHY ROOM & BELT PROGRESSION ---
+function setupDojoTrophyModal() {
+  if (!dom.trophyModal) return null;
+
+  const dojoManager = new DojoManager({
+    getState: () => state,
+    awardXp: (amount, reason) => awardXp(amount, reason),
+    container: dom.trophyModal
+  });
+  window.dojoManager = dojoManager;
+
+  const openModal = () => {
+    dojoManager.openModal();
+  };
+
+  if (dom.btnMenuTrophy) {
+    dom.btnMenuTrophy.addEventListener('click', openModal);
+  }
+
+  if (dom.userLevelBadge) {
+    dom.userLevelBadge.addEventListener('click', openModal);
+    dom.userLevelBadge.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openModal();
+      }
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.trophyModal.style.display === 'flex') {
+      dojoManager.closeModal();
+    }
+  });
+
+  return dojoManager;
+}
+
 // --- COMMAND PALETTE & QUICK SWITCHER ---
 function setupCommandPalette() {
   if (!dom.paletteModal || !dom.paletteSearchInput || !dom.paletteResultsContainer) return null;
@@ -16050,6 +16109,15 @@ function setupCommandPalette() {
   let currentResults = [];
 
   const quickActions = [
+    {
+      id: 'action-trophy',
+      type: 'action',
+      title: "Sensei's Dojo Trophy Room & Belts",
+      subtitle: '10-Tier Obi Belt Rank Ladder & 16 Achievement Medals',
+      icon: '🥋',
+      kbd: 'B',
+      run: () => { if (window.dojoManager) window.dojoManager.openModal(); }
+    },
     {
       id: 'action-galaxy',
       type: 'action',
@@ -16203,6 +16271,7 @@ function setupCommandPalette() {
     const btn = document.createElement('button');
     btn.className = 'palette-result-item';
     btn.setAttribute('data-index', index);
+    if (item.id) btn.setAttribute('data-id', item.id);
     btn.innerHTML = `
       <div class="palette-item-icon">${item.icon}</div>
       <div class="palette-item-details">
@@ -16317,6 +16386,8 @@ function setupGlobalShortcuts(paletteControls) {
       if (dom.btnToggleTutor) dom.btnToggleTutor.click();
     } else if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (dom.btnOpenDiploma) dom.btnOpenDiploma.click();
+    } else if ((e.key === 'b' || e.key === 'B') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (window.dojoManager) window.dojoManager.openModal();
     } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (dom.btnToggleSound) dom.btnToggleSound.click();
     } else if (e.key === ',' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -16327,7 +16398,11 @@ function setupGlobalShortcuts(paletteControls) {
 
 // --- APP BOOTSTRAP ---
 function initApp() {
+  const dojoManager = setupDojoTrophyModal();
   updateXpDisplay();
+  if (dojoManager) {
+    dojoManager.checkBadges();
+  }
   renderQuestList();
   renderActiveQuest();
   setupTabs();

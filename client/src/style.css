@@ -231,6 +231,19 @@ body {
   font-size: 0.8rem;
   font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.level-group:hover {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.25);
 }
 
 .hud-icon {
@@ -18931,5 +18944,847 @@ body.sidebar-locked {
   }
   .galaxy-hints-right {
     display: none;
+  }
+}
+
+
+/* ==========================================================================
+   SENSEI'S DOJO TROPHY ROOM & MARTIAL ARTS BELT SYSTEM
+   ========================================================================== */
+
+.dojo-modal-overlay {
+  z-index: 1260;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.94);
+  backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dojo-modal-card {
+  background: #030714;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.92), 0 0 50px rgba(250, 204, 21, 0.15);
+  border-radius: var(--radius-lg);
+  width: 1200px;
+  max-width: 96vw;
+  height: 90vh;
+  max-height: 880px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dojoCardFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dojoCardFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Dojo Header */
+.dojo-modal-header {
+  padding: 1rem 1.75rem;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.dojo-modal-branding {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.dojo-header-icon {
+  font-size: 1.85rem;
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.4));
+}
+
+.dojo-header-titles h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.dojo-subtitle {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
+
+/* Belt Hero Showcase Banner */
+.dojo-belt-hero {
+  padding: 1.25rem 1.75rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.75) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 5px solid #facc15;
+  display: flex;
+  gap: 1.75rem;
+  align-items: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.belt-canvas-visual {
+  width: 140px;
+  height: 80px;
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(0, 0, 0, 0.3);
+  border: 2px solid;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.belt-weave-texture {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events: none;
+}
+
+.belt-knot-wrapper {
+  background: #020617;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.belt-kanji {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+  line-height: 1;
+  display: block;
+}
+
+.belt-stripes-col {
+  position: absolute;
+  right: 12px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.belt-gold-stripe {
+  width: 5px;
+  height: 100%;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.5);
+}
+
+.belt-meta-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.belt-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.belt-rank-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.belt-rank-title .belt-role {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.belt-doctrine-quote {
+  font-size: 0.86rem;
+  font-style: italic;
+  color: #cbd5e1;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.belt-xp-progress-box {
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 540px;
+}
+
+.belt-xp-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
+
+.belt-xp-labels strong {
+  color: #facc15;
+}
+
+.belt-xp-needed {
+  color: #38bdf8;
+}
+
+.belt-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.belt-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+/* Dojo Tab Navigation */
+.dojo-tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.65rem 1.75rem;
+  background: rgba(11, 17, 33, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.dojo-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dojo-tab-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dojo-tab-btn.active {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.35);
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.12);
+}
+
+/* Dojo Scrollable Stage */
+.dojo-stage-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 1.75rem;
+}
+
+.dojo-stage-content::-webkit-scrollbar {
+  width: 6px;
+}
+.dojo-stage-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.dojo-stage-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+/* Belts Ladder Grid */
+.belts-ladder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 1.15rem;
+}
+
+.belt-ladder-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: all var(--transition-fast);
+}
+
+.belt-ladder-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.belt-ladder-card.attained {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.belt-ladder-card.current-belt {
+  border-color: #facc15;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(15, 23, 42, 0.95) 100%);
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.2), inset 0 0 15px rgba(250, 204, 21, 0.05);
+}
+
+.belt-ladder-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.65);
+}
+
+.belt-card-header {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  position: relative;
+}
+
+.mini-belt-cloth {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 2px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mini-kanji {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #020617;
+  line-height: 1;
+}
+
+.mini-stripes {
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #713f12;
+  letter-spacing: 1px;
+}
+
+.belt-card-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.belt-kyu-badge {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: #94a3b8;
+  display: block;
+}
+
+.belt-card-titles h4 {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0.1rem 0;
+}
+
+.belt-card-role {
+  font-size: 0.78rem;
+  color: #38bdf8;
+  font-weight: 500;
+  display: block;
+}
+
+.belt-status-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.belt-ladder-card.current-belt .belt-status-badge {
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.4);
+  background: rgba(250, 204, 21, 0.15);
+}
+
+.belt-ladder-card.attained .belt-status-badge {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.belt-card-doctrine {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #cbd5e1;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.belt-perks-list {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.perk-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.belt-perks-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.belt-perks-list li {
+  font-size: 0.78rem;
+  color: #e2e8f0;
+}
+
+.belt-card-footer {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+  color: #94a3b8;
+}
+
+/* Badges Grid Stage */
+.badges-grid-stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 1.15rem;
+}
+
+.trophy-badge-card {
+  display: flex;
+  gap: 0.95rem;
+  padding: 1.1rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  outline: none;
+}
+
+.trophy-badge-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.trophy-badge-card.unlocked {
+  border-color: rgba(250, 204, 21, 0.35);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.06) 0%, rgba(15, 23, 42, 0.9) 100%);
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.08);
+}
+
+.trophy-badge-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+  cursor: default;
+}
+
+.trophy-badge-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.trophy-badge-card.unlocked .trophy-badge-icon-box {
+  border-color: #facc15;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.3);
+}
+
+.badge-emoji {
+  font-size: 1.5rem;
+}
+
+.badge-check-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  background: #10b981;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #030714;
+}
+
+.badge-lock-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  background: #475569;
+  border-radius: 50%;
+  font-size: 0.58rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #030714;
+}
+
+.trophy-badge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.trophy-category-tag {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: #a78bfa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.trophy-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.trophy-desc {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.trophy-footer {
+  margin-top: auto;
+  padding-top: 0.45rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+}
+
+.trophy-xp {
+  color: #facc15;
+  font-weight: 700;
+}
+
+.trophy-criteria-hint {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.trophy-badge-card.unlocked .trophy-criteria-hint {
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* Dojo Stats Stage */
+.dojo-stats-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.stats-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.stat-kpi-box {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-kpi-box .kpi-icon {
+  font-size: 1.5rem;
+}
+
+.stat-kpi-box .kpi-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #fff;
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+}
+
+.stat-kpi-box .kpi-label {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.stats-breakdown-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.stats-panel {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stats-panel .panel-header {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stat-record-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
+}
+
+.stat-record-item:last-child {
+  border-bottom: none;
+}
+
+.stat-record-item strong {
+  color: #38bdf8;
+  font-family: var(--font-mono);
+}
+
+.doctrine-panel {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.05) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-color: rgba(250, 204, 21, 0.2);
+}
+
+.doctrine-quote {
+  font-size: 0.92rem;
+  font-style: italic;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.doctrine-author {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #facc15;
+  font-family: var(--font-mono);
+  margin-top: auto;
+  align-self: flex-end;
+}
+
+/* Real-Time Toast Notifications */
+.dojo-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.dojo-toast-card {
+  pointer-events: auto;
+  background: #090e1c;
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85), 0 0 25px rgba(250, 204, 21, 0.25);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  animation: dojoToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.25s ease;
+}
+
+.dojo-toast-card.fade-out {
+  opacity: 0;
+  transform: translateX(40px);
+}
+
+@keyframes dojoToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid #facc15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.3);
+}
+
+.toast-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.toast-tag {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  color: #facc15;
+  letter-spacing: 0.05em;
+}
+
+.toast-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.toast-desc {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.toast-xp {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: var(--font-mono);
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.35rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.toast-close:hover {
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .dojo-belt-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .belts-ladder-grid,
+  .badges-grid-stage {
+    grid-template-columns: 1fr;
   }
 }
