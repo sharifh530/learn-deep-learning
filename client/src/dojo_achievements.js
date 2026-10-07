@@ -207,10 +207,10 @@ export const DOJO_BADGES = [
     name: 'Valley Descent',
     category: 'Milestones',
     icon: '📉',
-    description: 'Traversed the loss landscape gradient surface in Quest 3.',
-    criteria: 'Complete Quest 3',
+    description: 'Traversed the loss landscape gradient surface in Quest 3 or the 3D Mountain Playground.',
+    criteria: 'Complete Quest 3 or explore 3D Loss Mountain',
     xp: 100,
-    check: (state) => state.completedQuests.has('quest-3')
+    check: (state) => state.completedQuests.has('quest-3') || (state.stats && state.stats.lossPlaygroundRuns > 0)
   },
   {
     id: 'badge-quickdraw',
@@ -659,6 +659,10 @@ export class DojoManager {
               <div class="stat-record-item">
                 <span>Neural Net Architect Customizations:</span>
                 <strong>${this.stats.architectCustomized} times</strong>
+              </div>
+              <div class="stat-record-item">
+                <span>3D Loss Mountain Playground Runs:</span>
+                <strong>${this.stats.lossPlaygroundRuns || 0} runs</strong>
               </div>
               <div class="stat-record-item">
                 <span>DoodleVision Sketches & Inference:</span>

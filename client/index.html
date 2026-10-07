@@ -116,6 +116,16 @@
                   <span class="studio-item-desc">10-Tier Obi Belts &amp; 16 Achievement Badges</span>
                 </div>
               </button>
+              <button class="studio-menu-item" id="btn-menu-landscape" role="menuitem" title="3D Loss Landscape Mountain Playground (Shortcut: L)">
+                <div class="studio-item-icon">⛰️</div>
+                <div class="studio-item-info">
+                  <div class="studio-item-title-row">
+                    <span class="studio-item-title">3D Loss Mountain</span>
+                    <kbd class="studio-kbd">L</kbd>
+                  </div>
+                  <span class="studio-item-desc">Non-Convex Surfaces &amp; Optimizer Marbles</span>
+                </div>
+              </button>
             </div>
           </div>
 
@@ -512,6 +522,7 @@
               <span><kbd class="palette-kbd">M</kbd> Architect</span>
               <span><kbd class="palette-kbd">D</kbd> DoodleVision</span>
               <span><kbd class="palette-kbd">B</kbd> Belts</span>
+              <span><kbd class="palette-kbd">L</kbd> 3D Loss</span>
               <span><kbd class="palette-kbd">T</kbd> Sensei</span>
             </div>
           </div>
@@ -520,6 +531,133 @@
 
       <!-- Sensei's Dojo Trophy Room & Martial Arts Belts Modal -->
       <div class="modal-overlay dojo-modal-overlay" id="trophy-modal" style="display: none;"></div>
+
+      <!-- 3D Loss Landscape Mountain Playground Modal -->
+      <div class="modal-overlay landscape-modal-overlay" id="landscape-modal" style="display: none;">
+        <div class="landscape-modal-card">
+          <!-- Top Bar Header -->
+          <div class="landscape-modal-header">
+            <div class="landscape-branding">
+              <span class="landscape-icon">⛰️</span>
+              <div class="landscape-titles">
+                <h3>3D Loss Landscape Mountain Playground</h3>
+                <span class="landscape-subtitle">Non-Convex Surfaces &amp; Multi-Optimizer Marbles (SGD, Momentum, RMSprop, Adam)</span>
+              </div>
+            </div>
+            <div class="landscape-header-stats">
+              <span class="landscape-step-badge" id="landscape-step-label">Step: 0 / 300</span>
+              <span class="landscape-hint-badge">💡 Click terrain to drop marbles</span>
+            </div>
+            <div class="landscape-header-actions">
+              <button class="modal-close" id="btn-close-landscape" title="Close 3D Landscape (Esc)">&times;</button>
+            </div>
+          </div>
+
+          <!-- Presets and Optimizers Control Bar -->
+          <div class="landscape-toolbar">
+            <!-- Function Presets -->
+            <div class="landscape-presets-group">
+              <span class="toolbar-label">⛰️ Terrain:</span>
+              <div class="landscape-presets-wrapper" id="landscape-presets-wrapper">
+                <!-- Dynamically populated presets -->
+              </div>
+            </div>
+
+            <!-- Optimizer Selectors -->
+            <div class="landscape-optimizers-group">
+              <span class="toolbar-label">🏎️ Competitors:</span>
+              <div class="landscape-optimizers-wrapper" id="landscape-optimizers-wrapper">
+                <!-- Dynamically populated optimizer pills -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Stage Arena Split: 3D Canvas + Telemetry & Controls Sidebar -->
+          <div class="landscape-stage-container">
+            <!-- 3D Three.js Arena -->
+            <div class="landscape-canvas-wrapper" id="landscape-canvas-container">
+              <!-- Three.js Canvas mounted here -->
+            </div>
+
+            <!-- Floating In-Canvas Viewport Toolbar -->
+            <div class="landscape-viewport-controls">
+              <button class="vp-btn" id="btn-cam-persp" title="Perspective 3D View">🌐 3D</button>
+              <button class="vp-btn" id="btn-cam-top" title="Top-Down 2D Contour View">🗺️ Contour</button>
+              <button class="vp-btn" id="btn-cam-side" title="Side Elevation Profile">📐 Side</button>
+              <button class="vp-btn" id="btn-toggle-wireframe" title="Toggle Technical Wireframe">🕸️ Wire</button>
+            </div>
+
+            <!-- Telemetry & Parameters Sidebar -->
+            <div class="landscape-sidebar">
+              <!-- Simulation Action Controls -->
+              <div class="landscape-action-panel">
+                <button class="btn-primary landscape-play-btn" id="btn-landscape-play">
+                  <span>▶</span> Roll Marbles
+                </button>
+                <div class="landscape-step-controls">
+                  <button class="btn-secondary" id="btn-landscape-step" title="Single step forward">
+                    <span>⏭</span> Step
+                  </button>
+                  <button class="btn-secondary" id="btn-landscape-reset" title="Reset to start spawn point">
+                    <span>↺</span> Reset
+                  </button>
+                </div>
+              </div>
+
+              <!-- Hyperparameter Sliders -->
+              <div class="landscape-params-panel">
+                <div class="param-row">
+                  <div class="param-header">
+                    <span>Learning Rate (η)</span>
+                    <strong id="landscape-lr-val">0.040</strong>
+                  </div>
+                  <input type="range" id="landscape-lr-slider" min="0.005" max="0.2" step="0.005" value="0.04" class="slider-input">
+                </div>
+
+                <div class="param-row">
+                  <div class="param-header">
+                    <span>Mini-Batch Noise (σ)</span>
+                    <strong id="landscape-noise-val">0.00</strong>
+                  </div>
+                  <input type="range" id="landscape-noise-slider" min="0.0" max="0.5" step="0.05" value="0.0" class="slider-input">
+                </div>
+              </div>
+
+              <!-- Live Convergence Leaderboard -->
+              <div class="landscape-leaderboard-panel">
+                <div class="leaderboard-header">
+                  <span>🏁 Optimizer Live Leaderboard</span>
+                </div>
+                <div class="leaderboard-table-wrapper">
+                  <table class="leaderboard-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Optimizer</th>
+                        <th>(x, y)</th>
+                        <th>Loss</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="landscape-leaderboard-body">
+                      <!-- Populated dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Mathematical Formula & Insight Box -->
+              <div class="landscape-formula-card">
+                <h4 id="landscape-formula-title">Beale's Ravine</h4>
+                <p id="landscape-formula-desc">A sharp, narrow curved valley with steep cliff walls.</p>
+                <div class="landscape-coords" id="landscape-min-coords">
+                  Global Minimum: <strong>(3.0, 0.5)</strong> | Value: <strong>0</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Neural Network Architecture Designer Modal -->
       <div class="modal-overlay architect-modal-overlay" id="architect-modal" style="display: none;">

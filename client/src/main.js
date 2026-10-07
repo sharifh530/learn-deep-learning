@@ -13,6 +13,7 @@ import { ArchitectDesigner } from './architect_designer.js';
 import { DoodleCapstoneStudio } from './doodle_capstone.js';
 import { GalaxyConstellationMap } from './galaxy_map.js';
 import { DojoManager } from './dojo_achievements.js';
+import { LossLandscape3D } from './loss_landscape_3d.js';
 
 // --- State Management ---
 const state = {
@@ -301,7 +302,10 @@ const dom = {
   studiosDropdownWrapper: document.getElementById('studios-dropdown-wrapper'),
   btnMenuGalaxy: document.getElementById('btn-menu-galaxy'),
   btnMenuTrophy: document.getElementById('btn-menu-trophy'),
+  btnMenuLandscape: document.getElementById('btn-menu-landscape'),
   trophyModal: document.getElementById('trophy-modal'),
+  landscapeModal: document.getElementById('landscape-modal'),
+  landscapeCanvasContainer: document.getElementById('landscape-canvas-container'),
   paletteModal: document.getElementById('palette-modal'),
   paletteSearchInput: document.getElementById('palette-search-input'),
   paletteResultsContainer: document.getElementById('palette-results-container'),
@@ -1131,12 +1135,18 @@ function renderGradientRunnerWidget(quest) {
   const container = document.createElement('div');
   container.className = 'marble-run-container';
   container.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
       <h3 style="font-size: 1.1rem; color: #fff;">Roll Down the Loss Landscape</h3>
-      <div style="display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 0.85rem;">
-        <span style="color: var(--accent-cyan);">Current Weight (w): <strong id="grad-weight-val">${state.gradientWeight.toFixed(3)}</strong></span>
-        <span style="color: var(--accent-amber);">Loss L(w): <strong id="grad-loss-val">0.00</strong></span>
-        <span style="color: var(--text-dim);">Steps: <strong id="grad-step-val">0</strong></span>
+      <div style="display: flex; gap: 0.85rem; align-items: center;">
+        <button class="btn-3d-loss-banner" id="btn-quest-open-3d-loss" title="Open full 3D Non-Convex Mountain Playground (Shortcut: L)">
+          <span>⛰️ Launch 3D Mountain (WebGL)</span>
+          <kbd class="banner-kbd">L</kbd>
+        </button>
+        <div style="display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 0.85rem;">
+          <span style="color: var(--accent-cyan);">Current Weight (w): <strong id="grad-weight-val">${state.gradientWeight.toFixed(3)}</strong></span>
+          <span style="color: var(--accent-amber);">Loss L(w): <strong id="grad-loss-val">0.00</strong></span>
+          <span style="color: var(--text-dim);">Steps: <strong id="grad-step-val">0</strong></span>
+        </div>
       </div>
     </div>
 
@@ -1254,6 +1264,13 @@ function renderGradientRunnerWidget(quest) {
   });
 
   drawScene();
+
+  const btnQuest3D = container.querySelector('#btn-quest-open-3d-loss');
+  if (btnQuest3D) {
+    btnQuest3D.addEventListener('click', () => {
+      if (window.landscape3dStudio) window.landscape3dStudio.openModal();
+    });
+  }
 }
 
 // --- WIDGET 4: DoodleVision AI Real-World Capstone ---
@@ -16101,6 +16118,38 @@ function setupDojoTrophyModal() {
   return dojoManager;
 }
 
+// --- 3D LOSS LANDSCAPE MOUNTAIN PLAYGROUND ---
+function setupLandscapeModal() {
+  if (!dom.landscapeModal || !dom.landscapeCanvasContainer) return null;
+
+  const studio = new LossLandscape3D({
+    container: dom.landscapeModal,
+    canvasContainer: dom.landscapeCanvasContainer,
+    onAwardXp: (amount, reason) => awardXp(amount, reason),
+    onRecordStat: (key) => {
+      if (window.dojoManager) window.dojoManager.recordStat(key);
+    }
+  });
+  window.landscape3dStudio = studio;
+
+  const openModal = () => {
+    studio.openModal();
+    if (window.dojoManager) window.dojoManager.recordStat('lossPlaygroundRuns');
+  };
+
+  if (dom.btnMenuLandscape) {
+    dom.btnMenuLandscape.addEventListener('click', openModal);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.landscapeModal.style.display === 'flex') {
+      studio.closeModal();
+    }
+  });
+
+  return studio;
+}
+
 // --- COMMAND PALETTE & QUICK SWITCHER ---
 function setupCommandPalette() {
   if (!dom.paletteModal || !dom.paletteSearchInput || !dom.paletteResultsContainer) return null;
@@ -16117,6 +16166,15 @@ function setupCommandPalette() {
       icon: '🥋',
       kbd: 'B',
       run: () => { if (window.dojoManager) window.dojoManager.openModal(); }
+    },
+    {
+      id: 'action-landscape',
+      type: 'action',
+      title: '3D Loss Mountain Playground',
+      subtitle: 'Non-Convex Surfaces & Optimizer Race (SGD, Momentum, Adam)',
+      icon: '⛰️',
+      kbd: 'L',
+      run: () => { if (window.landscape3dStudio) window.landscape3dStudio.openModal(); }
     },
     {
       id: 'action-galaxy',
@@ -16388,6 +16446,8 @@ function setupGlobalShortcuts(paletteControls) {
       if (dom.btnOpenDiploma) dom.btnOpenDiploma.click();
     } else if ((e.key === 'b' || e.key === 'B') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (window.dojoManager) window.dojoManager.openModal();
+    } else if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (window.landscape3dStudio) window.landscape3dStudio.openModal();
     } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (dom.btnToggleSound) dom.btnToggleSound.click();
     } else if (e.key === ',' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -16415,6 +16475,7 @@ function initApp() {
   setupArchitectModal();
   setupCapstoneModal();
   setupGalaxyModal();
+  setupLandscapeModal();
   setupStudiosDropdown();
   const paletteControls = setupCommandPalette();
   setupGlobalShortcuts(paletteControls);
