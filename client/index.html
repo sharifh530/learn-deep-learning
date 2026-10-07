@@ -15,64 +15,127 @@
     <div id="app">
       <!-- Top Navigation Bar -->
       <header class="navbar">
-        <div class="nav-brand">
-          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" aria-label="Toggle Quest Map" title="Open Quest Map">
+        <!-- Left Cluster: Sidebar Toggle, Brand & Quick Roadmap Launcher -->
+        <div class="nav-left-cluster">
+          <button class="btn-sidebar-toggle" id="btn-toggle-sidebar" aria-label="Toggle Quest Map" title="Toggle Quest Map (Quests)">
             <span class="btn-toggle-icon">☰</span>
             <span class="btn-toggle-label">Quests</span>
           </button>
-          <div class="brand-icon">🧠</div>
-          <div class="brand-titles">
-            <span class="brand-title">NeuroQuest</span>
-            <span class="brand-badge">Deep Learning Studio</span>
-          </div>
-        </div>
-
-        <div class="nav-stats">
-          <div class="stat-badge level-badge" id="user-level-badge">
-            <span class="badge-icon">⭐</span>
-            <span id="user-level-text">Lvl 1 • Tensor Novice</span>
-          </div>
-          <div class="xp-container">
-            <div class="xp-bar-bg">
-              <div class="xp-bar-fill" id="xp-bar-fill" style="width: 15%"></div>
+          
+          <a class="nav-brand" href="#quest-hero" title="NeuroQuest Deep Learning Studio">
+            <div class="brand-icon">🧠</div>
+            <div class="brand-titles">
+              <span class="brand-title">NeuroQuest</span>
+              <span class="brand-badge">DL Studio</span>
             </div>
-            <span class="xp-label" id="xp-label-text">100 / 750 XP</span>
+          </a>
+
+          <!-- Quick Constellation Roadmap Launcher -->
+          <button class="nav-pill-btn btn-galaxy-launcher" id="btn-open-galaxy" title="Open Celestial 20-Quest Constellation Galaxy Map (Shortcut: G)">
+            <span class="btn-cosmic-glow"></span>
+            <span class="nav-btn-icon">🌌</span>
+            <span class="nav-btn-text">Galaxy Map</span>
+            <kbd class="nav-kbd-hint">G</kbd>
+          </button>
+        </div>
+
+        <!-- Center Cluster: Unified Cosmic Learner HUD -->
+        <div class="nav-hud" id="nav-player-hud" title="Player Tensor Progression & PyTorch Engine Status">
+          <div class="hud-stat-group level-group" id="user-level-badge" title="Current Level & Rank">
+            <span class="hud-icon">⭐</span>
+            <span class="hud-level-text" id="user-level-text">Lvl 1 • Tensor Novice</span>
           </div>
-          <div class="backend-status-pill" id="backend-status-pill" title="Python Engine Connection Status">
+
+          <div class="hud-divider"></div>
+
+          <div class="hud-stat-group xp-group" title="Experience Points & Rank Progress">
+            <div class="hud-xp-track">
+              <div class="hud-xp-fill" id="xp-bar-fill" style="width: 15%"></div>
+            </div>
+            <span class="hud-xp-label" id="xp-label-text">100 / 250 XP</span>
+          </div>
+
+          <div class="hud-divider"></div>
+
+          <div class="hud-stat-group engine-group backend-status-pill" id="backend-status-pill" title="PyTorch GPU/CPU Engine Status">
             <span class="status-dot"></span>
-            <span id="backend-status-text">Engine: Connecting...</span>
+            <span class="hud-engine-label" id="backend-status-text">Engine: Connecting...</span>
           </div>
         </div>
 
-        <div class="nav-actions">
-          <button class="nav-btn btn-architect" id="btn-open-architect" title="Neural Net Architecture Designer">
-            <span>📐</span>
-            <span class="btn-text">Architect</span>
-          </button>
-          <button class="nav-btn btn-capstone" id="btn-open-capstone" title="DoodleVision AI Capstone Playroom">
-            <span>🎨</span>
-            <span class="btn-text">DoodleVision</span>
-          </button>
-          <button class="nav-btn btn-galaxy" id="btn-open-galaxy" title="Celestial 20-Quest Constellation Galaxy Map">
-            <span>🌌</span>
-            <span class="btn-text">Galaxy Map</span>
-          </button>
-          <button class="nav-btn btn-audio" id="btn-toggle-sound" title="Toggle Sound FX (Mute/Unmute)">
-            <span id="audio-icon">🔊</span>
-            <span class="btn-text" id="audio-text">Audio</span>
-          </button>
-          <button class="nav-btn btn-diploma" id="btn-open-diploma" title="View Sensei Tensor Master Diploma">
-            <span>🎓</span>
-            <span class="btn-text">Diploma</span>
+        <!-- Right Cluster: AI Studios Dropdown, Diploma, Utilities & Sensei AI -->
+        <div class="nav-right-cluster">
+          <!-- AI Studios Dropdown Menu -->
+          <div class="studios-dropdown-wrapper" id="studios-dropdown-wrapper">
+            <button class="nav-btn btn-studios" id="btn-studios-dropdown" aria-haspopup="true" aria-expanded="false" title="Interactive AI Creative Studios (Architect & DoodleVision)">
+              <span class="nav-btn-icon">🧪</span>
+              <span class="nav-btn-text">Studios</span>
+              <span class="dropdown-chevron">▾</span>
+            </button>
+            <div class="studios-menu" id="studios-menu" role="menu">
+              <div class="studios-menu-header">
+                <span>INTERACTIVE AI LABS</span>
+              </div>
+              <button class="studio-menu-item" id="btn-open-architect" role="menuitem" title="Interactive Multi-Layer Perceptron Visualizer & PyTorch Generator (Shortcut: M)">
+                <div class="studio-item-icon">📐</div>
+                <div class="studio-item-info">
+                  <div class="studio-item-title-row">
+                    <span class="studio-item-title">Neural Architect</span>
+                    <kbd class="studio-kbd">M</kbd>
+                  </div>
+                  <span class="studio-item-desc">Visual MLP Designer & Code Exporter</span>
+                </div>
+              </button>
+              <button class="studio-menu-item" id="btn-open-capstone" role="menuitem" title="QuickDraw 28×28 Grayscale Classifier & Conv1 Visualizer (Shortcut: D)">
+                <div class="studio-item-icon">🎨</div>
+                <div class="studio-item-info">
+                  <div class="studio-item-title-row">
+                    <span class="studio-item-title">DoodleVision AI</span>
+                    <kbd class="studio-kbd">D</kbd>
+                  </div>
+                  <span class="studio-item-desc">Live PyTorch CNN Canvas & Pictionary</span>
+                </div>
+              </button>
+              <button class="studio-menu-item" id="btn-menu-galaxy" role="menuitem" title="Celestial 20-Quest Constellation Galaxy Map (Shortcut: G)">
+                <div class="studio-item-icon">🌌</div>
+                <div class="studio-item-info">
+                  <div class="studio-item-title-row">
+                    <span class="studio-item-title">Galaxy Constellation</span>
+                    <kbd class="studio-kbd">G</kbd>
+                  </div>
+                  <span class="studio-item-desc">20-Quest Cosmic Tech Tree & Lore</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Master Diploma Achievement Badge -->
+          <button class="nav-pill-btn btn-diploma" id="btn-open-diploma" title="View Sensei Tensor Master Diploma (Shortcut: P)">
+            <span class="nav-btn-icon">🎓</span>
             <span class="diploma-completion-pill" id="diploma-nav-pill">0/20</span>
           </button>
-          <button class="nav-btn btn-settings" id="btn-open-settings" title="Settings & Google API Key">
-            <span>⚙️</span>
-            <span class="btn-text">Settings</span>
-          </button>
-          <button class="nav-btn btn-tutor" id="btn-toggle-tutor" title="Ask AI Tutor (Sensei Tensor)">
-            <span>🥋</span>
-            <span class="btn-text">Ask AI</span>
+
+          <!-- Utilities Vertical Divider -->
+          <div class="nav-v-separator"></div>
+
+          <!-- Compact Icon Utilities -->
+          <div class="nav-utilities-group">
+            <button class="nav-icon-btn btn-audio" id="btn-toggle-sound" aria-label="Toggle Sound FX" title="Toggle Sound FX (Shortcut: S)">
+              <span id="audio-icon">🔊</span>
+              <span class="sr-only" id="audio-text">Audio</span>
+            </button>
+            <button class="nav-icon-btn btn-settings" id="btn-open-settings" aria-label="Open Settings" title="Settings & Google API Key (Shortcut: ,)">
+              <span>⚙️</span>
+            </button>
+            <button class="nav-icon-btn btn-palette" id="btn-open-palette" aria-label="Command Palette" title="Command Palette & Quick Search (Shortcut: Ctrl+K / ?)">
+              <span>🔍</span>
+            </button>
+          </div>
+
+          <!-- Primary Hero Action: Ask Sensei Tutor -->
+          <button class="nav-btn btn-tutor" id="btn-toggle-tutor" title="Ask AI Sensei Tensor (Shortcut: T)">
+            <span class="nav-btn-icon">🥋</span>
+            <span class="nav-btn-text">Ask Sensei</span>
             <span class="nav-tutor-glow"></span>
           </button>
         </div>
@@ -413,6 +476,32 @@
           <div class="diploma-scroll-area">
             <div class="diploma-canvas-wrapper" id="diploma-canvas-wrapper">
               <!-- Dynamically populated high-resolution Canvas preview -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command Palette & Quick Switcher Modal (Ctrl+K / ?) -->
+      <div class="modal-overlay palette-modal-overlay" id="palette-modal" style="display: none;">
+        <div class="palette-modal-card">
+          <div class="palette-search-bar">
+            <span class="palette-search-icon">🔍</span>
+            <input type="text" id="palette-search-input" class="palette-input" placeholder="Jump to quest, launch studio, or search keywords..." autocomplete="off" spellcheck="false">
+            <div class="palette-search-hints">
+              <kbd class="palette-kbd">ESC</kbd>
+            </div>
+          </div>
+          <div class="palette-results-container" id="palette-results-container">
+            <!-- Dynamic results populated by main.js -->
+          </div>
+          <div class="palette-footer">
+            <div class="palette-footer-hints">
+              <span><kbd class="palette-kbd">↑</kbd><kbd class="palette-kbd">↓</kbd> Navigate</span>
+              <span><kbd class="palette-kbd">↵</kbd> Select</span>
+              <span><kbd class="palette-kbd">G</kbd> Galaxy</span>
+              <span><kbd class="palette-kbd">M</kbd> Architect</span>
+              <span><kbd class="palette-kbd">D</kbd> DoodleVision</span>
+              <span><kbd class="palette-kbd">T</kbd> Sensei</span>
             </div>
           </div>
         </div>

@@ -293,7 +293,15 @@ const dom = {
   galaxyStarsConquered: document.getElementById('galaxy-stars-conquered'),
   btnGalaxyZoomIn: document.getElementById('btn-galaxy-zoom-in'),
   btnGalaxyZoomOut: document.getElementById('btn-galaxy-zoom-out'),
-  btnGalaxyFit: document.getElementById('btn-galaxy-fit')
+  btnGalaxyFit: document.getElementById('btn-galaxy-fit'),
+  // Studios Dropdown & Command Palette
+  btnStudiosDropdown: document.getElementById('btn-studios-dropdown'),
+  studiosDropdownWrapper: document.getElementById('studios-dropdown-wrapper'),
+  btnMenuGalaxy: document.getElementById('btn-menu-galaxy'),
+  paletteModal: document.getElementById('palette-modal'),
+  paletteSearchInput: document.getElementById('palette-search-input'),
+  paletteResultsContainer: document.getElementById('palette-results-container'),
+  btnOpenPalette: document.getElementById('btn-open-palette')
 };
 
 // --- XP & Level Calculations ---
@@ -326,9 +334,12 @@ function updateXpDisplay() {
   }
 
   const progressPercent = Math.min(100, Math.round((xp / nextXp) * 100));
-  dom.userLevelText.textContent = `Lvl ${level} • ${title}`;
+  dom.userLevelText.textContent = `Lvl ${level}`;
+  if (dom.userLevelBadge) {
+    dom.userLevelBadge.title = `Level ${level}: ${title} (${xp} / ${nextXp} XP)`;
+  }
   dom.xpBarFill.style.width = `${progressPercent}%`;
-  dom.xpLabelText.textContent = `${xp} / ${nextXp} XP`;
+  dom.xpLabelText.textContent = `${xp}/${nextXp} XP`;
 
   localStorage.setItem('nq_user_xp', xp.toString());
 }
@@ -352,7 +363,8 @@ async function checkBackendStatus() {
       const data = await res.json();
       state.backendOnline = true;
       dom.backendStatusPill.classList.add('online');
-            dom.backendStatusText.textContent = 'PyTorch Engine: Online 🟢';
+      dom.backendStatusText.textContent = 'PyTorch';
+      dom.backendStatusPill.title = 'PyTorch Backend Engine: Online (Ready)';
       if (dom.doodleEngineBadge) {
         dom.doodleEngineBadge.style.background = 'rgba(16, 185, 129, 0.12)';
         dom.doodleEngineBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
@@ -365,7 +377,8 @@ async function checkBackendStatus() {
   } catch {
     state.backendOnline = false;
     dom.backendStatusPill.classList.remove('online');
-        dom.backendStatusText.textContent = 'PyTorch Engine: Offline (Local Mode)';
+    dom.backendStatusText.textContent = 'Offline';
+    dom.backendStatusPill.title = 'PyTorch Backend Engine: Offline (Local Heuristic Mode)';
     if (dom.doodleEngineBadge) {
       dom.doodleEngineBadge.style.background = 'rgba(245, 158, 11, 0.12)';
       dom.doodleEngineBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
@@ -15654,6 +15667,10 @@ function setupGalaxyModal() {
     dom.btnSidebarGalaxy.addEventListener('click', openModal);
   }
 
+  if (dom.btnMenuGalaxy) {
+    dom.btnMenuGalaxy.addEventListener('click', openModal);
+  }
+
   if (dom.btnCloseGalaxy) {
     dom.btnCloseGalaxy.addEventListener('click', closeModal);
   }
@@ -15987,6 +16004,327 @@ function setupArchitectModal() {
   }
 }
 
+// --- AI STUDIOS DROPDOWN MENU ---
+function setupStudiosDropdown() {
+  if (!dom.btnStudiosDropdown || !dom.studiosDropdownWrapper) return;
+
+  const toggleDropdown = (e) => {
+    e.stopPropagation();
+    const isOpen = dom.studiosDropdownWrapper.classList.toggle('open');
+    dom.btnStudiosDropdown.setAttribute('aria-expanded', isOpen);
+    soundFx.playBlip(isOpen ? 640 : 480, 0.03);
+  };
+
+  const closeDropdown = () => {
+    if (dom.studiosDropdownWrapper.classList.contains('open')) {
+      dom.studiosDropdownWrapper.classList.remove('open');
+      dom.btnStudiosDropdown.setAttribute('aria-expanded', 'false');
+    }
+  };
+
+  dom.btnStudiosDropdown.addEventListener('click', toggleDropdown);
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!dom.studiosDropdownWrapper.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  // Close when an item inside is clicked
+  const items = dom.studiosDropdownWrapper.querySelectorAll('.studio-menu-item');
+  items.forEach(item => {
+    item.addEventListener('click', closeDropdown);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDropdown();
+  });
+}
+
+// --- COMMAND PALETTE & QUICK SWITCHER ---
+function setupCommandPalette() {
+  if (!dom.paletteModal || !dom.paletteSearchInput || !dom.paletteResultsContainer) return null;
+
+  let selectedIndex = 0;
+  let currentResults = [];
+
+  const quickActions = [
+    {
+      id: 'action-galaxy',
+      type: 'action',
+      title: 'Galaxy Constellation Map',
+      subtitle: '20-Quest Neural Constellation Tech Tree & Lore',
+      icon: '🌌',
+      kbd: 'G',
+      run: () => { if (dom.btnOpenGalaxy) dom.btnOpenGalaxy.click(); }
+    },
+    {
+      id: 'action-architect',
+      type: 'action',
+      title: 'Neural Network Architect',
+      subtitle: 'Visual MLP Designer & nn.Sequential Code Exporter',
+      icon: '📐',
+      kbd: 'M',
+      run: () => { if (dom.btnOpenArchitect) dom.btnOpenArchitect.click(); }
+    },
+    {
+      id: 'action-capstone',
+      type: 'action',
+      title: 'DoodleVision AI Playroom',
+      subtitle: 'Live PyTorch CNN Drawing Canvas & AI Pictionary',
+      icon: '🎨',
+      kbd: 'D',
+      run: () => { if (dom.btnOpenCapstone) dom.btnOpenCapstone.click(); }
+    },
+    {
+      id: 'action-tutor',
+      type: 'action',
+      title: 'Ask AI Sensei Tensor',
+      subtitle: 'Interactive Deep Learning Martial Arts Tutor',
+      icon: '🥋',
+      kbd: 'T',
+      run: () => { if (dom.btnToggleTutor) dom.btnToggleTutor.click(); }
+    },
+    {
+      id: 'action-diploma',
+      type: 'action',
+      title: 'View Sensei Master Diploma',
+      subtitle: 'Official NeuroQuest Credential & Course Certificate',
+      icon: '🎓',
+      kbd: 'P',
+      run: () => { if (dom.btnOpenDiploma) dom.btnOpenDiploma.click(); }
+    },
+    {
+      id: 'action-sound',
+      type: 'action',
+      title: 'Toggle Sound Effects',
+      subtitle: 'Mute or Unmute Audio Cues and Dojo Gongs',
+      icon: '🔊',
+      kbd: 'S',
+      run: () => { if (dom.btnToggleSound) dom.btnToggleSound.click(); }
+    },
+    {
+      id: 'action-settings',
+      type: 'action',
+      title: 'Settings & API Configuration',
+      subtitle: 'Google Gemini API Keys, Custom Agents & Reset',
+      icon: '⚙️',
+      kbd: ',',
+      run: () => { if (dom.btnOpenSettings) dom.btnOpenSettings.click(); }
+    }
+  ];
+
+  const openPalette = () => {
+    dom.paletteModal.style.display = 'flex';
+    dom.paletteSearchInput.value = '';
+    renderResults('');
+    dom.paletteSearchInput.focus();
+    soundFx.playCelestialChime(740);
+  };
+
+  const closePalette = () => {
+    dom.paletteModal.style.display = 'none';
+    soundFx.playBlip(380, 0.04);
+  };
+
+  const renderResults = (query) => {
+    const q = query.trim().toLowerCase();
+    dom.paletteResultsContainer.innerHTML = '';
+    currentResults = [];
+
+    // Filter actions
+    const matchedActions = quickActions.filter(a => {
+      if (!q) return true;
+      return a.title.toLowerCase().includes(q) || a.subtitle.toLowerCase().includes(q) || a.kbd.toLowerCase() === q;
+    });
+
+    // Filter quests
+    const matchedQuests = state.curriculum.quests.filter(quest => {
+      if (!q) return true;
+      const text = `${quest.number} ${quest.title} ${quest.subtitle} ${quest.tag || ''} ${quest.phaseName || ''}`.toLowerCase();
+      return text.includes(q);
+    }).map(quest => ({
+      id: quest.id,
+      type: 'quest',
+      title: `Quest ${quest.number}: ${quest.title}`,
+      subtitle: `${quest.phaseName || 'Phase'} • +${quest.xp} XP • ${quest.tag || ''}`,
+      icon: quest.icon || '📜',
+      kbd: `#${quest.number}`,
+      run: () => {
+        state.activeQuestId = quest.id;
+        renderQuestList();
+        renderActiveQuest();
+        if (dom.questHero) {
+          dom.questHero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        soundFx.playDojoGong();
+      }
+    }));
+
+    if (matchedActions.length > 0) {
+      const header = document.createElement('div');
+      header.className = 'palette-section-title';
+      header.textContent = 'Studios & Quick Actions';
+      dom.paletteResultsContainer.appendChild(header);
+
+      matchedActions.forEach(action => {
+        currentResults.push(action);
+        appendResultElement(action, currentResults.length - 1);
+      });
+    }
+
+    if (matchedQuests.length > 0) {
+      const header = document.createElement('div');
+      header.className = 'palette-section-title';
+      header.textContent = 'Cosmic Quests (1–20)';
+      dom.paletteResultsContainer.appendChild(header);
+
+      matchedQuests.forEach(quest => {
+        currentResults.push(quest);
+        appendResultElement(quest, currentResults.length - 1);
+      });
+    }
+
+    if (currentResults.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.padding = '1.5rem';
+      empty.style.textAlign = 'center';
+      empty.style.color = 'var(--text-muted)';
+      empty.textContent = `No quests or actions match "${query}".`;
+      dom.paletteResultsContainer.appendChild(empty);
+    }
+
+    selectedIndex = 0;
+    updateSelectedHighlight();
+  };
+
+  const appendResultElement = (item, index) => {
+    const btn = document.createElement('button');
+    btn.className = 'palette-result-item';
+    btn.setAttribute('data-index', index);
+    btn.innerHTML = `
+      <div class="palette-item-icon">${item.icon}</div>
+      <div class="palette-item-details">
+        <div class="palette-item-title-row">
+          <span class="palette-item-title">${item.title}</span>
+          <kbd class="palette-kbd">${item.kbd}</kbd>
+        </div>
+        <span class="palette-item-subtitle">${item.subtitle}</span>
+      </div>
+    `;
+
+    btn.addEventListener('click', () => {
+      closePalette();
+      item.run();
+    });
+
+    btn.addEventListener('mouseenter', () => {
+      selectedIndex = index;
+      updateSelectedHighlight();
+    });
+
+    dom.paletteResultsContainer.appendChild(btn);
+  };
+
+  const updateSelectedHighlight = () => {
+    const items = dom.paletteResultsContainer.querySelectorAll('.palette-result-item');
+    items.forEach((item, idx) => {
+      if (idx === selectedIndex) {
+        item.classList.add('selected');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('selected');
+      }
+    });
+  };
+
+  // Input event
+  dom.paletteSearchInput.addEventListener('input', (e) => {
+    renderResults(e.target.value);
+  });
+
+  // Keyboard navigation
+  dom.paletteSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentResults.length > 0) {
+        selectedIndex = (selectedIndex + 1) % currentResults.length;
+        updateSelectedHighlight();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentResults.length > 0) {
+        selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+        updateSelectedHighlight();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (currentResults[selectedIndex]) {
+        const item = currentResults[selectedIndex];
+        closePalette();
+        item.run();
+      }
+    } else if (e.key === 'Escape') {
+      closePalette();
+    }
+  });
+
+  if (dom.btnOpenPalette) {
+    dom.btnOpenPalette.addEventListener('click', openPalette);
+  }
+
+  dom.paletteModal.addEventListener('click', (e) => {
+    if (e.target === dom.paletteModal) {
+      closePalette();
+    }
+  });
+
+  return { openPalette, closePalette };
+}
+
+// --- GLOBAL KEYBOARD SHORTCUTS ---
+function setupGlobalShortcuts(paletteControls) {
+  window.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    const isTyping = active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.isContentEditable ||
+      (active.closest && (active.closest('#code-editor-area') || active.closest('.cm-editor')))
+    );
+
+    // Command Palette hotkey: Ctrl+K or Cmd+K
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      if (paletteControls) paletteControls.openPalette();
+      return;
+    }
+
+    if (isTyping) return;
+
+    // Single-key hotkeys (when not typing in an input)
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      e.preventDefault();
+      if (paletteControls) paletteControls.openPalette();
+    } else if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnOpenGalaxy) dom.btnOpenGalaxy.click();
+    } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnOpenArchitect) dom.btnOpenArchitect.click();
+    } else if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnOpenCapstone) dom.btnOpenCapstone.click();
+    } else if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnToggleTutor) dom.btnToggleTutor.click();
+    } else if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnOpenDiploma) dom.btnOpenDiploma.click();
+    } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnToggleSound) dom.btnToggleSound.click();
+    } else if (e.key === ',' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.btnOpenSettings) dom.btnOpenSettings.click();
+    }
+  });
+}
+
 // --- APP BOOTSTRAP ---
 function initApp() {
   updateXpDisplay();
@@ -16002,6 +16340,9 @@ function initApp() {
   setupArchitectModal();
   setupCapstoneModal();
   setupGalaxyModal();
+  setupStudiosDropdown();
+  const paletteControls = setupCommandPalette();
+  setupGlobalShortcuts(paletteControls);
   updateDiplomaStatus();
   updateTutorBadge();
 
