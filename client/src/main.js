@@ -11,6 +11,7 @@ import { exportProgress, importProgress, resetProgress } from './progress_manage
 import { soundFx } from './sound_effects.js';
 import { renderInteractiveWidget } from './widgets/index.js';
 import { DojoManager } from './dojo_achievements.js';
+import { MasteryChallengeManager } from './mastery_challenges.js';
 
 // --- State Management ---
 const state = {
@@ -160,6 +161,7 @@ const state = {
   robotPathMode: 'diffusion_policy', // 'mse_average' | 'diffusion_policy'
   robotDenoiseStep: 16
 };
+window.state = state;
 
 const tutorService = new AITutorService();
 
@@ -168,6 +170,8 @@ const dom = {
   // Navigation
   userLevelBadge: document.getElementById('user-level-badge'),
   userLevelText: document.getElementById('user-level-text'),
+  navChallengesPill: document.getElementById('nav-challenges-pill'),
+  navChallengesText: document.getElementById('nav-challenges-text'),
   xpBarFill: document.getElementById('xp-bar-fill'),
   xpLabelText: document.getElementById('xp-label-text'),
   backendStatusPill: document.getElementById('backend-status-pill'),
@@ -357,6 +361,18 @@ function updateXpDisplay() {
   localStorage.setItem('nq_user_xp', xp.toString());
 }
 
+function updateNavChallenges() {
+  if (!dom.navChallengesText || !window.masteryManager) return;
+  const done = window.masteryManager.getCompletedCount();
+  const total = window.masteryManager.getTotalCount();
+  dom.navChallengesText.textContent = `${done}/${total} Goals`;
+  if (done > 0) {
+    dom.navChallengesText.style.color = '#34d399';
+  } else {
+    dom.navChallengesText.style.color = '#fbbf24';
+  }
+}
+
 function awardXp(amount, reason = '') {
   state.userXp += amount;
   updateXpDisplay();
@@ -427,6 +443,7 @@ function renderQuestList() {
 
     const card = document.createElement('div');
     card.className = `quest-card-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`;
+    card.dataset.questId = quest.id;
     card.innerHTML = `
       <div class="quest-item-icon">${quest.icon}</div>
       <div class="quest-item-content">
@@ -524,6 +541,12 @@ function renderActiveQuest() {
     dom,
     awardXp: (amount, reason) => awardXp(amount, reason)
   });
+
+  // Mount Guided Mastery Challenge HUD Card
+  if (window.masteryManager && dom.interactiveContainer) {
+    window.masteryManager.render(dom.interactiveContainer, quest.id);
+    window.masteryManager.evaluate(quest.id);
+  }
 
   // Render Quiz
   renderQuiz(quest);
@@ -1489,6 +1512,7 @@ function setupSettings() {
           renderActiveQuest();
           updateDiplomaStatus();
           updateTutorBadge();
+          updateNavChallenges();
           if (window.dojoManager) window.dojoManager.checkBadges();
           soundFx.playCelestialChime(880);
           dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Successfully restored journey for <strong>${res.learnerName}</strong> (${res.completedCount}/${res.totalQuests} quests, ${res.badgeCount} medals, ${res.userXp} XP)!</span>`;
@@ -1511,6 +1535,7 @@ function setupSettings() {
         renderQuestList();
         renderActiveQuest();
         updateDiplomaStatus();
+        updateNavChallenges();
         if (window.dojoManager) window.dojoManager.resetAll();
         soundFx.playBlip(380, 0.08);
         closeModal();
@@ -2300,6 +2325,69 @@ function setupDojoTrophyModal() {
   return dojoManager;
 }
 
+// --- GUIDED MASTERY CHALLENGE ENGINE ---
+function setupMasteryChallenges() {
+  const masteryManager = new MasteryChallengeManager({
+    getState: () => state,
+    awardXp: (amount, reason) => awardXp(amount, reason),
+    soundFx,
+    confetti,
+    onChallengeComplete: (questId, challenge) => {
+      updateNavChallenges();
+      if (window.dojoManager) {
+        window.dojoManager.recordStat('challengesCompleted');
+        window.dojoManager.checkBadges();
+      }
+    },
+    onBadgeCheck: () => {
+      if (window.dojoManager) {
+        window.dojoManager.checkBadges();
+      }
+    }
+  });
+  window.masteryManager = masteryManager;
+
+  // Nav pill click: switches to Interactive Sandbox and smoothly scrolls to Challenge Card
+  if (dom.navChallengesPill) {
+    dom.navChallengesPill.addEventListener('click', () => {
+      const sandboxTab = document.querySelector('.tab-btn[data-tab="interactive"]');
+      if (sandboxTab) sandboxTab.click();
+      const card = document.getElementById('mastery-challenge-card');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        card.classList.add('glow-pulse');
+        setTimeout(() => card.classList.remove('glow-pulse'), 1500);
+      } else if (window.dojoManager) {
+        window.dojoManager.openModal();
+      }
+    });
+  }
+
+  // Interactive Container live delegation: re-evaluate challenges on input, change, or clicks
+  if (dom.interactiveContainer) {
+    dom.interactiveContainer.addEventListener('input', () => {
+      if (window.masteryManager) {
+        window.masteryManager.evaluate(state.activeQuestId);
+      }
+    });
+    dom.interactiveContainer.addEventListener('change', () => {
+      if (window.masteryManager) {
+        window.masteryManager.evaluate(state.activeQuestId);
+      }
+    });
+    dom.interactiveContainer.addEventListener('click', () => {
+      setTimeout(() => {
+        if (window.masteryManager) {
+          window.masteryManager.evaluate(state.activeQuestId);
+        }
+      }, 50);
+    });
+  }
+
+  updateNavChallenges();
+  return masteryManager;
+}
+
 // --- 3D LOSS LANDSCAPE MOUNTAIN PLAYGROUND ---
 function setupLandscapeModal() {
   if (!dom.landscapeModal || !dom.landscapeCanvasContainer) return null;
@@ -2349,6 +2437,17 @@ function setupCommandPalette() {
   let currentResults = [];
 
   const quickActions = [
+    {
+      id: 'action-challenges',
+      type: 'action',
+      title: 'Current Quest Mastery Challenge',
+      subtitle: 'Jump to active puzzle objective, hints & pass/fail tracker',
+      icon: '🎯',
+      kbd: 'C',
+      run: () => {
+        if (dom.navChallengesPill) dom.navChallengesPill.click();
+      }
+    },
     {
       id: 'action-trophy',
       type: 'action',
@@ -2643,6 +2742,8 @@ function setupGlobalShortcuts(paletteControls) {
     } else if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (dom.btnMenuLandscape) dom.btnMenuLandscape.click();
       else if (window.landscape3dStudio) window.landscape3dStudio.openModal();
+    } else if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (dom.navChallengesPill) dom.navChallengesPill.click();
     } else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (dom.btnToggleSound) dom.btnToggleSound.click();
     } else if (e.key === ',' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -2654,7 +2755,9 @@ function setupGlobalShortcuts(paletteControls) {
 // --- APP BOOTSTRAP ---
 function initApp() {
   const dojoManager = setupDojoTrophyModal();
+  const masteryManager = setupMasteryChallenges();
   updateXpDisplay();
+  updateNavChallenges();
   if (dojoManager) {
     dojoManager.checkBadges();
   }

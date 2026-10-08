@@ -24,6 +24,7 @@ export function exportProgress(state, tutorService) {
     learnerName,
     userXp: state.userXp,
     completedQuests: Array.from(state.completedQuests),
+    completedChallenges: Array.from(new Set(JSON.parse(localStorage.getItem('nq_completed_challenges') || '[]'))),
     activeQuestId: state.activeQuestId,
     backendUrl: state.backendUrl,
     unlockedBadges,
@@ -91,6 +92,10 @@ export function importProgress(jsonString, state, tutorService) {
       localStorage.setItem('nq_dojo_stats', JSON.stringify(data.dojoStats));
     }
 
+    if (Array.isArray(data.completedChallenges)) {
+      localStorage.setItem('nq_completed_challenges', JSON.stringify(data.completedChallenges));
+    }
+
     // 4. Restore AI Tutor Settings
     if (data.tutorSettings && tutorService) {
       if (data.tutorSettings.providerType) {
@@ -101,9 +106,16 @@ export function importProgress(jsonString, state, tutorService) {
       }
     }
 
-    // 5. Sync active in-memory DojoManager instance
+    // 5. Sync active in-memory managers
     if (window.dojoManager && typeof window.dojoManager.reloadFromStorage === 'function') {
       window.dojoManager.reloadFromStorage();
+    }
+    if (window.masteryManager) {
+      if (typeof window.masteryManager.reloadFromStorage === 'function') {
+        window.masteryManager.reloadFromStorage();
+      } else {
+        window.masteryManager.completedChallenges = new Set(JSON.parse(localStorage.getItem('nq_completed_challenges') || '[]'));
+      }
     }
 
     const totalQuests = state.curriculum?.quests?.length || 20;
@@ -114,7 +126,8 @@ export function importProgress(jsonString, state, tutorService) {
       userXp: state.userXp,
       completedCount: state.completedQuests.size,
       totalQuests,
-      badgeCount: restoredBadgesCount
+      badgeCount: restoredBadgesCount,
+      challengeCount: Array.isArray(data.completedChallenges) ? data.completedChallenges.length : 0
     };
   } catch (err) {
     return {
@@ -132,6 +145,7 @@ export function resetProgress(state) {
   localStorage.setItem('nq_user_xp', '100');
   localStorage.setItem('nq_completed_quests', '[]');
   localStorage.setItem('nq_unlocked_badges', '[]');
+  localStorage.setItem('nq_completed_challenges', '[]');
   localStorage.setItem('nq_dojo_stats', JSON.stringify({
     galaxyOpens: 0,
     architectCustomized: 0,
@@ -139,12 +153,20 @@ export function resetProgress(state) {
     doodleDraws: 0,
     codeRuns: 0,
     tutorChats: 0,
-    correctQuizzes: 0
+    correctQuizzes: 0,
+    challengesCompleted: 0
   }));
   localStorage.removeItem('nq_chat_history');
 
-  // Sync active DojoManager instance
+  // Sync active managers
   if (window.dojoManager && typeof window.dojoManager.resetAll === 'function') {
     window.dojoManager.resetAll();
+  }
+  if (window.masteryManager) {
+    if (typeof window.masteryManager.resetAll === 'function') {
+      window.masteryManager.resetAll();
+    } else {
+      window.masteryManager.completedChallenges = new Set();
+    }
   }
 }

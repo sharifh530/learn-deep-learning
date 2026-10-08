@@ -341,6 +341,45 @@ export const DOJO_BADGES = [
     criteria: 'Conquer all 20 Quests',
     xp: 500,
     check: (state) => state.completedQuests.size >= 20
+  },
+  {
+    id: 'badge-puzzle-initiate',
+    name: 'Puzzle Initiate',
+    category: 'Mastery',
+    icon: '🎯',
+    description: 'Demonstrated tactical precision by solving your first Guided Mastery Challenge.',
+    criteria: 'Solve 1+ Mastery Challenge',
+    xp: 75,
+    check: () => {
+      const challenges = JSON.parse(localStorage.getItem('nq_completed_challenges') || '[]');
+      return challenges.length >= 1;
+    }
+  },
+  {
+    id: 'badge-puzzle-adept',
+    name: 'Puzzle Adept',
+    category: 'Mastery',
+    icon: '🧩',
+    description: 'Proved deep intuition by conquering 5 Guided Mastery Challenges.',
+    criteria: 'Solve 5+ Mastery Challenges',
+    xp: 150,
+    check: () => {
+      const challenges = JSON.parse(localStorage.getItem('nq_completed_challenges') || '[]');
+      return challenges.length >= 5;
+    }
+  },
+  {
+    id: 'badge-puzzle-master',
+    name: 'Puzzle Grandmaster',
+    category: 'Mastery',
+    icon: '👑',
+    description: 'Attained supreme martial intuition by completing 15 Guided Mastery Challenges.',
+    criteria: 'Solve 15+ Mastery Challenges',
+    xp: 300,
+    check: () => {
+      const challenges = JSON.parse(localStorage.getItem('nq_completed_challenges') || '[]');
+      return challenges.length >= 15;
+    }
   }
 ];
 
@@ -358,7 +397,8 @@ export class DojoManager {
       doodleDraws: 0,
       codeRuns: 0,
       tutorChats: 0,
-      correctQuizzes: 0
+      correctQuizzes: 0,
+      challengesCompleted: 0
     }));
 
     this.activeTab = 'belts'; // 'belts' | 'badges' | 'stats'
@@ -521,7 +561,7 @@ export class DojoManager {
             <span class="dojo-header-icon">🥋</span>
             <div class="dojo-header-titles">
               <h3>Sensei's Dojo & Trophy Room</h3>
-              <span class="dojo-subtitle">Martial Arts Belt Ladder • 16 Dojo Medals • Combat Records</span>
+              <span class="dojo-subtitle">Martial Arts Belt Ladder • ${DOJO_BADGES.length} Dojo Medals • Combat Records</span>
             </div>
           </div>
           <button class="modal-close" id="btn-close-trophy" title="Close Trophy Room (Esc)">&times;</button>
@@ -686,6 +726,10 @@ export class DojoManager {
           <div class="stats-breakdown-row">
             <div class="stats-panel">
               <div class="panel-header"><span>🥋</span> Sensei's Martial Combat Records</div>
+              <div class="stat-record-item">
+                <span>Guided Mastery Challenges Solved:</span>
+                <strong>${this.stats.challengesCompleted || 0} / 20</strong>
+              </div>
               <div class="stat-record-item">
                 <span>Galaxy Constellation Map Opens:</span>
                 <strong>${this.stats.galaxyOpens} times</strong>
