@@ -2,6 +2,8 @@ import io
 import sys
 import contextlib
 import base64
+import subprocess
+import ast
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response, PlainTextResponse
@@ -87,41 +89,118 @@ def get_status():
         "history": training_history[-10:] if training_history else []
     }
 
+BLOCKED_CALL_NAMES = {
+    "system", "popen", "spawn", "execv", "execve", "fork", "kill",
+    "remove", "unlink", "rmdir", "rmtree"
+}
+BLOCKED_MODULES = {"subprocess", "shutil", "ctypes", "winreg"}
+
+def check_code_safety(code_str: str) -> Optional[str]:
+    """
+    Parses code AST to block destructive system calls while allowing normal PyTorch learning.
+    """
+    try:
+        tree = ast.parse(code_str)
+    except SyntaxError:
+        return None # Let Python interpreter report syntax errors naturally
+
+    for node in ast.walk(tree):
+        # Block import of dangerous modules
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root_mod = alias.name.split('.')[0]
+                if root_mod in BLOCKED_MODULES:
+                    return f"Security Restriction: Module '{alias.name}' is disabled in the NeuroQuest educational sandbox."
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                root_mod = node.module.split('.')[0]
+                if root_mod in BLOCKED_MODULES:
+                    return f"Security Restriction: Importing from '{node.module}' is disabled in the NeuroQuest educational sandbox."
+        # Block dangerous function calls like os.system(...)
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in BLOCKED_CALL_NAMES:
+                    return f"Security Restriction: Calling '{node.func.attr}()' is disabled in the educational sandbox."
+            elif isinstance(node.func, ast.Name):
+                if node.func.id in BLOCKED_CALL_NAMES:
+                    return f"Security Restriction: Calling '{node.func.id}()' is disabled in the educational sandbox."
+    return None
+
 @app.post("/api/execute")
 def execute_python_code(req: CodeExecutionRequest):
     """
-    Executes Python snippets from the in-app playgrounds and captures standard output.
+    Executes Python snippets in an isolated subprocess with strict timeout (6.0s),
+    pre-imported PyTorch/NumPy environment, output size bounds, and safety restrictions.
     """
-    buffer = io.StringIO()
-    error_msg = None
-    success = False
+    # 1. Pre-check code safety
+    security_violation = check_code_safety(req.code)
+    if security_violation:
+        return {
+            "success": False,
+            "output": "",
+            "error": security_violation
+        }
+
+    # 2. Build isolated runner with standard ML imports pre-seeded
+    runner_preamble = (
+        "import sys, math, random\n"
+        "try:\n"
+        "    import numpy as np\n"
+        "except Exception:\n"
+        "    pass\n"
+        "try:\n"
+        "    import torch\n"
+        "    import torch.nn as nn\n"
+        "    import torch.nn.functional as F\n"
+        "except Exception:\n"
+        "    pass\n\n"
+    )
+    full_code = runner_preamble + req.code
+    timeout_sec = 6.0
+    max_output_length = 35000
 
     try:
-        # Restricted safe globals
-        safe_globals = {
-            "__builtins__": __builtins__,
-            "np": np,
+        proc = subprocess.run(
+            [sys.executable, "-u", "-"],
+            input=full_code,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec
+        )
+
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+
+        if len(stdout) > max_output_length:
+            stdout = stdout[:max_output_length] + "\n\n... [Output truncated after 35,000 characters]"
+
+        if proc.returncode == 0:
+            return {
+                "success": True,
+                "output": stdout,
+                "error": None
+            }
+        else:
+            err_output = stderr.strip() or f"Process exited with code {proc.returncode}"
+            return {
+                "success": False,
+                "output": stdout,
+                "error": err_output
+            }
+
+    except subprocess.TimeoutExpired as e:
+        partial_stdout = e.stdout.decode('utf-8', errors='replace') if isinstance(e.stdout, bytes) else (e.stdout or "")
+        return {
+            "success": False,
+            "output": partial_stdout,
+            "error": f"TimeoutError: Execution exceeded {timeout_sec}s time limit. Check for infinite loops (e.g. while True) or excessive epochs!"
         }
-        try:
-            import torch
-            safe_globals["torch"] = torch
-            import torch.nn as nn
-            safe_globals["nn"] = nn
-        except ImportError:
-            pass
-
-        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
-            exec(req.code, safe_globals)
-        success = True
     except Exception as e:
-        error_msg = f"{type(e).__name__}: {str(e)}"
-        success = False
-
-    return {
-        "success": success,
-        "output": buffer.getvalue(),
-        "error": error_msg
-    }
+        return {
+            "success": False,
+            "output": "",
+            "error": f"ExecutionError: {type(e).__name__}: {str(e)}"
+        }
 
 @app.post("/api/predict_doodle")
 def predict_doodle(req: DoodlePredictRequest):
