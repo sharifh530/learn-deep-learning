@@ -15336,7 +15336,8 @@ function setupSettings() {
     dom.btnExportProgress.addEventListener('click', () => {
       const res = exportProgress(state, tutorService);
       if (res.success) {
-        dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Saved journey data exported to <strong>${res.fileName}</strong></span>`;
+        soundFx.playSuccess();
+        dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Saved journey exported to <strong>${res.fileName}</strong> (${res.completedCount} quests, ${res.badgeCount} medals, ${res.userXp} XP)!</span>`;
       }
     });
   }
@@ -15358,9 +15359,12 @@ function setupSettings() {
           renderActiveQuest();
           updateDiplomaStatus();
           updateTutorBadge();
-          dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Successfully restored journey for <strong>${res.learnerName}</strong> (${res.completedCount}/7 quests, ${res.userXp} XP)!</span>`;
-          confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+          if (window.dojoManager) window.dojoManager.checkBadges();
+          soundFx.playCelestialChime(880);
+          dom.settingsTestStatus.innerHTML = `<span style="color: #34d399;">✓ Successfully restored journey for <strong>${res.learnerName}</strong> (${res.completedCount}/${res.totalQuests} quests, ${res.badgeCount} medals, ${res.userXp} XP)!</span>`;
+          confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 } });
         } else {
+          soundFx.playBlip(320, 0.08);
           dom.settingsTestStatus.innerHTML = `<span style="color: #f87171;">❌ Restore failed: ${res.error}</span>`;
         }
       };
@@ -15371,14 +15375,16 @@ function setupSettings() {
 
   if (dom.btnResetProgress) {
     dom.btnResetProgress.addEventListener('click', () => {
-      if (confirm('⚠️ Are you sure you want to reset all quest progress and XP? This action cannot be undone.')) {
+      if (confirm('⚠️ Are you sure you want to reset all quest progress, belt ranks, medals, and XP? This action cannot be undone.')) {
         resetProgress(state);
         updateXpDisplay();
         renderQuestList();
         renderActiveQuest();
         updateDiplomaStatus();
+        if (window.dojoManager) window.dojoManager.resetAll();
+        soundFx.playBlip(380, 0.08);
         closeModal();
-        alert('✓ Progress reset to beginning.');
+        alert('✓ Progress reset to White Belt beginning.');
       }
     });
   }

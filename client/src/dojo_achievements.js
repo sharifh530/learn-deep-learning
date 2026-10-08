@@ -369,6 +369,40 @@ export class DojoManager {
     localStorage.setItem('nq_dojo_stats', JSON.stringify(this.stats));
   }
 
+  reloadFromStorage() {
+    this.unlockedBadges = new Set(JSON.parse(localStorage.getItem('nq_unlocked_badges') || '[]'));
+    this.stats = JSON.parse(localStorage.getItem('nq_dojo_stats') || JSON.stringify({
+      galaxyOpens: 0,
+      architectCustomized: 0,
+      lossPlaygroundRuns: 0,
+      doodleDraws: 0,
+      codeRuns: 0,
+      tutorChats: 0,
+      correctQuizzes: 0
+    }));
+    this.checkBadges();
+    if (this.container && this.container.style.display === 'flex') {
+      this.renderModal();
+    }
+  }
+
+  resetAll() {
+    this.unlockedBadges.clear();
+    this.stats = {
+      galaxyOpens: 0,
+      architectCustomized: 0,
+      lossPlaygroundRuns: 0,
+      doodleDraws: 0,
+      codeRuns: 0,
+      tutorChats: 0,
+      correctQuizzes: 0
+    };
+    this.save();
+    if (this.container && this.container.style.display === 'flex') {
+      this.renderModal();
+    }
+  }
+
   recordStat(key, increment = 1) {
     if (this.stats[key] !== undefined) {
       this.stats[key] += increment;
