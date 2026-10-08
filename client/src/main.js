@@ -12,6 +12,7 @@ import { soundFx } from './sound_effects.js';
 import { renderInteractiveWidget } from './widgets/index.js';
 import { DojoManager } from './dojo_achievements.js';
 import { MasteryChallengeManager } from './mastery_challenges.js';
+import { pythonEngine } from './python_engine.js';
 
 // --- State Management ---
 const state = {
@@ -162,6 +163,7 @@ const state = {
   robotDenoiseStep: 16
 };
 window.state = state;
+window.pythonEngine = pythonEngine;
 
 const tutorService = new AITutorService();
 
@@ -206,6 +208,12 @@ const dom = {
   btnResetCode: document.getElementById('btn-reset-code'),
   terminalOutput: document.getElementById('terminal-output'),
   btnClearTerminal: document.getElementById('btn-clear-terminal'),
+  codeEngineSelect: document.getElementById('code-engine-select'),
+  codeEngineBadge: document.getElementById('code-engine-badge'),
+  engineStatusDot: document.getElementById('engine-status-dot'),
+  engineStatusLabel: document.getElementById('engine-status-label'),
+  terminalExecStat: document.getElementById('terminal-exec-stat'),
+  btnCopyTerminal: document.getElementById('btn-copy-terminal'),
   // Quiz
   quizContainer: document.getElementById('quiz-container'),
   // Tutor Modal & Floating button
@@ -394,6 +402,8 @@ async function checkBackendStatus() {
     if (res.ok) {
       const data = await res.json();
       state.backendOnline = true;
+      pythonEngine.backendUrl = state.backendUrl;
+      pythonEngine.setBackendOnline(true);
       dom.backendStatusPill.classList.add('online');
       dom.backendStatusText.textContent = 'PyTorch';
       dom.backendStatusPill.title = 'PyTorch Backend Engine: Online (Ready)';
@@ -408,6 +418,7 @@ async function checkBackendStatus() {
     }
   } catch {
     state.backendOnline = false;
+    pythonEngine.setBackendOnline(false);
     dom.backendStatusPill.classList.remove('online');
     dom.backendStatusText.textContent = 'Offline';
     dom.backendStatusPill.title = 'PyTorch Backend Engine: Offline (Local Heuristic Mode)';
@@ -838,47 +849,129 @@ function renderLesson(quest) {
 
 // --- PYTHON CODE RUNNER & TERMINAL ---
 function setupCodeLab() {
+  // Sync engine status indicator & badges
+  const updateEngineUI = (status) => {
+    if (!dom.engineStatusDot || !dom.engineStatusLabel) return;
+
+    dom.engineStatusDot.className = 'engine-status-dot';
+    if (status.mode === 'wasm') {
+      if (status.wasmStatus === 'loading') {
+        dom.engineStatusDot.classList.add('loading');
+        dom.engineStatusLabel.textContent = status.wasmMessage || 'Loading Pyodide WebAssembly...';
+      } else if (status.wasmStatus === 'ready') {
+        dom.engineStatusDot.classList.add('ready');
+        dom.engineStatusLabel.textContent = 'Pyodide WebAssembly (WASM) ⚡ Ready';
+      } else if (status.wasmStatus === 'error') {
+        dom.engineStatusDot.classList.add('error');
+        dom.engineStatusLabel.textContent = status.wasmMessage || 'Pyodide Error';
+      } else {
+        dom.engineStatusLabel.textContent = 'Pyodide WebAssembly (WASM)';
+      }
+    } else {
+      // Backend server mode
+      if (status.backendOnline) {
+        dom.engineStatusDot.classList.add('ready');
+        dom.engineStatusLabel.textContent = 'Native PyTorch CUDA Server 🚀 Connected';
+      } else {
+        dom.engineStatusDot.classList.add('error');
+        dom.engineStatusLabel.textContent = 'PyTorch Backend Offline ⚠️';
+      }
+    }
+
+    if (dom.codeEngineSelect && dom.codeEngineSelect.value !== status.mode) {
+      dom.codeEngineSelect.value = status.mode;
+    }
+  };
+
+  pythonEngine.onStatusChange(updateEngineUI);
+  updateEngineUI(pythonEngine.getStatus());
+
+  // Engine selection dropdown
+  if (dom.codeEngineSelect) {
+    dom.codeEngineSelect.value = pythonEngine.engineMode;
+    dom.codeEngineSelect.addEventListener('change', (e) => {
+      pythonEngine.setMode(e.target.value);
+      soundFx.playBlip(540, 0.04);
+    });
+  }
+
+  // Pre-initialize worker when code tab is selected
+  dom.tabBtns.forEach(btn => {
+    if (btn.dataset.tab === 'code') {
+      btn.addEventListener('click', () => {
+        if (pythonEngine.wasmStatus === 'idle') {
+          pythonEngine.initWasmWorker();
+        }
+      });
+    }
+  });
+
+  // Run Code button
   dom.btnRunCode.addEventListener('click', async () => {
     if (window.dojoManager) window.dojoManager.recordStat('codeRuns');
     const code = dom.codeEditorArea.value;
     dom.terminalOutput.textContent = '⏳ Executing snippet in Python engine...';
+    if (dom.terminalExecStat) dom.terminalExecStat.textContent = 'Running...';
     dom.btnRunCode.disabled = true;
 
     try {
-      if (state.backendOnline) {
-        const res = await fetch(`${state.backendUrl}/api/execute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
-        });
-        const data = await res.json();
-        if (data.success) {
-          dom.terminalOutput.textContent = data.output || '✓ Code executed with no stdout.';
-          awardXp(25);
-        } else {
-          dom.terminalOutput.textContent = `❌ Execution Error:\n${data.error}`;
+      const result = await pythonEngine.execute(code);
+
+      if (result.success) {
+        dom.terminalOutput.textContent = result.output || '✓ Code executed with no stdout.';
+        if (dom.terminalExecStat) {
+          const modeTag = result.engine === 'wasm' ? 'WASM' : 'PyTorch Server';
+          dom.terminalExecStat.textContent = `⚡ ${result.durationMs}ms (${modeTag})`;
         }
+        awardXp(25, 'Python Sandbox Execution');
+        soundFx.playBlip(720, 0.05);
       } else {
-        // Simulated local fallback
-        await new Promise(r => setTimeout(r, 600));
-        dom.terminalOutput.textContent = `[Local Engine Simulation]\n✓ Execution simulated successfully.\n(Start Python backend: uvicorn server.main:app to run live PyTorch)`;
-        awardXp(25);
+        dom.terminalOutput.textContent = `❌ Execution Error:\n${result.error}`;
+        if (dom.terminalExecStat) {
+          dom.terminalExecStat.textContent = `Error (${result.durationMs || 0}ms)`;
+        }
+        soundFx.playBlip(320, 0.08);
       }
     } catch (err) {
-      dom.terminalOutput.textContent = `❌ Communication Error: ${err.message}`;
+      dom.terminalOutput.textContent = `❌ Execution Failed: ${err.message}`;
+      if (dom.terminalExecStat) dom.terminalExecStat.textContent = 'Failed';
+      soundFx.playBlip(280, 0.08);
     } finally {
       dom.btnRunCode.disabled = false;
     }
   });
 
+  // Reset Code button
   dom.btnResetCode.addEventListener('click', () => {
     const quest = getActiveQuest();
     dom.codeEditorArea.value = quest.codeSnippet;
+    soundFx.playBlip(440, 0.04);
   });
 
+  // Clear Terminal button
   dom.btnClearTerminal.addEventListener('click', () => {
     dom.terminalOutput.textContent = '// Terminal cleared.';
+    if (dom.terminalExecStat) dom.terminalExecStat.textContent = '';
+    soundFx.playBlip(380, 0.03);
   });
+
+  // Copy Terminal Output button
+  if (dom.btnCopyTerminal) {
+    dom.btnCopyTerminal.addEventListener('click', async () => {
+      const text = dom.terminalOutput.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        const originalText = dom.btnCopyTerminal.innerHTML;
+        dom.btnCopyTerminal.innerHTML = '✓ Copied!';
+        soundFx.playBlip(720, 0.04);
+        setTimeout(() => {
+          dom.btnCopyTerminal.innerHTML = originalText;
+        }, 1800);
+      } catch (err) {
+        console.warn('Failed to copy to clipboard', err);
+      }
+    });
+  }
 }
 
 // --- QUIZ COMPONENT ---
@@ -2782,6 +2875,13 @@ function initApp() {
 
   checkBackendStatus();
   setInterval(checkBackendStatus, 15000);
+
+  // Pre-initialize Pyodide WebAssembly worker in background for instantaneous execution
+  setTimeout(() => {
+    if (pythonEngine.wasmStatus === 'idle') {
+      pythonEngine.initWasmWorker();
+    }
+  }, 1000);
 }
 
 if (document.readyState === 'loading') {

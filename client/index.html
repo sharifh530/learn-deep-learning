@@ -248,10 +248,20 @@
           <div class="tab-content" id="content-code">
             <div class="code-workspace">
               <div class="code-header">
-                <div class="code-title">
-                  <span>🐍</span> Hands-On Python Sandbox
+                <div class="code-title-group">
+                  <div class="code-title">
+                    <span>🐍</span> Hands-On Python Sandbox
+                  </div>
+                  <div class="code-engine-badge" id="code-engine-badge" title="Active execution engine">
+                    <span class="engine-status-dot wasm" id="engine-status-dot"></span>
+                    <span class="engine-status-label" id="engine-status-label">Pyodide WebAssembly (WASM)</span>
+                  </div>
                 </div>
                 <div class="code-actions">
+                  <select id="code-engine-select" class="code-engine-select" title="Switch Python Execution Engine">
+                    <option value="wasm" selected>⚡ In-Browser WebAssembly (Pyodide)</option>
+                    <option value="backend">🚀 Local PyTorch Server (FastAPI)</option>
+                  </select>
                   <button class="btn-reset-code" id="btn-reset-code" title="Reset to original snippet">↺ Reset</button>
                   <button class="btn-run-code" id="btn-run-code">▶ Run in Python Engine</button>
                 </div>
@@ -265,7 +275,11 @@
                     <span class="dot green"></span>
                   </div>
                   <span class="terminal-title">Output Terminal</span>
-                  <button class="terminal-clear" id="btn-clear-terminal">Clear</button>
+                  <div class="terminal-actions-right">
+                    <span class="terminal-exec-stat" id="terminal-exec-stat"></span>
+                    <button class="terminal-btn-copy" id="btn-copy-terminal" title="Copy terminal output">📋 Copy</button>
+                    <button class="terminal-clear" id="btn-clear-terminal">Clear</button>
+                  </div>
                 </div>
                 <pre class="terminal-body" id="terminal-output">// Output will appear here after clicking 'Run in Python Engine'...</pre>
               </div>
