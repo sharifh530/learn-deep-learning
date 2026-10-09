@@ -258,9 +258,9 @@ export const DOJO_BADGES = [
     category: 'Milestones',
     icon: '🌫️',
     description: 'Guided Markov forward noise and backward reverse sampling.',
-    criteria: 'Complete Quest 14',
+    criteria: 'Complete Quest 17',
     xp: 150,
-    check: (state) => state.completedQuests.has('quest-14')
+    check: (state) => state.completedQuests.has('quest-17')
   },
   {
     id: 'badge-embodied',

@@ -50,12 +50,12 @@ export const MASTERY_CHALLENGES = {
       const act = state.activeActivation || 'relu';
       const isNegative = x <= -1.0;
       const isAlive = (act === 'leaky_relu' || act === 'gelu' || act === 'tanh' || act === 'sigmoid');
-      const passed = isNegative && (act === 'leaky_relu' || act === 'gelu');
+      const passed = isNegative && isAlive;
       return {
         passed,
         progressRatio: passed ? 1 : (isNegative ? 0.5 : (isAlive ? 0.3 : 0.1)),
         currentStatus: passed
-          ? 'Revived! Non-zero gradient flowing 🟢'
+          ? `Revived! Gradient flowing (${act.toUpperCase()}) 🟢`
           : (isNegative ? `Negative input (x = ${x.toFixed(1)}), but ReLU is flat dead 💀` : `Set x <= -1.0 (Current: ${x.toFixed(1)})`)
       };
     }
@@ -72,14 +72,14 @@ export const MASTERY_CHALLENGES = {
     check: (state) => {
       const w = state.gradientWeight ?? -3.5;
       const steps = state.gradientSteps || 0;
-      const dist = Math.abs(w);
+      const dist = Math.min(Math.abs(w - 1.5), Math.abs(w));
       const passed = dist <= 0.20 && steps >= 3;
       const ratio = Math.max(0, Math.min(1, 1 - (dist / 4.0)));
       return {
         passed,
         progressRatio: passed ? 1 : Math.min(0.9, ratio),
         currentStatus: passed
-          ? `Global Minimum reached! (|w| = ${dist.toFixed(3)}, ${steps} steps)`
+          ? `Global Minimum reached! (|w - 1.5| = ${dist.toFixed(3)}, ${steps} steps)`
           : `Distance to Minimum: ${dist.toFixed(2)} (Target: <= 0.20, Steps: ${steps}/3)`
       };
     }
@@ -141,7 +141,7 @@ export const MASTERY_CHALLENGES = {
     xpReward: 50,
     check: (state) => {
       const comp = state.regComplexity || 8;
-      const l2 = state.regL2Lambda ?? 0;
+      const l2 = state.regL2Lambda ?? state.regWeightDecay ?? 0;
       const isHighDegree = comp >= 6;
       const hasL2 = l2 >= 0.03;
       const passed = isHighDegree && hasL2;
@@ -164,7 +164,7 @@ export const MASTERY_CHALLENGES = {
     hint: 'Coreference resolution allows language models to resolve ambiguous pronouns. Click token #7 ("it") on the token ribbon to see it attend to "animal".',
     xpReward: 50,
     check: (state) => {
-      const qIdx = state.attentionActiveQueryIdx ?? 0;
+      const qIdx = state.attentionActiveQueryIdx ?? state.attnFocusedToken ?? 0;
       const passed = qIdx === 7;
       return {
         passed,
@@ -263,8 +263,8 @@ export const MASTERY_CHALLENGES = {
       const steps = state.dpoTrainedSteps || 0;
       const votesOk = votes >= 2;
       const stepsOk = steps >= 3;
-      const passed = votesOk && stepsOk;
-      const ratio = (Math.min(2, votes) / 2 * 0.5) + (Math.min(3, steps) / 3 * 0.5);
+      const passed = (votesOk && stepsOk) || steps >= 4;
+      const ratio = Math.min(1, Math.max(steps / 3, (votes / 2 * 0.5) + (steps / 3 * 0.5)));
       return {
         passed,
         progressRatio: ratio,

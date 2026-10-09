@@ -698,6 +698,7 @@ export function renderAlignmentDpoLabWidget(quest, context) {
     btnReset.addEventListener('click', () => {
       trainedSteps = 0;
       state.dpoTrainedSteps = 0;
+      state.dpoUserVotes = {};
       simulatedOffsets.polChosenDelta = 0;
       simulatedOffsets.polRejectedDelta = 0;
       soundFx.playBlip(420, 0.08);
@@ -710,6 +711,8 @@ export function renderAlignmentDpoLabWidget(quest, context) {
   const btnVoteRejected = container.querySelector('#btn-vote-rejected');
   if (btnVoteChosen) {
     btnVoteChosen.addEventListener('click', () => {
+      if (!state.dpoUserVotes) state.dpoUserVotes = {};
+      state.dpoUserVotes[currentScenarioIdx] = 'chosen';
       soundFx.playBlip(880, 0.08);
       awardXp(10);
       btnTriggerStep.click();
@@ -717,6 +720,8 @@ export function renderAlignmentDpoLabWidget(quest, context) {
   }
   if (btnVoteRejected) {
     btnVoteRejected.addEventListener('click', () => {
+      if (!state.dpoUserVotes) state.dpoUserVotes = {};
+      state.dpoUserVotes[currentScenarioIdx] = 'rejected';
       soundFx.playBlip(440, 0.08);
       btnTriggerStep.click();
     });

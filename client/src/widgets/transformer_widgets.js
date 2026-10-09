@@ -590,6 +590,7 @@ export function renderRegularizationArenaWidget(quest, context) {
 
   sliderWeightDecay.addEventListener('input', (e) => {
     state.regWeightDecay = parseFloat(e.target.value);
+    state.regL2Lambda = state.regWeightDecay;
     valWeightDecay.textContent = `λ = ${state.regWeightDecay.toFixed(3)}`;
     recomputeAndDraw();
   });
@@ -651,6 +652,7 @@ export function renderRegularizationArenaWidget(quest, context) {
         state.regDropout = 0.2;
         state.regAugmentActive = true;
       }
+      state.regL2Lambda = state.regWeightDecay;
 
       // Sync UI sliders
       sliderComplexity.value = state.regComplexity;
@@ -1104,6 +1106,7 @@ export function renderAttentionWorkshopWidget(quest, context) {
       chip.addEventListener('click', () => {
         focusedIdx = idx;
         state.attnFocusedToken = idx;
+        state.attentionActiveQueryIdx = idx;
         state.attnQueryVectorOverride = null;
         recomputeAndDraw();
       });

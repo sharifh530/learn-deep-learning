@@ -154,6 +154,8 @@ export function renderActivationLabWidget(quest, context) {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem;">
       <div class="activation-selector">
         <button class="act-btn ${state.activeActivation === 'relu' ? 'active' : ''}" data-act="relu">ReLU: max(0, x)</button>
+        <button class="act-btn ${state.activeActivation === 'leaky_relu' ? 'active' : ''}" data-act="leaky_relu">Leaky ReLU: max(0.01x, x)</button>
+        <button class="act-btn ${state.activeActivation === 'gelu' ? 'active' : ''}" data-act="gelu">GELU: Gaussian</button>
         <button class="act-btn ${state.activeActivation === 'sigmoid' ? 'active' : ''}" data-act="sigmoid">Sigmoid: 1/(1+e⁻ˣ)</button>
         <button class="act-btn ${state.activeActivation === 'tanh' ? 'active' : ''}" data-act="tanh">Tanh</button>
         <button class="act-btn ${state.activeActivation === 'linear' ? 'active' : ''}" data-act="linear">Linear (No Activation)</button>
@@ -188,6 +190,8 @@ export function renderActivationLabWidget(quest, context) {
 
   const computeAct = (x, type) => {
     if (type === 'relu') return Math.max(0, x);
+    if (type === 'leaky_relu') return x >= 0 ? x : 0.01 * x;
+    if (type === 'gelu') return 0.5 * x * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * Math.pow(x, 3))));
     if (type === 'sigmoid') return 1 / (1 + Math.exp(-x));
     if (type === 'tanh') return Math.tanh(x);
     return x; // Linear
@@ -951,6 +955,16 @@ export function renderDoodleArenaWidget(quest, context) {
   };
 
   const updatePredictionUI = (data) => {
+    state.doodlePredictions = (data.all_predictions || []).map(p => ({
+      name: p.class,
+      confidence: (typeof p.confidence === 'number' ? p.confidence : parseFloat(p.confidence) || 0) / 100
+    }));
+    if (state.doodlePredictions.length === 0 && data.confidence) {
+      state.doodlePredictions = [{
+        name: data.top_class || 'Doodle',
+        confidence: (typeof data.confidence === 'number' ? data.confidence : parseFloat(data.confidence) || 0) / 100
+      }];
+    }
     const topConf = typeof data.confidence === 'number' ? Number(data.confidence).toFixed(1) : data.confidence;
     container.querySelector('#doodle-top-class').textContent = data.top_class;
     container.querySelector('#doodle-top-confidence').textContent = `${topConf}%`;
