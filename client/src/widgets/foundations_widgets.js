@@ -8,9 +8,10 @@ export function renderCoffeeNeuronWidget(quest, context) {
   const { state, dom, awardXp } = context;
 
   const config = quest.interactiveConfig;
-  const customer = config.customers[state.selectedCustomerIdx];
+  const getCustomer = () => config.customers[state.selectedCustomerIdx] || config.customers[0];
 
   const calcScore = () => {
+    const customer = getCustomer();
     const [s, m, e] = customer.inputs;
     const { sugar, milk, espresso, bias } = state.neuronWeights;
     return (s * sugar) + (m * milk) + (e * espresso) + bias;
@@ -93,13 +94,17 @@ export function renderCoffeeNeuronWidget(quest, context) {
     `;
     card.addEventListener('click', () => {
       state.selectedCustomerIdx = idx;
-      renderCoffeeNeuronWidget(quest);
+      listEl.querySelectorAll('.customer-card').forEach((c, i) => {
+        c.classList.toggle('active', i === idx);
+      });
+      updateNeuronUI();
     });
     listEl.appendChild(card);
   });
 
   // Wire Sliders
   const updateNeuronUI = () => {
+    const customer = getCustomer();
     const score = calcScore();
     const scoreEl = container.querySelector('#neuron-score-text');
     const feedbackEl = container.querySelector('#customer-feedback-badge');

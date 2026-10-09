@@ -405,7 +405,6 @@ export function renderMoeRoutingLabWidget(quest, context) {
     </div>
   `;
 
-  dom.interactiveContainer.innerHTML = '';
   dom.interactiveContainer.appendChild(container);
 
   // --- TAB NAVIGATION ---
@@ -1414,7 +1413,6 @@ export function renderDiffusionFlowLabWidget(quest, context) {
     </div>
   `;
 
-  dom.interactiveContainer.innerHTML = '';
   dom.interactiveContainer.appendChild(container);
 
   // --- TAB NAVIGATION ---
@@ -2325,7 +2323,6 @@ export function renderAudioSpeechLabWidget(quest, context) {
   `;
 
   // Attach container to DOM
-  dom.interactiveContainer.innerHTML = '';
   dom.interactiveContainer.appendChild(container);
 
   // Tab switching logic
@@ -3110,7 +3107,6 @@ export function renderWorldModelVideoLabWidget(quest, context) {
   `;
 
   // Attach to DOM
-  dom.interactiveContainer.innerHTML = '';
   dom.interactiveContainer.appendChild(container);
 
   // Helper to render Rollout Steps Tray
@@ -3754,7 +3750,6 @@ export function renderEmbodiedRoboticsLabWidget(quest, context) {
   `;
 
   // Attach to DOM
-  dom.interactiveContainer.innerHTML = '';
   dom.interactiveContainer.appendChild(container);
 
   // Tab switching

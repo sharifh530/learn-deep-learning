@@ -9,7 +9,7 @@ import { getSectionVisual, mountVisual, disposeVisuals } from './lesson_visuals.
 import { generateDiplomaCanvas, downloadDiplomaPng, generateVerificationCode } from './certificate_generator.js';
 import { exportProgress, importProgress, resetProgress } from './progress_manager.js';
 import { soundFx } from './sound_effects.js';
-import { renderInteractiveWidget } from './widgets/index.js';
+import { renderInteractiveWidget, clearInteractiveSandbox } from './widgets/index.js';
 import { DojoManager } from './dojo_achievements.js';
 import { MasteryChallengeManager } from './mastery_challenges.js';
 import { pythonEngine } from './python_engine.js';
@@ -545,6 +545,9 @@ function renderActiveQuest() {
 
   // Render Concept Lesson
   renderLesson(quest);
+
+  // Clear previous sandbox widgets (preserving Mastery HUD)
+  clearInteractiveSandbox(dom.interactiveContainer);
 
   // Render Sandbox based on type
   renderInteractiveWidget(quest, {
